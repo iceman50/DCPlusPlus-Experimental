@@ -43,16 +43,17 @@ int GridDialog::run() {
 void GridDialog::layout() {
 	long spacing = static_cast<long>(grid->getSpacing());
 
-	auto sz = getClientSize();
+	const auto content = getContentRect();
+	auto sz = content.size;
 	sz.y = grid->getPreferredSize().y;
-	grid->resize(dwt::Rectangle(spacing, spacing, sz.x - spacing * 2, sz.y));
+	grid->resize(dwt::Rectangle(content.left() + spacing, content.top() + spacing, sz.x - spacing * 2, sz.y));
 
 	// now resize the dialog itself
 	sz.x = width * dwt::util::dpiFactor(); // don't change the horizontal size
 	sz.y += spacing * 2;
 
 	RECT rect = { 0, 0, 0, sz.y };
-	::AdjustWindowRectEx(&rect, ::GetWindowLongPtr(handle(), GWL_STYLE), FALSE, ::GetWindowLongPtr(handle(), GWL_EXSTYLE));
+	adjustContentRect(rect);
 	sz.y = rect.bottom - rect.top;
 
 	resize(dwt::Rectangle(getWindowRect().pos, sz));

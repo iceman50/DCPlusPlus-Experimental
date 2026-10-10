@@ -39,6 +39,7 @@
 #include <dwt/resources/Pen.h>
 #include <dwt/tstring.h>
 #include <dwt/util/win32/Dpi.h>
+#include <dwt/util/win32/NonClientPaint.h>
 
 #include <algorithm>
 #include <array>
@@ -70,9 +71,10 @@ enum class NativeControl {
 };
 
 struct SharedAppearance {
-	explicit SharedAppearance(const Appearance::Palette& palette_, bool preserveDialogClientPainting_) :
+	explicit SharedAppearance(const Appearance::Palette& palette_, bool preserveDialogClientPainting_,
+		const NativeDialogAppearance::OwnerDrawHandler& ownerDraw_) :
 		references(0), palette(palette_), background(palette.background), surface(palette.surface),
-		preserveDialogClientPainting(preserveDialogClientPainting_) { }
+		preserveDialogClientPainting(preserveDialogClientPainting_), ownerDraw(ownerDraw_) { }
 
 	void retain() {
 		::InterlockedIncrement(&references);
@@ -89,6 +91,7 @@ struct SharedAppearance {
 	Brush background;
 	Brush surface;
 	bool preserveDialogClientPainting;
+	NativeDialogAppearance::OwnerDrawHandler ownerDraw;
 };
 
 struct NativeWindowData {
@@ -111,6 +114,7 @@ struct NativeWindowData {
 	int pressedCaptionButton;
 	bool captionActive;
 	bool trackingCaptionMouse;
+	bool nativeNonClientHover = false;
 	bool manualNonClient;
 };
 
@@ -485,7 +489,7 @@ void drawCaptionGlyph(Canvas& canvas, const Rectangle& bounds, int hitTest, bool
 }
 
 void redrawNonClient(HWND window) {
-	::RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
+	invalidateNonClient(window);
 }
 
 void paintNonClient(HWND window, NativeWindowData& data) {
@@ -1213,6 +1217,14 @@ bool drawsClient(const NativeWindowData& data, HWND window) {
 	return false;
 }
 
+bool drawsHover(const NativeWindowData& data, HWND window) {
+	// Backgrounds, separators and progress bars have no hover appearance.
+	// Tracking them makes every crossing of a child repaint the whole dialog.
+	return (data.control == NativeControl::Button ||
+		data.control == NativeControl::ComboBox || data.control == NativeControl::Header) &&
+		drawsClient(data, window);
+}
+
 void drawClient(HWND window, Canvas& canvas, NativeWindowData& data) {
 	switch(data.control) {
 	case NativeControl::Dialog:
@@ -1329,6 +1341,11 @@ void configureNativeControl(HWND window, NativeWindowData& data) {
 	case NativeControl::Dialog:
 		data.captionActive = true;
 		data.manualNonClient = true;
+		if(!appearance.preserveDialogClientPainting) {
+			// Never blit the dialog background over its independently painted controls.
+			::SetWindowLongPtr(window, GWL_STYLE,
+				::GetWindowLongPtr(window, GWL_STYLE) | WS_CLIPCHILDREN);
+		}
 		setNonClientRendering(window, true);
 		::SetWindowPos(window, nullptr, 0, 0, 0, 0,
 			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
@@ -1417,14 +1434,17 @@ bool handleCaptionInput(HWND window, NativeWindowData& data, UINT message, WPARA
 				data.trackingCaptionMouse =
 					::TrackMouseEvent(&tracking) != FALSE;
 			}
-			result = ::DefSubclassProc(window, message, hitTest, lParam);
+			result = 0;
 			if(data.hotCaptionButton != hot) {
 				data.hotCaptionButton = hot;
 				paintNonClient(window, data);
-			} else if(button) {
-				/* USER32 may repaint its caption button while maintaining native
-				 * tooltip state. Restore the palette pixels immediately. */
-				paintNonClient(window, data);
+			}
+			if(hitTest == HTMENU || hitTest == HTHSCROLL || hitTest == HTVSCROLL) {
+				data.nativeNonClientHover = true;
+				result = ::DefSubclassProc(window, message, hitTest, lParam);
+			} else if(data.nativeNonClientHover) {
+				data.nativeNonClientHover = false;
+				::DefSubclassProc(window, WM_NCMOUSELEAVE, 0, 0);
 			}
 			return true;
 		}
@@ -1432,7 +1452,11 @@ bool handleCaptionInput(HWND window, NativeWindowData& data, UINT message, WPARA
 	case WM_NCMOUSELEAVE:
 		data.trackingCaptionMouse = false;
 		data.hotCaptionButton = HTNOWHERE;
-		result = ::DefSubclassProc(window, message, wParam, lParam);
+		result = 0;
+		if(data.nativeNonClientHover) {
+			data.nativeNonClientHover = false;
+			result = ::DefSubclassProc(window, message, wParam, lParam);
+		}
 		paintNonClient(window, data);
 		return true;
 
@@ -1518,6 +1542,13 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 	}
 
 	switch(message) {
+	case WM_DRAWITEM:
+		if(lParam && data->appearance->ownerDraw &&
+			data->appearance->ownerDraw(*reinterpret_cast<const DRAWITEMSTRUCT*>(lParam))) {
+			return TRUE;
+		}
+		break;
+
 	case WM_NCHITTEST:
 		if(data->control == NativeControl::Dialog) {
 			const auto nativeResult = ::DefSubclassProc(
@@ -1586,12 +1617,9 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 		return colorControl(*data, message, reinterpret_cast<HDC>(wParam));
 
 	case WM_ERASEBKGND:
-		if(data->control == NativeControl::Dialog &&
-			!data->appearance->preserveDialogClientPainting) {
-			RECT bounds = { 0 };
-			::GetClientRect(window, &bounds);
-			FreeCanvas canvas(reinterpret_cast<HDC>(wParam));
-			canvas.fill(Rectangle(bounds), data->appearance->background);
+		if(drawsClient(*data, window)) {
+			// The buffered WM_PAINT handler fills every pixel it owns. A separate
+			// erase exposes an intermediate blank/native background during hover.
 			return 1;
 		}
 		break;
@@ -1646,7 +1674,7 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 		break;
 
 	case WM_MOUSEMOVE:
-		if(drawsClient(*data, window) && !data->hot) {
+		if(drawsHover(*data, window) && !data->hot) {
 			data->hot = true;
 			TRACKMOUSEEVENT tracking = { sizeof(TRACKMOUSEEVENT),
 				TME_LEAVE, window, 0 };
@@ -1675,6 +1703,7 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 	case WM_SETFOCUS:
 	case WM_KILLFOCUS:
 	case WM_SETTEXT:
+	case WM_SETICON:
 	case WM_SETFONT:
 	case BM_SETCHECK:
 	case BM_SETSTATE:
@@ -1683,18 +1712,23 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 	case PBM_SETRANGE:
 	case PBM_SETRANGE32:
 		{
-			const auto result = ::DefSubclassProc(window, message, wParam, lParam);
+			const bool caption = data->control == NativeControl::Dialog &&
+				(message == WM_SETTEXT || message == WM_SETICON);
+			const MSG msg { window, message, wParam, lParam };
+			const auto result = caption ? updateCaptionWithoutPainting(msg,
+				[](const MSG& item) { return ::DefSubclassProc(item.hwnd, item.message, item.wParam, item.lParam); }) :
+				::DefSubclassProc(window, message, wParam, lParam);
 			if(message == CB_SHOWDROPDOWN && data->control == NativeControl::ComboBox) {
 				COMBOBOXINFO info = { sizeof(COMBOBOXINFO) };
 				if(::GetComboBoxInfo(window, &info) && info.hwndList) {
 					applyTree(info.hwndList, data->appearance);
 				}
 			}
-			if(drawsClient(*data, window)) {
+			if(!caption && drawsClient(*data, window)) {
 				::InvalidateRect(window, nullptr, FALSE);
 			}
 			if(data->control == NativeControl::Dialog &&
-				(message == WM_SETTEXT || message == WM_ENABLE)) {
+				(message == WM_SETTEXT || message == WM_SETICON || message == WM_ENABLE)) {
 				redrawNonClient(window);
 			}
 			return result;
@@ -1720,8 +1754,9 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 
 class NativeDialogAppearance::Impl {
 public:
-	explicit Impl(const Appearance& appearance, bool preserveDialogClientPainting_) :
-		enabled(appearance.isManual()), preserveDialogClientPainting(preserveDialogClientPainting_), hook(nullptr), previous(nullptr) {
+	explicit Impl(const Appearance& appearance, bool preserveDialogClientPainting_, OwnerDrawHandler ownerDraw_) :
+		enabled(appearance.isManual()), preserveDialogClientPainting(preserveDialogClientPainting_),
+		ownerDraw(std::move(ownerDraw_)), hook(nullptr), previous(nullptr) {
 		if(!enabled) {
 			return;
 		}
@@ -1756,7 +1791,7 @@ public:
 			applyTree(window, inherited);
 			return;
 		}
-		auto shared = new SharedAppearance(palette, preserveDialogClientPainting);
+		auto shared = new SharedAppearance(palette, preserveDialogClientPainting, ownerDraw);
 		applyTree(window, shared);
 		/* applyWindow owns every successful reference. No supported native dialog
 		 * reaches here without a recognized root class. */
@@ -1794,6 +1829,7 @@ public:
 
 	bool enabled;
 	bool preserveDialogClientPainting;
+	OwnerDrawHandler ownerDraw;
 	Appearance::Palette palette;
 	HHOOK hook;
 	Impl* previous;
@@ -1802,8 +1838,9 @@ public:
 
 thread_local NativeDialogAppearance::Impl* NativeDialogAppearance::Impl::current = nullptr;
 
-NativeDialogAppearance::NativeDialogAppearance(const Appearance& appearance, bool preserveDialogClientPainting) :
-	impl(new Impl(appearance, preserveDialogClientPainting))
+NativeDialogAppearance::NativeDialogAppearance(const Appearance& appearance, bool preserveDialogClientPainting,
+	OwnerDrawHandler ownerDraw) :
+	impl(new Impl(appearance, preserveDialogClientPainting, std::move(ownerDraw)))
 {
 }
 

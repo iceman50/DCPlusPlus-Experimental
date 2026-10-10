@@ -26,6 +26,7 @@
 #include "ParamDlg.h"
 #include "resource.h"
 #include "WinUtil.h"
+#include "HtmlToRtf.h"
 
 RichTextBox::Seed::Seed() : 
 BaseType::Seed()
@@ -147,27 +148,71 @@ void RichTextBox::appendMessages(std::vector<RenderedMessage> batch) {
 	if(batch.empty()) return;
 
 	const int oldLength = static_cast<int>(length());
-	bool addLine = oldLength != 0;
 	std::vector<tstring> documents;
 	documents.reserve(batch.size());
 	for(auto& message: batch) {
+		if(!message.html.empty()) message.rtf = HtmlToRtf::convert(message.html, this, message.hubUrl);
 		tstring document = _T("{\\urtf1\n");
-		if(addLine) document += _T("\\line\n");
+		document += _T("\\pard\n");
 		document += message.rtf;
 		document += _T("}\n");
 		documents.push_back(std::move(document));
-		addLine = true;
 	}
 
-	auto ranges = addTextSteadyBatch(documents);
+	std::vector<int> insertedLengths;
+	auto ranges = addTextSteadyBatch(documents, true, &insertedLengths);
 	if(ranges.empty()) return;
 
 	const int removed = std::max(0, oldLength - ranges.front().first);
 	adjustMessageRanges(removed);
 	for(size_t i = 0; i < ranges.size(); ++i) {
 		if(ranges[i].second <= ranges[i].first) continue;
+		// Never regenerate an entire message after history trimming retained only its tail.
+		if(ranges[i].second - ranges[i].first != insertedLengths[i]) batch[i].html.clear();
 		messages.push_back({ nextMessageId++, ranges[i].first, ranges[i].second,
-			std::move(batch[i].plainText), std::move(batch[i].author), std::move(batch[i].userId), batch[i].timestamp });
+			std::move(batch[i].plainText), std::move(batch[i].author), std::move(batch[i].userId), batch[i].timestamp,
+			std::move(batch[i].html), std::move(batch[i].hubUrl), oldLength != 0 || i != 0 });
+	}
+}
+
+void RichTextBox::refreshMessageStyles() {
+	if(messages.empty()) return;
+	HoldScroll hold { this };
+	const auto originalSelection = getCaretPosRange();
+	const bool readOnly = isReadOnly();
+	const auto textLimit = getTextLimit();
+	setReadOnly(false);
+	setTextLimit(std::numeric_limits<int>::max());
+	struct Restore {
+		RichTextBox* box;
+		bool readOnly;
+		int textLimit;
+		std::pair<int, int> selection;
+		~Restore() {
+			const auto end = static_cast<int>(box->length());
+			box->setSelection(std::clamp(selection.first, 0, end), std::clamp(selection.second, 0, end));
+			box->setReadOnly(readOnly);
+			box->setTextLimit(textLimit);
+		}
+	} restore { this, readOnly, textLimit, originalSelection };
+	for(size_t i = messages.size(); i-- > 0;) {
+		auto& message = messages[i];
+		if(message.html.empty()) continue;
+		const auto rtf = escapeUnicode(_T("{\\urtf1\n") + HtmlToRtf::convert(message.html, this, message.hubUrl) + _T("}"));
+		const auto previousLength = static_cast<int>(length());
+		setSelection(message.begin + (message.separator ? 1 : 0), message.end);
+		SETTEXTEX config { ST_SELECTION, CP_ACP };
+		sendMessage(EM_SETTEXTEX, reinterpret_cast<WPARAM>(&config), reinterpret_cast<LPARAM>(rtf.c_str()));
+		const auto change = static_cast<int>(length()) - previousLength;
+		for(auto position : { &restore.selection.first, &restore.selection.second }) {
+			if(*position >= message.end) *position += change;
+			else if(*position > message.begin) *position = std::min(*position, message.end + change);
+		}
+		message.end += change;
+		for(size_t j = i + 1; j < messages.size(); ++j) {
+			messages[j].begin += change;
+			messages[j].end += change;
+		}
 	}
 }
 
@@ -183,6 +228,7 @@ void RichTextBox::adjustMessageRanges(int removed) {
 	if(removed <= 0) return;
 	while(!messages.empty() && messages.front().end <= removed) messages.pop_front();
 	for(auto& message: messages) {
+		if(message.begin < removed) message.html.clear();
 		message.begin = std::max(0, message.begin - removed);
 		message.end = std::max(0, message.end - removed);
 	}

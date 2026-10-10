@@ -12,27 +12,35 @@
 
 #include <string>
 #include <vector>
+#include <map>
+#include <dcpp/Style.h>
 
 #include <dwt/Appearance.h>
 #include <dwt/tstring.h>
 
-/** Loads DC++ application-chrome palettes without adding application policy to DWT. */
+/** A complete application theme. Matching rules are never imported from theme files. */
 class ThemeManager {
 public:
 	struct Theme {
-		Theme(const dwt::tstring& name_, const dwt::Appearance::Palette& palette_, const std::string& path_ = std::string()) : name(name_), palette(palette_), path(path_) { }
+		Theme(const dwt::tstring& name_, const dwt::Appearance::Palette& palette_, const std::string& path_ = std::string());
 
 		dwt::tstring name;
 		dwt::Appearance::Palette palette;
 		std::string path;
+		std::map<int, std::string> fonts;
+		std::map<int, int> colors;
+		std::map<std::string, dcpp::Style> userStyles;
 	};
+	static const std::vector<int>& fontSettings();
+	static const std::vector<int>& colorSettings();
+	static Theme capture();
 
 	static std::string getDirectory();
 	static std::vector<Theme> getThemes();
 	static Theme load(const std::string& path);
 	static std::string getImportPath(const std::string& source);
 	static std::string importTheme(const std::string& source);
-	static std::string saveTheme(const std::string& target, const dwt::Appearance::Palette& palette);
+	static std::string saveTheme(const std::string& target, const Theme& theme);
 };
 
 #endif

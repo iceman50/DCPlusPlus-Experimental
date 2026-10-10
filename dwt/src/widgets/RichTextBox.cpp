@@ -165,6 +165,13 @@ inline int RichTextBox::lineFromChar(int c) {
 	return static_cast<int>(sendMessage(EM_EXLINEFROMCHAR, 0, c));
 }
 
+size_t RichTextBox::length() const {
+	// WM_GETTEXTLENGTH expands line endings to CRLF, but selection, formatting and
+	// trimming APIs use the control's internal character positions.
+	GETTEXTLENGTHEX config { GTL_NUMCHARS | GTL_PRECISE, 1200 };
+	return static_cast<size_t>(sendMessage(EM_GETTEXTLENGTHEX, reinterpret_cast<WPARAM>(&config)));
+}
+
 tstring RichTextBox::getSelection() const {
 	std::pair<int, int> range = getCaretPosRange();
 	const int64_t selected = static_cast<int64_t>(range.second) - range.first;
@@ -269,8 +276,10 @@ void RichTextBox::addTextSteady(const tstring& txtRaw) {
 	addTextSteadyBatch({ txtRaw });
 }
 
-std::vector<std::pair<int, int>> RichTextBox::addTextSteadyBatch(const std::vector<tstring>& documents) {
+std::vector<std::pair<int, int>> RichTextBox::addTextSteadyBatch(const std::vector<tstring>& documents,
+	bool separateParagraphs, std::vector<int>* insertedLengths) {
 	std::vector<std::pair<int, int>> ranges;
+	if(insertedLengths) insertedLengths->clear();
 	if(documents.empty()) return ranges;
 
 	HoldScroll hold { this };
@@ -304,8 +313,22 @@ std::vector<std::pair<int, int>> RichTextBox::addTextSteadyBatch(const std::vect
 	ranges.reserve(documents.size());
 	for(const auto& document: documents) {
 		const auto begin = static_cast<int>(length());
+		if(separateParagraphs) {
+			// Insert the boundary before importing RTF so the new document's paragraph
+			// properties cannot reformat the preceding message.
+			setSelection(-1, -1);
+			if(begin != 0) replaceSelection(_T("\r"));
+			// EM_SETTEXTEX retains the destination paragraph's layout. Start chat
+			// messages at the left margin even after an aligned or indented message.
+			PARAFORMAT2 paragraph { sizeof(PARAFORMAT2) };
+			paragraph.dwMask = PFM_ALIGNMENT | PFM_STARTINDENT | PFM_RIGHTINDENT |
+				PFM_OFFSET | PFM_SPACEBEFORE | PFM_SPACEAFTER | PFM_LINESPACING;
+			paragraph.wAlignment = PFA_LEFT;
+			sendMessage(EM_SETPARAFORMAT, 0, reinterpret_cast<LPARAM>(&paragraph));
+		}
 		addText(escapeUnicode(document));
 		ranges.emplace_back(begin, static_cast<int>(length()));
+		if(insertedLengths) insertedLengths->push_back(ranges.back().second - begin);
 	}
 
 	int charsToRemove = 0;
@@ -435,6 +458,8 @@ tstring RichTextBox::rtfEscape(const tstring& str) {
 
 void RichTextBox::updateColors(COLORREF text, COLORREF background, bool updateFont) {
 	util::HoldRedraw hold { this };
+	const auto selection = getCaretPosRange();
+	auto scrollPos = getScrollPos();
 
 	/* when changing the global formatting of a Rich Edit, its per-character formatting properties
 	may become funky depending on how they were initially set (the RTF context depth, for example,
@@ -477,12 +502,16 @@ void RichTextBox::updateColors(COLORREF text, COLORREF background, bool updateFo
 		}
 		++sel;
 	}
+	setSelection(selection.first, selection.second);
+	setScrollPos(scrollPos);
 }
 
 void RichTextBox::setColorImpl(COLORREF text, COLORREF background) {
 	if(text != textColor || background != bgColor) {
 		updateColors(text, background);
-		redraw();
+		// Paint after updateColors releases WM_SETREDRAW. A queued WM_PAINT can
+		// otherwise be delayed by incoming chat until the user scrolls or resizes.
+		redraw(true);
 	}
 }
 
@@ -504,7 +533,7 @@ void RichTextBox::appearanceChanged() {
 void RichTextBox::setFontImpl() {
 	// changing the default font resets default colors.
 	updateColors(textColor, bgColor, true);
-	redraw();
+	redraw(true);
 }
 
 bool RichTextBox::handleMessage(const MSG& msg, LRESULT& retVal) {

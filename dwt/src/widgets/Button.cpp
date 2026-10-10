@@ -52,7 +52,8 @@ Button::Button(Widget* parent) :
 	BaseType(parent, ChainingDispatcher::superClass<ThisType>()),
 	imageAlignment(BUTTON_IMAGELIST_ALIGN_LEFT),
 	dropDownState(false),
-	nativeDropDownState(false)
+	nativeDropDownState(false),
+	surfaceBackground(false)
 {
 }
 
@@ -196,6 +197,13 @@ void Button::onFocusChanged(std::function<void (bool)> f) {
 
 bool Button::isHot() const {
 	return (sendMessage(BM_GETSTATE) & BST_HOT) != 0;
+}
+
+void Button::setSurfaceBackground(bool value) {
+	if(surfaceBackground != value) {
+		surfaceBackground = value;
+		redraw();
+	}
 }
 
 bool Button::handleMessage(const MSG& msg, LRESULT& retVal) {

@@ -32,6 +32,7 @@
 #include <dcpp/ClientManager.h>
 #include <dcpp/debug.h>
 #include <dcpp/File.h>
+#include <dcpp/FontStyle.h>
 #include <dcpp/HashManager.h>
 #include <dcpp/LogManager.h>
 #include <dcpp/Magnet.h>
@@ -254,9 +255,8 @@ void WinUtil::init() {
 	SettingsManager::getInstance()->setDefault(SettingsManager::BACKGROUND_COLOR, dwt::Color::predefined(COLOR_WINDOW));
 	SettingsManager::getInstance()->setDefault(SettingsManager::TEXT_COLOR, dwt::Color::predefined(COLOR_WINDOWTEXT));
 
-	// The application theme colors widget chrome. Rich chat, transfer and user
-	// styles remain controlled by Appearance > Styles and must not be rewritten
-	// when the chrome theme changes.
+	// Theme editing writes both the interface palette and content styles. Keep
+	// their persisted settings intact when Windows changes its appearance mode.
 	updateApplicationColors();
 	appearance.onChanged(updateApplicationColors);
 
@@ -507,7 +507,10 @@ tstring WinUtil::encodeFont(LOGFONT const& font) {
 	res += Text::toT(std::to_string(font.lfItalic));
 	res += _T(',');
 	res += Text::toT(std::to_string(font.lfCharSet));
-	return res;
+	FontStyle effects;
+	effects.underline = font.lfUnderline ? 1 : 0;
+	effects.strike = font.lfStrikeOut ? 1 : 0;
+	return Text::toT(effects.encode(Text::fromT(res)));
 }
 
 std::string WinUtil::toString(const std::vector<int>& tokens) {
@@ -541,8 +544,12 @@ void WinUtil::decodeFont(const tstring& setting, LOGFONT &dest) {
 	}
 
 	if(!face.empty()) {
-		_tcscpy(dest.lfFaceName, face.c_str());
+		_tcsncpy(dest.lfFaceName, face.c_str(), LF_FACESIZE - 1);
+		dest.lfFaceName[LF_FACESIZE - 1] = 0;
 	}
+	const auto effects = FontStyle::decode(Text::fromT(setting));
+	dest.lfUnderline = effects.underline != 0;
+	dest.lfStrikeOut = effects.strike != 0;
 }
 
 void WinUtil::updateFont(dwt::FontPtr& font, int setting) {
@@ -1326,7 +1333,8 @@ void WinUtil::setColor(dwt::Control* widget) {
 
 	widget->onCommand([widget] {
 		widget->setColor(textColor, bgColor);
-		widget->redraw();
+		if(auto chat = dynamic_cast<RichTextBox*>(widget)) chat->refreshMessageStyles();
+		widget->redraw(true);
 	}, ID_UPDATECOLOR);
 }
 

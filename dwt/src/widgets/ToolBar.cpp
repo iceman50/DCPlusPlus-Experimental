@@ -32,7 +32,9 @@
 #include <dwt/widgets/ToolBar.h>
 
 #include <dwt/WidgetCreator.h>
+#include <dwt/CanvasClasses.h>
 #include <dwt/widgets/ToolTip.h>
+#include <dwt/util/win32/NativeDialogAppearance.h>
 
 #include "AppearanceDraw.h"
 
@@ -236,6 +238,62 @@ bool ToolBar::handleMessage( const MSG & msg, LRESULT & retVal ) {
 		}
 	}
 	const bool handled = BaseType::handleMessage(msg, retVal);
+	if(!handled && isManualAppearance() &&
+		(msg.message == TB_CUSTOMIZE || msg.message == WM_LBUTTONDBLCLK)) {
+		// Comctl32 opens its own modal dialog, including directly from a double
+		// click on empty toolbar space. Keep the native-dialog palette scope
+		// alive until that modal message handler returns.
+		util::win32::NativeDialogAppearance appearance(getAppearance(), false,
+			[this, customizeDialog = HWND{}](const DRAWITEMSTRUCT& item) mutable {
+				if(!customizing || item.CtlType != ODT_LISTBOX || !item.hDC ||
+					!(::GetWindowLongPtr(item.hwndItem, GWL_STYLE) & LBS_HASSTRINGS)) return false;
+				const auto dialog = ::GetParent(item.hwndItem);
+				if(customizeDialog && customizeDialog != dialog) return false;
+				customizeDialog = dialog;
+				const auto& palette = getAppearance().getPalette();
+				const bool selected = (item.itemState & ODS_SELECTED) != 0;
+				const bool disabled = (item.itemState & ODS_DISABLED) || !::IsWindowEnabled(item.hwndItem);
+				BufferedCanvas<FreeCanvas> canvas(item.hDC, Rectangle(item.rcItem));
+				Brush background(selected ? palette.accent : palette.surface);
+				canvas.fill(Rectangle(item.rcItem), background);
+				if(item.itemID != static_cast<UINT>(-1)) {
+					const auto length = ::SendMessage(item.hwndItem, LB_GETTEXTLEN, item.itemID, 0);
+					if(length != LB_ERR && length < 65536) {
+						tstring text(static_cast<size_t>(length) + 1, 0);
+						::SendMessage(item.hwndItem, LB_GETTEXT, item.itemID, reinterpret_cast<LPARAM>(&text[0]));
+						text.resize(static_cast<size_t>(length));
+						const auto iconSize = itsNormalImageList ? itsNormalImageList->getImageSize() : Point(scale(16), scale(16));
+						// List-box strings are public API; comctl32's itemData is private.
+						// Resolve our supplied label against the toolbar's button catalog.
+						for(const auto& button : buttons) {
+							if(button.text == text && itsNormalImageList && button.button.iBitmap >= 0) {
+								::ImageList_Draw(itsNormalImageList->handle(), button.button.iBitmap, canvas.handle(),
+									item.rcItem.left + scale(2), item.rcItem.top + (item.rcItem.bottom - item.rcItem.top - iconSize.y) / 2,
+									ILD_TRANSPARENT);
+								break;
+							}
+						}
+						RECT bounds = item.rcItem;
+						bounds.left += iconSize.x + scale(6);
+						bounds.right -= scale(2);
+						auto font = reinterpret_cast<HFONT>(::SendMessage(item.hwndItem, WM_GETFONT, 0, 0));
+						const auto previous = font ? ::SelectObject(canvas.handle(), font) : nullptr;
+						::SetBkMode(canvas.handle(), TRANSPARENT);
+						::SetTextColor(canvas.handle(), disabled ? palette.disabledText : selected ? palette.highlightText : palette.text);
+						::DrawText(canvas.handle(), text.c_str(), static_cast<int>(text.size()), &bounds,
+							DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+						if(previous) ::SelectObject(canvas.handle(), previous);
+					}
+				}
+				if((item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT)) {
+					::DrawFocusRect(canvas.handle(), &item.rcItem);
+				}
+				canvas.blast(Rectangle(item.rcItem));
+				return true;
+			});
+		retVal = getDispatcher().chain(msg);
+		return true;
+	}
 	if(msg.message != WM_NOTIFY || !msg.lParam ||
 		reinterpret_cast<NMHDR*>(msg.lParam)->code != NM_CUSTOMDRAW ||
 		!isManualAppearance() ||

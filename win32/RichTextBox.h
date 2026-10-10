@@ -67,10 +67,13 @@ public:
 		tstring author;
 		string userId;
 		time_t timestamp = 0;
+		string html;
+		string hubUrl;
 	};
 
 	/// Append a UI batch while retaining message boundaries for context actions.
 	void appendMessages(std::vector<RenderedMessage> messages);
+	void refreshMessageStyles();
 	void discardMessagePrefix(int characters);
 	void clearMessageMetadata() { messages.clear(); }
 
@@ -83,6 +86,9 @@ private:
 		tstring author;
 		string userId;
 		time_t timestamp;
+		string html;
+		string hubUrl;
+		bool separator;
 	};
 
 	bool handleKeyDown(int c);

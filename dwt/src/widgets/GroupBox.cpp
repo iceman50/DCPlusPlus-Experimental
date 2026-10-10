@@ -50,6 +50,7 @@ padding(6, 6)
 }
 
 void GroupBox::create( const GroupBox::Seed & cs ) {
+	nativeTransparent = (cs.exStyle & WS_EX_TRANSPARENT) != 0;
 	BaseType::create(cs);
 	setFont(cs.font);
 
@@ -58,6 +59,13 @@ void GroupBox::create( const GroupBox::Seed & cs ) {
 
 	onEnabled([this](bool b) { handleEnabled(b); });
 	onWindowPosChanged([this](const Rectangle &) { layout(); });
+}
+
+void GroupBox::appearanceChanged() {
+	// The palette renderer fills the full background. Transparent sibling
+	// painting only erases/repaints the dialog behind these opaque controls.
+	addRemoveExStyle(WS_EX_TRANSPARENT, nativeTransparent && !isManualAppearance());
+	BaseType::appearanceChanged();
 }
 
 Point GroupBox::getPreferredSize() {

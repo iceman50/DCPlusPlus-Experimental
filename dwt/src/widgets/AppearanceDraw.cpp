@@ -314,7 +314,9 @@ LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette
 
 	FreeCanvas canvas(data.hdc);
 	Rectangle bounds(data.rc);
-	Brush backdrop(colors.background);
+	const auto backdropColor = button.hasSurfaceBackground() ?
+		colors.surface : colors.background;
+	Brush backdrop(backdropColor);
 	canvas.fill(bounds, backdrop);
 
 	const bool check = buttonType == BS_CHECKBOX ||

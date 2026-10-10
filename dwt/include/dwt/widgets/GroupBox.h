@@ -89,6 +89,7 @@ public:
 	virtual Point getPreferredSize();
 
 	virtual void layout();
+	void appearanceChanged() override;
 
 protected:
 	/// Constructor Taking pointer to parent
@@ -108,6 +109,7 @@ private:
 	static const TCHAR windowClass[];
 
 	Point padding;
+	bool nativeTransparent = true;
 
 	Rectangle shrink(const Rectangle& client);
 	Point expand(const Point& child);

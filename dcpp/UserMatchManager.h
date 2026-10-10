@@ -45,6 +45,8 @@ class UserMatchManager :
 public:
 	/** Retrieve the list of user matching definitions. */
 	UserMatches getList() const;
+	/** Resolve a theme appearance without copying matching rules. */
+	Style getStyle(const string& name) const;
 	/** Assign a new list of user matching definitions. */
 	void setList(UserMatches&& newList, bool updateUsers = true);
 

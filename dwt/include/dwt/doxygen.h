@@ -138,6 +138,15 @@
   * for a surface whose application-defined formatting must be preserved, or call
   * setColor() to provide explicit foreground and background colors. Calling
   * clearColor() returns a colorable widget to appearance inheritance.
+  *
+  * Top-level dwt::Frame windows replace the native caption and menu bar with
+  * client-area controls in manual mode. Layout application controls inside
+  * Frame::getContentRect(), which excludes the caption, menu rows, and resize
+  * gutters. getClientSize() continues to report the complete Win32 client area.
+  * Use Frame::adjustContentRect() when sizing a window around its content and
+  * Frame::setMenuBar() when showing or hiding an attached menu. Menu::setMenu()
+  * also updates the client frame. Light mode, high contrast, and the Native
+  * appearance policy restore the original native frame styles.
   */
 
 

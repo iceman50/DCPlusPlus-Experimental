@@ -32,6 +32,8 @@
 #include <dwt/widgets/StatusBar.h>
 
 #include <dwt/WidgetCreator.h>
+#include <dwt/widgets/Button.h>
+#include <dwt/widgets/Frame.h>
 #include <dwt/widgets/ToolTip.h>
 
 #include <numeric>
@@ -132,6 +134,11 @@ void StatusBar::setHelpId(unsigned part, unsigned id) {
 
 void StatusBar::setWidget(unsigned part, Control* widget, const Rectangle& padding) {
 	dwtassert(part < parts.size(), "Invalid part number");
+	// Embedded widgets are siblings of the bar, so their HWND parent cannot
+	// supply the surface color underneath checkbox/radio labels.
+	if(auto button = dynamic_cast<Button*>(widget)) {
+		button->setSurfaceBackground(true);
+	}
 	auto p = std::make_unique<WidgetPart>(widget, padding);
 	p->desiredSize = p->preferredSize();
 	p->helpId = widget->getHelpId();
@@ -163,6 +170,16 @@ void StatusBar::onDblClicked(unsigned part, const F& f) {
 }
 
 int StatusBar::refresh() {
+	if(auto frame = dynamic_cast<Frame*>(getParent())) {
+		// Keep the bottom and side resize gutters exposed in a client frame.
+		addRemoveStyle(CCS_NOPARENTALIGN, true);
+		sendMessage(WM_SIZE);
+		const auto content = frame->getContentRect();
+		const long height = getWindowSize().y;
+		::SetWindowPos(handle(), nullptr, content.left(), content.bottom() - height, content.width(), height, SWP_NOACTIVATE | SWP_NOZORDER);
+		layoutSections(getClientSize());
+		return static_cast<int>(height);
+	}
 	// The status bar will auto-resize itself - all we need to do is to layout the sections
 	sendMessage(WM_SIZE);
 

@@ -15,18 +15,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPLUSPLUS_WIN32_STYLES_PAGE_H
-#define DCPLUSPLUS_WIN32_STYLES_PAGE_H
+#ifndef DCPLUSPLUS_WIN32_THEME_PAGE_H
+#define DCPLUSPLUS_WIN32_THEME_PAGE_H
 
 #include <dcpp/UserMatch.h>
+#include <dcpp/FontStyle.h>
+#include "ThemeManager.h"
 
 #include "PropPage.h"
 
-class StylesPage : public PropPage
+class ThemePage : public PropPage
 {
 public:
-	StylesPage(dwt::Widget* parent);
-	virtual ~StylesPage();
+	ThemePage(dwt::Widget* parent);
+	virtual ~ThemePage();
 
 	virtual void layout();
 	virtual void write();
@@ -41,6 +43,7 @@ private:
 	};
 
 	enum {
+		GROUP_INTERFACE,
 		GROUP_GENERAL,
 		GROUP_TRANSFERS,
 		GROUP_CHAT,
@@ -60,7 +63,7 @@ private:
 		virtual ~Data() { }
 
 		const tstring& getText(int) const;
-		int getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgColor, int) const;
+		int getStyle(HFONT&, COLORREF& textColor, COLORREF& bgColor, int) const;
 
 		virtual const Font& getFont() const { return defaultFont; }
 		virtual int getTextColor() const { return -1; }
@@ -68,6 +71,10 @@ private:
 
 		virtual void update() { }
 		virtual void write() { }
+		virtual void capture(ThemeManager::Theme&) const { }
+		virtual void load(const ThemeManager::Theme&) { }
+		string encodedFont() const;
+		FontStyle effects;
 
 		const tstring text;
 		const unsigned helpId;
@@ -95,6 +102,8 @@ private:
 		int getBgColor() const;
 
 		void write();
+		void capture(ThemeManager::Theme& theme) const override;
+		void load(const ThemeManager::Theme& theme) override;
 
 	private:
 		const int fontSetting;
@@ -111,6 +120,8 @@ private:
 		int getBgColor() const;
 
 		void update();
+		void capture(ThemeManager::Theme& theme) const override;
+		void load(const ThemeManager::Theme& theme) override;
 
 	private:
 		UserMatch& matcher;
@@ -121,7 +132,20 @@ private:
 	typedef TypedTable<Data> Table;
 	Table* table;
 
-	LabelPtr preview;
+	RichTextBoxPtr preview;
+	ButtonPtr effectsButton;
+	ComboBoxPtr themeMode;
+	ComboBoxPtr themePreset;
+	std::vector<ThemeManager::Theme> presets;
+	bool loading = false;
+	bool updatingMatches = false;
+	std::vector<UserMatch>* matches = nullptr;
+	ThemeManager::Theme snapshot() const;
+	void applyTheme(const ThemeManager::Theme& theme);
+	void reloadThemes();
+	void importTheme();
+	void saveTheme();
+	void handleEffects();
 
 	CheckBoxPtr customFont;
 	ButtonPtr font;

@@ -6,14 +6,23 @@
 <link type="text/css" rel="stylesheet" href="style.css"/>
 </head>
 <body>
-	<h1>Styles</h1>
-	<p>
-	Various color and font settings can be configured here. The combination of a font, a text color
-	and a background color is what DC++ calls a style.<br/>
-	Select the setting you want to configure in the list; its current properties will then be shown
-	in the bottom. You can then edit these properties.<br/>
-	The list always reflects current style properties in order to preview changes.
-	</p>
+	<h1>Themes</h1>
+	<p>Configure all interface, chat, log, transfer and user-match fonts and colors under
+	<em>Appearance &gt; Themes</em>. Your current appearance is loaded as a custom theme.
+	The table labels display their configured text colors and backgrounds. Single-color interface
+	entries use their configured color for the label with a contrasting backdrop.
+	Select an item to edit its font, text color, background and text effects. Changes remain in
+	the settings draft until you click OK; Cancel discards them.</p>
+	<h2>Mode and theme files</h2>
+	<p>Choose Follow Windows, Light or Dark. The interface palette is used in Dark mode; Windows
+	high contrast takes precedence for interface colors. Select a theme to load its complete appearance.
+	Existing palette-only themes derive chat colors from their palette.</p>
+	<p>Save theme exports the draft to an XML file. Import theme validates a file and loads it into
+	the draft. Save in the per-user Themes folder to add a preset; Open folder and Reload themes
+	manage the preset list. Files in this folder override application themes with the same filename.</p>
+	<p>Theme XML version 2 includes the interface palette, fonts, content colors and user-match
+	appearance. Files are UTF-8 XML, limited to 64 KiB. Matching rules and ignore behavior remain in
+	<placeholder><a href="settings_user_matching.html">Styles / User matching</a></placeholder>.</p>
 
 	<h2>General</h2>
 	<h3>Global application style</h3>
@@ -21,7 +30,7 @@
 	The style used throughout all DC++ windows.
 	</p>
 
-	<h2>Transfers</h2>
+	<h2 id="transfercolors">Transfers</h2>
 	<h3>Uploads</h3>
 	<p cshelp="IDH_SETTINGS_STYLES_UPLOADS">
 	The style used to paint upload transfer bars. Default background color: RGB(205, 60, 55).
@@ -46,20 +55,37 @@
 
 	<h2>Users</h2>
 	<p cshelp="IDH_SETTINGS_STYLES_USER_MATCH">
-	The styles used to paint users that match user matching definitions.
+	The appearance of users that match definitions. Theme files associate these styles with exact
+	definition names without changing matching rules. A definition absent from an imported theme
+	inherits its appearance. Edit definitions in Styles / User matching.
 	</p>
 
-	<h2>Preview line</h2>
+	<h2>Live chat preview</h2>
 	<p cshelp="IDH_SETTINGS_STYLES_PREVIEW">
-	When an item is selected in the list, a preview line appears below the list. It reflects style
-	properties for the item currently selected in the list.
+	The preview uses an actual RichEdit control and the same renderer as chat. It shows the selected
+	style and sample incoming and outgoing messages, timestamps, nicknames, mentions, links, system
+	messages and history. Editing the preview does not change active chat settings.
 	</p>
 
 	<h2>Font customization</h2>
 	<p cshelp="IDH_SETTINGS_STYLES_FONT">
 	By default, the font used by the current Windows theme is used throughout DC++ (generally
-	Segoe UI (size 9) on Windows 7 and newer). A different font may be selected here.
+	Segoe UI (size 9) on Windows 7 and newer). A different font may be selected here, including
+	bold, italic, underline and strikethrough. Text effects adds underline and strike variants,
+	subscript/superscript, capitalization, outline, shadow, character spacing, baseline offset and
+	kerning. Advanced effect rendering depends on the Windows RichEdit version; the preview shows
+	the local result. Other controls use the font properties they support.
 	</p>
+
+	<h2>Text effects dialog</h2>
+	<p>Text effects sits beside Select font. Its live RichEdit preview updates as you check bold,
+	italic, underline, strikethrough, capitalization, script, outline and shadow options.
+	Choose the underline pattern from the dropdown. Double strikethrough overrides single;
+	turning it off restores the previous single-strike choice. Subscript/superscript and
+	small/all capitals are mutually exclusive.</p>
+	<p>Character spacing, baseline offset and kerning use points. Positive baseline offsets raise
+	the text; negative values lower it. Reset effects restores normal text. OK accepts the draft
+	and Cancel discards it; the theme is applied when the main Settings dialog is accepted.</p>
 
 	<h2>Text color customization</h2>
 	<p cshelp="IDH_SETTINGS_STYLES_TEXT">

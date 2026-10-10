@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "PropPage.h"
-#include "ThemeManager.h"
 
 /** Experimental sharing, hashing, MCN, RTF0, interface and defensive protocol controls. */
 class ExperimentalPage : public PropPage
@@ -32,11 +31,6 @@ private:
 		int setting;
 		int multiplier;
 	};
-	struct ThemeColorItem {
-		LabelPtr preview;
-		int setting;
-		COLORREF color;
-	};
 	struct TempShareRow {
 		string path;
 		string route;
@@ -45,10 +39,6 @@ private:
 
 	ItemList items;
 	std::vector<ScaledIntItem> scaledIntItems;
-	std::vector<ThemeColorItem> themeColors;
-	std::vector<ThemeManager::Theme> themePresets;
-	ComboBoxPtr themeMode;
-	ComboBoxPtr themePreset;
 	ComboBoxPtr hubUserIconSize;
 	TablePtr tempShares;
 	std::vector<std::unique_ptr<TempShareRow>> tempShareRows;
@@ -64,18 +54,6 @@ private:
 		const tstring& unit, int minimum, int maximum, int multiplier = 1);
 	void readScaledIntItems();
 	void writeScaledIntItems();
-	void addThemeColor(GridPtr target, const tstring& text, int setting);
-	void chooseThemeColor(size_t index);
-	void resetThemeColors();
-	void updateThemeColor(size_t index);
-	void reloadThemePresets(const std::string& selectedPath = std::string());
-	void applyThemePreset();
-	void applyThemePalette(const dwt::Appearance::Palette& palette);
-	dwt::Appearance::Palette currentThemePalette() const;
-	void updateThemePresetSelection();
-	void saveCustomTheme();
-	void importTheme();
-	void openThemeDirectory();
 	void fillTempShares();
 	TempShareRow* getTempShareRow(int row);
 	void handleTempSelectionChanged();

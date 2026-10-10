@@ -399,7 +399,10 @@ public:
 		}
 	};
 
-	Proxy(Widget* parent) : BaseType(parent, NormalDispatcher::getDefault()) { }
+	Proxy(Widget* parent) : BaseType(parent, NormalDispatcher::getDefault()) {
+		// This hidden HWND represents a taskbar tab, not an application surface.
+		setAppearancePolicy(AppearancePolicy::Native);
+	}
 };
 
 void Taskbar::addToTaskbar(ContainerPtr tab) {
@@ -459,7 +462,7 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 			POINT offset = { 0 };
 			::MapWindowPoints(tab->handle(), window->handle(), &offset, 1);
 			MENUBARINFO info = { sizeof(MENUBARINFO) };
-			if(::GetMenuBarInfo(window->handle(), OBJID_MENU, 0, &info))
+			if(!window->usesClientFrame() && ::GetMenuBarInfo(window->handle(), OBJID_MENU, 0, &info))
 				offset.y += Rectangle(info.rcBar).height();
 			::DwmSetIconicLivePreviewBitmap(proxy->handle(), bitmap->handle(), &offset, 0);
 		}

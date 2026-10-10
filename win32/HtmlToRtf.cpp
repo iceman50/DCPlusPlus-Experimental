@@ -31,6 +31,7 @@
 
 #include <dcpp/debug.h>
 #include <dcpp/File.h>
+#include <dcpp/FontStyle.h>
 #include <dcpp/FinishedItem.h>
 #include <dcpp/FinishedManager.h>
 #include <dcpp/Flags.h>
@@ -43,6 +44,7 @@
 #include <dcpp/SimpleXML.h>
 #include <dcpp/StringTokenizer.h>
 #include <dcpp/Text.h>
+#include <dcpp/UserMatchManager.h>
 
 #include <dwt/util/GDI.h>
 #include <dwt/widgets/RichTextBox.h>
@@ -108,7 +110,7 @@ namespace {
 }
 
 struct Parser : SimpleXMLReader::CallBack {
-	Parser(dwt::RichTextBox* box, string hubUrl);
+	Parser(dwt::RichTextBox* box, string hubUrl, const ThemeManager::Theme* theme);
 	void startTag(const string& name, StringPairList& attribs, bool simple);
 	void data(const string& data);
 	void endTag(const string& name);
@@ -126,6 +128,7 @@ private:
 		bool timestampIconPending;
 
 		int alignment; // 0 = inherited, 1 = left, 2 = center, 3 = right
+		FontStyle effects;
 
 		Context(dwt::RichTextBox* box, Parser& parser);
 
@@ -143,6 +146,8 @@ private:
 	void applyConfiguredStyle(Context& context, SettingsManager::StrSetting fontSetting,
 		SettingsManager::IntSetting textColorSetting, SettingsManager::IntSetting bgColorSetting);
 	bool applySemanticStyle(Context& context, const string& id);
+	bool defaultFont(SettingsManager::StrSetting setting) const;
+	Style userStyle(const string& name) const;
 	void ensureContrast(Context& context);
 	static tstring rtfEscape(const string& s);
 
@@ -161,16 +166,17 @@ private:
 	vector<bool> emoticonSuppressions;
 	vector<bool> inlineMediaSuppressions;
 	string hubUrl;
+	const ThemeManager::Theme* theme;
 };
 
-tstring HtmlToRtf::convert(const string& html, dwt::RichTextBox* box, const string& hubUrl) {
-	Parser parser(box, hubUrl);
+tstring HtmlToRtf::convert(const string& html, dwt::RichTextBox* box, const string& hubUrl, const ThemeManager::Theme* theme) {
+	Parser parser(box, hubUrl, theme);
 	try { SimpleXMLReader(&parser).parse(html); }
 	catch(const SimpleXMLException& e) { return Text::toT(e.getError()); }
 	return parser.finalize();
 }
 
-Parser::Parser(dwt::RichTextBox* box, string aHubUrl) : hubUrl(std::move(aHubUrl)) {
+Parser::Parser(dwt::RichTextBox* box, string aHubUrl, const ThemeManager::Theme* aTheme) : hubUrl(std::move(aHubUrl)), theme(aTheme) {
 	// create a default context with the Rich Edit control's current formatting.
 	contexts.emplace_back(box, *this);
 	const auto width = std::max(1L, box->getClientSize().x);
@@ -270,13 +276,17 @@ void Parser::startTag(const string& name_, StringPairList& attribs, bool simple)
 		if(!link.empty()) {
 			auto& context = contexts.back();
 			context.link = link;
-			context.setFlag(Context::Underlined);
 			applyConfiguredStyle(context, SettingsManager::LINK_FONT,
 				SettingsManager::LINK_COLOR, SettingsManager::LINK_BG_COLOR);
+			if(defaultFont(SettingsManager::LINK_FONT)) context.setFlag(Context::Underlined);
 		}
 	}
 
 	const auto style = getAttrib(attribs, "style", 0);
+	const auto fontSource = getAttrib(attribs, "themeFontStyle", 0);
+	const auto textSource = getAttrib(attribs, "themeTextStyle", 0);
+	const auto bgSource = getAttrib(attribs, "themeBgStyle", 0);
+	bool incomingColors = false;
 	size_t begin = 0;
 	while(begin < style.size()) {
 		auto end = style.find(';', begin);
@@ -288,9 +298,10 @@ void Parser::startTag(const string& name_, StringPairList& attribs, bool simple)
 			auto value = declaration.substr(separator + 1);
 			trimInPlace(property);
 			trimInPlace(value);
-			if(property == "font") parseFont(contexts.back(), value);
-			else if(property == "color") parseColor(contexts.back().textColor, value);
-			else if(property == "background-color") parseColor(contexts.back().bgColor, value);
+			if(property == "font" && fontSource.empty()) parseFont(contexts.back(), value);
+			else if(property == "dc-font" && fontSource.empty()) contexts.back().effects = FontStyle::decode(value);
+			else if(property == "color" && textSource.empty()) { parseColor(contexts.back().textColor, value); incomingColors = true; }
+			else if(property == "background-color" && bgSource.empty()) { parseColor(contexts.back().bgColor, value); incomingColors = true; }
 			else if(property == "text-decoration") parseDecoration(value);
 			else if(property == "font-weight" && (value == "bold" || Util::toInt(value) >= FW_BOLD)) contexts.back().setFlag(Context::Bold);
 			else if(property == "font-style" && value == "italic") contexts.back().setFlag(Context::Italic);
@@ -300,8 +311,35 @@ void Parser::startTag(const string& name_, StringPairList& attribs, bool simple)
 		}
 		begin = end + 1;
 	}
-	if(!preserveConfiguredColor)
+	if(!fontSource.empty()) {
+		const auto matched = userStyle(fontSource);
+		if(!matched.font.empty()) {
+			contexts.back().unsetFlag(Context::Underlined | Context::Strike);
+			parseFont(contexts.back(), Util::cssFont(matched.font));
+			contexts.back().effects = FontStyle::decode(matched.font);
+		}
+	}
+	if(!textSource.empty() && semanticId != "ownNick") {
+		const auto matched = userStyle(textSource);
+		if(matched.textColor >= 0) contexts.back().textColor = addColor(matched.textColor);
+	}
+	if(!bgSource.empty()) {
+		const auto matched = userStyle(bgSource);
+		if(matched.bgColor >= 0) contexts.back().bgColor = addColor(matched.bgColor);
+	}
+	// Preserve theme colors inherited by nested markup; adjust only incoming color overrides.
+	if(incomingColors && !preserveConfiguredColor && name != "a")
 		ensureContrast(contexts.back());
+}
+
+Style Parser::userStyle(const string& name) const {
+	if(theme) {
+		const auto found = theme->userStyles.find(name);
+		if(found != theme->userStyles.end()) return found->second;
+	} else if(auto manager = UserMatchManager::getInstance()) {
+		return manager->getStyle(name);
+	}
+	return Style();
 }
 
 tstring Parser::rtfEscape(const string& data) {
@@ -365,10 +403,14 @@ tstring Parser::finalize() {
 Parser::Context::Context(dwt::RichTextBox* box, Parser& parser) {
 	// create a default context with the Rich Edit control's current formatting.
 	auto lf = box->getFont()->getLogFont();
-	font = parser.addFont("\\fnil\\fcharset" + std::to_string(lf.lfCharSet) + " " + Text::fromT(lf.lfFaceName));
+	font = parser.addFont("\\fnil\\fcharset" + std::to_string(lf.lfCharSet) + " " + Text::fromT(dwt::RichTextBox::rtfEscape(lf.lfFaceName)));
 	fontSize = rtfFontSize(static_cast<float>(std::abs(lf.lfHeight)) / dwt::util::dpiFactor());
 	if(lf.lfWeight >= FW_BOLD) { setFlag(Bold); }
 	if(lf.lfItalic) { setFlag(Italic); }
+	effects.underline = lf.lfUnderline ? 1 : 0;
+	effects.strike = lf.lfStrikeOut ? 1 : 0;
+	if(parser.theme) effects = FontStyle::decode(parser.theme->fonts.at(SettingsManager::MAIN_FONT));
+	else effects = FontStyle::decode(SETTING(MAIN_FONT));
 
 	textColor = parser.addColor(box->getTextColor());
 	bgColor = parser.addColor(box->getBgColor());
@@ -395,8 +437,9 @@ tstring Parser::Context::getBegin() const {
 	if(alignment == 1) { ret += "\\ql"; }
 	else if(alignment == 2) { ret += "\\qc"; }
 	else if(alignment == 3) { ret += "\\qr"; }
-	if(isSet(Bold)) { ret += "\\b"; }
-	if(isSet(Italic)) { ret += "\\i"; }
+	ret += effects.rtf();
+	ret += isSet(Bold) ? "\\b" : "\\b0";
+	ret += isSet(Italic) ? "\\i" : "\\i0";
 	if(isSet(Underlined)) { ret += "\\ul"; }
 	if(isSet(Strike)) { ret += "\\strike"; }
 
@@ -450,13 +493,21 @@ void Parser::applyConfiguredStyle(Context& context, SettingsManager::StrSetting 
 	SettingsManager::IntSetting textColorSetting, SettingsManager::IntSetting bgColorSetting)
 {
 	auto settings = SettingsManager::getInstance();
-	parseFont(context, Util::cssFont(settings->get(fontSetting)));
-	context.textColor = addColor(settings->get(textColorSetting));
-	context.bgColor = addColor(settings->get(bgColorSetting));
+	const auto& font = theme ? theme->fonts.at(fontSetting) : settings->get(fontSetting);
+	if(!font.empty()) {
+		context.unsetFlag(Context::Underlined | Context::Strike);
+		parseFont(context, Util::cssFont(font));
+		context.effects = FontStyle::decode(font);
+	}
+	context.textColor = addColor(theme ? theme->colors.at(textColorSetting) : settings->get(textColorSetting));
+	context.bgColor = addColor(theme ? theme->colors.at(bgColorSetting) : settings->get(bgColorSetting));
+}
+
+bool Parser::defaultFont(SettingsManager::StrSetting setting) const {
+	return theme ? theme->fonts.at(setting).empty() : SettingsManager::getInstance()->get(setting).empty();
 }
 
 bool Parser::applySemanticStyle(Context& context, const string& id) {
-	auto settings = SettingsManager::getInstance();
 	if(id == "timestamp" || id == "messageTimestamp") {
 		applyConfiguredStyle(context, SettingsManager::CHAT_TIMESTAMP_FONT,
 			SettingsManager::CHAT_TIMESTAMP_COLOR, SettingsManager::CHAT_TIMESTAMP_BG_COLOR);
@@ -466,11 +517,11 @@ bool Parser::applySemanticStyle(Context& context, const string& id) {
 	} else if(id == "nick") {
 		applyConfiguredStyle(context, SettingsManager::CHAT_NICK_FONT,
 			SettingsManager::CHAT_NICK_COLOR, SettingsManager::CHAT_NICK_BG_COLOR);
-		if(settings->isDefault(SettingsManager::CHAT_NICK_FONT)) context.setFlag(Context::Bold);
+		if(defaultFont(SettingsManager::CHAT_NICK_FONT)) context.setFlag(Context::Bold);
 	} else if(id == "ownNick") {
 		applyConfiguredStyle(context, SettingsManager::CHAT_OWN_NICK_FONT,
 			SettingsManager::CHAT_OWN_NICK_COLOR, SettingsManager::CHAT_OWN_NICK_BG_COLOR);
-		if(settings->isDefault(SettingsManager::CHAT_OWN_NICK_FONT)) context.setFlag(Context::Bold);
+		if(defaultFont(SettingsManager::CHAT_OWN_NICK_FONT)) context.setFlag(Context::Bold);
 	} else if(id == "text") {
 		applyConfiguredStyle(context, SettingsManager::CHAT_TEXT_FONT,
 			SettingsManager::CHAT_TEXT_COLOR, SettingsManager::CHAT_TEXT_BG_COLOR);
@@ -480,11 +531,11 @@ bool Parser::applySemanticStyle(Context& context, const string& id) {
 	} else if(id == "systemMessage") {
 		applyConfiguredStyle(context, SettingsManager::CHAT_SYSTEM_FONT,
 			SettingsManager::CHAT_SYSTEM_COLOR, SettingsManager::CHAT_SYSTEM_BG_COLOR);
-		if(settings->isDefault(SettingsManager::CHAT_SYSTEM_FONT)) context.setFlag(Context::Italic);
+		if(defaultFont(SettingsManager::CHAT_SYSTEM_FONT)) context.setFlag(Context::Italic);
 	} else if(id == "mention") {
 		applyConfiguredStyle(context, SettingsManager::CHAT_MENTION_FONT,
 			SettingsManager::CHAT_MENTION_COLOR, SettingsManager::CHAT_MENTION_BG_COLOR);
-		if(settings->isDefault(SettingsManager::CHAT_MENTION_FONT)) context.setFlag(Context::Bold);
+		if(defaultFont(SettingsManager::CHAT_MENTION_FONT)) context.setFlag(Context::Bold);
 	} else if(id == "log") {
 		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
 			SettingsManager::LOG_COLOR, SettingsManager::LOG_BG_COLOR);
@@ -519,8 +570,10 @@ bool Parser::applySemanticStyle(Context& context, const string& id) {
 		const int percentages[] = { 0, 160, 145, 130, 120, 110, 100 };
 		context.fontSize = std::max(1, context.fontSize * percentages[id[10] - '0'] / 100);
 	}
-	return id == "systemLogVerbose" || id == "systemLogInfo" || id == "systemLogWarning" ||
-		id == "systemLogError" || id == "systemLogArea";
+	// A theme is authoritative, including deliberately subtle colors and highlights.
+	return id == "timestamp" || id == "messageTimestamp" || id == "ownTimestamp" || id == "ownMessageTimestamp" ||
+		id == "nick" || id == "ownNick" || id == "text" || id == "ownText" || id == "systemMessage" ||
+		id == "mention" || id == "log" || id.compare(0, 9, "systemLog") == 0;
 }
 
 void Parser::ensureContrast(Context& context) {
@@ -564,7 +617,8 @@ void Parser::parseFont(Context& context, const string& s) {
 	family.erase(std::remove(family.begin(), family.end(), '\''), family.end());
 	if(family.empty())
 		return;
-	context.font = addFont("\\fnil " + std::move(family));
+	context.font = addFont("\\fnil " + Text::fromT(rtfEscape(family)));
+	context.unsetFlag(Context::Bold | Context::Italic);
 
 	// parse the second to last param (font size).
 	/// @todo handle more than px sizes

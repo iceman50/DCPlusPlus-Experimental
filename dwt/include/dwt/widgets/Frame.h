@@ -43,6 +43,8 @@
 
 namespace dwt {
 
+class ClientFrame;
+
 /** Base class for a top-level window (either a main app window or a dialog). */
 class Frame :
 	public Composite,
@@ -93,6 +95,15 @@ public:
 	/// Sets the large icon for the Widget (the large icon appears e.g. when you press ALT+Tab)
 	void setLargeIcon(const IconPtr& icon);
 
+	/** Client coordinates available for application content, below custom chrome. */
+	Rectangle getContentRect() const;
+	bool usesClientFrame() const { return manualFrame; }
+	bool isMenuBarFocused() const;
+	void refreshClientFrame();
+	void setMenuBar(HMENU menu);
+	/** Convert a desired content rectangle to the outer window rectangle. */
+	bool adjustContentRect(RECT& rect) const;
+
 protected:
 	struct Seed : public BaseType::Seed {
 		Seed(const tstring& caption, DWORD style, DWORD exStyle);
@@ -108,24 +119,20 @@ protected:
 	/** Apply the application appearance to frame-owned client and non-client areas. */
 	virtual void appearanceChanged() override;
 
-	/** Preserve the native frame contract while painting manual-mode chrome. */
+	/** Own the complete client frame in manual mode; use the native frame otherwise. */
 	virtual bool handleMessage(const MSG& msg, LRESULT& retVal) override;
 
 private:
 	bool handleEraseBackground(HDC dc);
-	bool handleCaptionInput(const MSG& msg, LRESULT& retVal);
-	bool isManualFrame() const;
-	void paintNonClient();
-	void redrawNonClient();
 	void updateCaptionAppearance();
 
 	IconPtr smallIcon;
 	IconPtr largeIcon;
-	int hotCaptionButton;
-	int pressedCaptionButton;
-	bool captionActive;
-	bool trackingCaptionMouse;
-	bool manualNonClient;
+	ClientFrame* clientFrame;
+	DWORD captionStyle;
+	DWORD edgeStyle;
+	bool manualFrame;
+	bool changingFrame;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

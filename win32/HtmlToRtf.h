@@ -21,12 +21,14 @@
 #include <dcpp/typedefs.h>
 
 #include <dwt/forward.h>
+#include "ThemeManager.h"
 
 /** Convert an HTML string to an RTF string, suitable for insertion within a Rich Edit control.
 Simple HTML phrasing content and the trusted semantic elements generated for RTF0 are supported. */
 class HtmlToRtf {
 public:
-	static tstring convert(const string& html, dwt::RichTextBox* box, const string& hubUrl = string());
+	static tstring convert(const string& html, dwt::RichTextBox* box, const string& hubUrl = string(),
+		const ThemeManager::Theme* theme = nullptr);
 };
 
 #endif

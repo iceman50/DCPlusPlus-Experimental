@@ -85,6 +85,7 @@ private:
 	typedef std::vector<PageInfo> PageList;
 	PageList pages;
 	PropPage* currentPage;
+	dwt::Control* pageHost = nullptr;
 
 	GridPtr grid;
 	TreePtr tree;

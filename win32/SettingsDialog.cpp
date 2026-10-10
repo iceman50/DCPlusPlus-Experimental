@@ -48,7 +48,7 @@
 
 #include "AppearancePage.h"
 #include "EmoticonsPage.h"
-#include "StylesPage.h"
+#include "ThemePage.h"
 #include "TabsPage.h"
 #include "WindowsPage.h"
 
@@ -123,6 +123,7 @@ bool SettingsDialog::initDialog() {
 	{
 		auto seed = Tree::Seed();
 		seed.style |= WS_BORDER;
+		seed.tvExStyle |= TVS_EX_DOUBLEBUFFER;
 		tree = grid->addChild(seed);
 		tree->setHelpId(IDH_SETTINGS_TREE);
 		tree->setItemHeight(tree->getItemHeight() * 5 / 4);
@@ -140,7 +141,10 @@ bool SettingsDialog::initDialog() {
 		cur->column(0).mode = GridInfo::FILL;
 		cur->setSpacing(grid->getSpacing());
 
-		auto container = cur->addChild(dwt::ScrolledContainer::Seed(WS_BORDER));
+		// Compose the page and its controls together, including their background
+		// erases. Buffer only this subtree so tree input and the footer stay responsive.
+		auto container = cur->addChild(dwt::ScrolledContainer::Seed(WS_BORDER, WS_EX_COMPOSITED));
+		pageHost = container;
 
 		const size_t setting = SETTING(SETTINGS_PAGE);
 		HTREEITEM selectedPage = nullptr;
@@ -178,7 +182,8 @@ bool SettingsDialog::initDialog() {
 		{
 			HTREEITEM item = addPage(T_("Appearance"), typeid(AppearancePage), [container] { return new AppearancePage(container); }, IDI_DCPP, TVI_ROOT);
 			addPage(T_("Icons"), typeid(EmoticonsPage), [container] { return new EmoticonsPage(container); }, IDI_CHAT, item);
-			addPage(T_("Styles"), typeid(StylesPage), [container] { return new StylesPage(container); }, IDI_STYLES, item);
+			addPage(T_("Themes"), typeid(ThemePage), [container] { return new ThemePage(container); }, IDI_STYLES, item);
+			addPage(T_("Styles / User matching"), typeid(UserMatchPage), [container] { return new UserMatchPage(container); }, IDI_USERS, item);
 			addPage(T_("Tabs"), typeid(TabsPage), [container] { return new TabsPage(container); }, IDI_TABS, item);
 			addPage(T_("Windows"), typeid(WindowsPage), [container] { return new WindowsPage(container); }, IDI_WINDOWS, item);
 		}
@@ -196,7 +201,6 @@ bool SettingsDialog::initDialog() {
 			addPage(T_("User commands"), typeid(UCPage), [container] { return new UCPage(container); }, IDI_USER_OP, item);
 			addPage(T_("Security & certificates"), typeid(CertificatesPage), [container] { return new CertificatesPage(container); }, IDI_SECURE, item);
 			addPage(T_("Search types"), typeid(SearchTypesPage), [container] { return new SearchTypesPage(container); }, IDI_SEARCH, item);
-			addPage(T_("User matching"), typeid(UserMatchPage), [container] { return new UserMatchPage(container); }, IDI_USERS, item);
 		}
 
 		addPage(T_("Experimental"), typeid(ExperimentalPage), [container] { return new ExperimentalPage(container); }, IDI_EXPERT, TVI_ROOT);
@@ -280,7 +284,8 @@ bool SettingsDialog::initDialog() {
 	updateTitle();
 
 	centerWindow();
-	onWindowPosChanged([this](const dwt::Rectangle &) { layout(); });
+	onSized([this](const dwt::SizedEvent&) { layout(); });
+	layout();
 
 	return false;
 }
@@ -343,7 +348,8 @@ BOOL CALLBACK SettingsDialog::EnumChildProc(HWND hwnd, LPARAM lParam) {
 }
 
 void SettingsDialog::handleChildHelp(dwt::Control* widget) {
-	help->setText(Text::toT(WinUtil::getHelpText(widget->getHelpId()).second));
+	const auto text = Text::toT(WinUtil::getHelpText(widget->getHelpId()).second);
+	if(help->getText() != text) help->setText(text);
 }
 
 bool SettingsDialog::handleClosing() {
@@ -372,18 +378,17 @@ void SettingsDialog::handleSelectionChanged() {
 			return;
 		}
 
-		auto page = ensurePage(*pageInfo);
-		if(page == currentPage) {
+		if(pageInfo->page && pageInfo->page == currentPage) {
 			return;
 		}
 
-		auto pageHost = page->getParent();
 		{
 			/* Page creation, scroll-range changes and ShowWindow each invalidate
 			 * overlapping parts of the host. Suppress those intermediate paints,
 			 * size the new page while it is hidden, and expose it only after the
 			 * ScrolledContainer has its final geometry. */
 			dwt::util::HoldRedraw hold(pageHost);
+			auto page = ensurePage(*pageInfo);
 			if(currentPage) {
 				currentPage->setVisible(false);
 			}
@@ -393,11 +398,12 @@ void SettingsDialog::handleSelectionChanged() {
 			currentPage = page;
 			pageHost->layout();
 			page->setVisible(true);
+			updateTitle();
 		}
+		// Paint the completed subtree together after the tree notification returns.
+		// Synchronous painting here can run inside the native tree's drawing cycle.
 		pageHost->redrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
 			RDW_ALLCHILDREN);
-
-		updateTitle();
 	}
 }
 
@@ -440,8 +446,8 @@ void SettingsDialog::write() {
 }
 
 void SettingsDialog::layout() {
-	dwt::Point sz = getClientSize();
-	grid->resize(dwt::Rectangle(8, 8, sz.x - 16, sz.y - 16));
+	const auto content = getContentRect();
+	grid->resize(dwt::Rectangle(content.left() + 8, content.top() + 8, content.width() - 16, content.height() - 16));
 
 	if(currentPage) {
 		currentPage->getParent()->layout();

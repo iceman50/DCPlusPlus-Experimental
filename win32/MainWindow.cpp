@@ -426,13 +426,13 @@ void MainWindow::initMenu() {
 	if(SETTING(SHOW_MENU_BAR)) {
 		viewMenu->checkItem(viewIndexes["Menu"], true);
 	} else {
-		::SetMenu(handle(), nullptr);
+		setMenuBar(nullptr);
 	}
 
 	// hide the temporary menu bar on WM_EXITMENULOOP
 	onRaw([this](WPARAM wParam, LPARAM) -> LRESULT {
 		if(!wParam && !SETTING(SHOW_MENU_BAR) && ::GetMenu(handle())) {
-			::SetMenu(handle(), nullptr);
+			setMenuBar(nullptr);
 		}
 		return 0;
 	}, dwt::Message(WM_EXITMENULOOP));
@@ -656,20 +656,19 @@ void MainWindow::initTray() {
 }
 
 bool MainWindow::filter(MSG& msg) {
-	if(msg.message == WM_SYSKEYDOWN && (msg.wParam == VK_MENU || msg.wParam == VK_F10) &&
+	if((msg.message == WM_SYSKEYDOWN || msg.message == WM_KEYDOWN) && (msg.wParam == VK_MENU || msg.wParam == VK_F10) &&
 		!SETTING(SHOW_MENU_BAR) && !::GetMenu(handle()) && !isShiftPressed())
 	{
 		// show the temporary menu bar when pressing Alt or F10
-		::SetMenu(handle(), mainMenu->handle());
+		setMenuBar(mainMenu->handle());
 
 	} else if((msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP) && (msg.wParam == VK_MENU || msg.wParam == VK_F10)  &&
 		!SETTING(SHOW_MENU_BAR) && ::GetMenu(handle()))
 	{
 		// hide the temporary menu bar if when releasing Alt or F10, the menu bar isn't focused
 		callAsync([this] {
-			MENUBARINFO info = { sizeof(MENUBARINFO) };
-			if(!::GetMenuBarInfo(handle(), OBJID_MENU, 0, &info) || !info.fBarFocused) {
-				::SetMenu(handle(), nullptr);
+			if(!isMenuBarFocused()) {
+				setMenuBar(nullptr);
 			}
 		});
 	}
@@ -1126,7 +1125,7 @@ bool MainWindow::handleClosing() {
 }
 
 void MainWindow::layout() {
-	dwt::Rectangle r { getClientSize() };
+	auto r = getContentRect();
 
 	if(!rebar->empty()) {
 		auto y = rebar->refresh();
@@ -1456,7 +1455,7 @@ void MainWindow::handleMatchAll() {
 void MainWindow::handleActivate(bool active) {
 	// hide the temporary menu bar when moving out of the main window
 	if(!active && !SETTING(SHOW_MENU_BAR) && ::GetMenu(handle())) {
-		::SetMenu(handle(), nullptr);
+		setMenuBar(nullptr);
 	}
 
 	// focus the active tab window
@@ -1833,7 +1832,7 @@ void MainWindow::handleToolbarSize(int size) {
 void MainWindow::switchMenuBar() {
 	auto show = !SETTING(SHOW_MENU_BAR);
 	SettingsManager::getInstance()->set(SettingsManager::SHOW_MENU_BAR, show);
-	::SetMenu(handle(), show ? mainMenu->handle() : nullptr);
+	setMenuBar(show ? mainMenu->handle() : nullptr);
 	viewMenu->checkItem(viewIndexes["Menu"], show);
 
 	if(!show) {

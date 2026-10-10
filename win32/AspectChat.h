@@ -160,8 +160,9 @@ protected:
 
 	/// add an RTF-formatted message.
 	void addChatRTF(tstring message, tstring plainText = Util::emptyStringT,
-		tstring author = Util::emptyStringT, string userId = Util::emptyString, time_t timestamp = 0) {
-		pendingChat.push_back({ std::move(message), std::move(plainText), std::move(author), std::move(userId), timestamp });
+		tstring author = Util::emptyStringT, string userId = Util::emptyString, time_t timestamp = 0,
+		string html = string(), string hubUrl = string()) {
+		pendingChat.push_back({ std::move(message), std::move(plainText), std::move(author), std::move(userId), timestamp, std::move(html), std::move(hubUrl) });
 		if(chatFlushScheduled) return;
 		chatFlushScheduled = true;
 		auto alive = chatAlive;
@@ -173,8 +174,7 @@ protected:
 	/// add an HTML-formatted message.
 	void addChatHTML(const string& message, const tstring& plainText = Util::emptyStringT,
 		tstring author = Util::emptyStringT, string userId = Util::emptyString, time_t timestamp = 0) {
-		addChatRTF(HtmlToRtf::convert(message, chat, richTextHubUrl), plainText,
-			std::move(author), std::move(userId), timestamp);
+		addChatRTF(tstring(), plainText, std::move(author), std::move(userId), timestamp, message, richTextHubUrl);
 	}
 
 	void readLog(const string& logPath, const unsigned setting) {

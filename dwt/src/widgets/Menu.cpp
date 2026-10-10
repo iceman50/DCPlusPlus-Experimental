@@ -47,6 +47,7 @@
 #include <memory>
 
 #include <dwt/widgets/Control.h>
+#include <dwt/widgets/Frame.h>
 
 namespace dwt {
 
@@ -135,8 +136,9 @@ void Menu::create(const Seed& seed) {
 		ownerDrawn = getRootMenu()->ownerDrawn;
 	}
 
-	if(!popup && !commandMessages) {
-		// set the MNS_NOTIFYBYPOS style to the whole menu
+	if(!getRootMenu()->popup && !commandMessages) {
+		// Submenus can also be opened directly by a client-area menu bar.
+		// Each HMENU must retain position-based command notifications.
 		MENUINFO mi = { sizeof(MENUINFO), MIM_STYLE, MNS_NOTIFYBYPOS };
 		if(!::SetMenuInfo(handle(), &mi))
 			throw Win32Exception("SetMenuInfo in Menu::create failed");
@@ -222,9 +224,28 @@ void Menu::setOwnerDrawn(bool value) {
 }
 
 LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
-	// forward to ::DefWindowProc
-	const MSG msg { getParent()->handle(), message, wParam, lParam };
-	getParent()->getDispatcher().chain(msg);
+	const auto window = getParent()->handle();
+	const bool manual = getParent()->isManualAppearance();
+	if(!manual) {
+		const MSG msg { window, message, wParam, lParam };
+		getParent()->getDispatcher().chain(msg);
+	} else {
+		if(message == WM_NCACTIVATE) {
+			const MSG activation { window, message, wParam, -1 };
+			getParent()->getDispatcher().chain(activation);
+		}
+		// USER32 still lays out and draws owner-drawn menu items, but must not
+		// paint its caption underneath the custom frame on every menu repaint.
+		MENUBARINFO bar { sizeof(MENUBARINFO) };
+		if(::GetMenuBarInfo(window, OBJID_MENU, 0, &bar)) {
+			auto region = ::CreateRectRgnIndirect(&bar.rcBar);
+			if(region) {
+				const MSG paint { window, WM_NCPAINT, reinterpret_cast<WPARAM>(region), 0 };
+				getParent()->getDispatcher().chain(paint);
+				::DeleteObject(region);
+			}
+		}
+	}
 
 	auto& rootTheme = getRootMenu()->theme;
 	auto root = getRootMenu();
@@ -236,6 +257,8 @@ LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 		RECT windowRect = getParent()->getWindowRect();
 		long itemLeft = info.rcBar.right;
 		long itemRight = info.rcBar.left;
+		long itemTop = info.rcBar.bottom;
+		long itemBottom = info.rcBar.top;
 		bool hasItems = false;
 		for(unsigned i = 0, n = size(); i < n; ++i) {
 			RECT itemRect = { 0 };
@@ -243,6 +266,8 @@ LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 				hasItems = true;
 				itemLeft = std::min(itemLeft, itemRect.left);
 				itemRight = std::max(itemRight, itemRect.right);
+				itemTop = std::min(itemTop, itemRect.top);
+				itemBottom = std::max(itemBottom, itemRect.bottom);
 			}
 		}
 		WindowUpdateCanvas canvas(getParent());
@@ -278,6 +303,28 @@ LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 		} else {
 			paintGap(info.rcBar.left, info.rcBar.right);
 		}
+		if(root->appearance->isManual()) {
+			/* Owner-drawn items and MIM_BACKGROUND do not cover USER32's
+			 * non-client menu edges. Paint those after native menu drawing,
+			 * including the strip just above rcBar and the gap to the client.
+			 * Use the item bounds so wrapped rows and their text stay intact. */
+			POINT clientOrigin = { 0, 0 };
+			if(::ClientToScreen(window, &clientOrigin)) {
+				Brush background(root->appearance->getPalette().surface);
+				auto paintEdge = [&](long top, long bottom) {
+					top = std::max(top, windowRect.top);
+					bottom = std::min(bottom, clientOrigin.y);
+					if(top < bottom) {
+						canvas.fill(Rectangle(info.rcBar.left - windowRect.left,
+							top - windowRect.top, info.rcBar.right - info.rcBar.left,
+							bottom - top), background);
+					}
+				};
+				paintEdge(info.rcBar.top - getParent()->getSystemMetric(SM_CYBORDER),
+					hasItems ? itemTop : info.rcBar.top);
+				paintEdge(hasItems ? itemBottom : info.rcBar.bottom, clientOrigin.y);
+			}
+		}
 	}
 
 	return TRUE;
@@ -286,7 +333,9 @@ LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 void Menu::setMenu() {
 	dwtassert(!popup,"Only non-popup menus may call setMenu (change the Seed accordingly)");
 
-	if(!::SetMenu(getParent()->handle(), handle()))
+	if(auto frame = dynamic_cast<Frame*>(getParent())) {
+		frame->setMenuBar(handle());
+	} else if(!::SetMenu(getParent()->handle(), handle()))
 		throw Win32Exception("SetMenu in Menu::setMenu failed");
 
 	Control* control = static_cast<Control*>(getParent());

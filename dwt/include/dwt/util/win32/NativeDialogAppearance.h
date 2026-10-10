@@ -35,6 +35,7 @@
 #include "../../WindowsHeaders.h"
 
 #include <memory>
+#include <functional>
 
 namespace dwt {
 
@@ -67,7 +68,10 @@ namespace util { namespace win32 {
  */
 class NativeDialogAppearance {
 public:
-	explicit NativeDialogAppearance(const Appearance& appearance, bool preserveDialogClientPainting = false);
+	using OwnerDrawHandler = std::function<bool(const DRAWITEMSTRUCT&)>;
+	/** Optional owner-draw handling is scoped to dialogs opened by this call. */
+	explicit NativeDialogAppearance(const Appearance& appearance, bool preserveDialogClientPainting = false,
+		OwnerDrawHandler ownerDraw = {});
 	~NativeDialogAppearance();
 
 	NativeDialogAppearance(const NativeDialogAppearance&) = delete;

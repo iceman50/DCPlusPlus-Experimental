@@ -30,7 +30,7 @@
 
 #include "HoldRedraw.h"
 #include "SettingsDialog.h"
-#include "StylesPage.h"
+#include "ThemePage.h"
 #include "UserMatchDlg.h"
 #include "WinUtil.h"
 
@@ -97,10 +97,10 @@ dirty(false)
 		remove->onClicked([this] { handleRemoveClicked(); });
 
 		button = cur->addChild(Grid::Seed(1, 1))->addChild(
-			Button::Seed(T_("Configure styles (fonts / colors) for these user matching definitions")));
+			Button::Seed(T_("Edit user-match appearance in Themes")));
 		button->setHelpId(IDH_SETTINGS_USER_MATCH_STYLES);
 		button->setImage(WinUtil::buttonIcon(IDI_STYLES));
-		button->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->activatePage<StylesPage>(); });
+		button->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->activatePage<ThemePage>(); });
 	}
 
 	WinUtil::makeColumns(table, columns, 1);
@@ -142,7 +142,7 @@ void UserMatchPage::setDirty() {
 }
 
 void UserMatchPage::updateStyles() {
-	static_cast<SettingsDialog*>(getRoot())->getPage<StylesPage>()->updateUserMatches(list);
+	static_cast<SettingsDialog*>(getRoot())->getPage<ThemePage>()->updateUserMatches(list);
 }
 
 void UserMatchPage::handleDoubleClick() {

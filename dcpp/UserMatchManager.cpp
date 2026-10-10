@@ -39,6 +39,12 @@ UserMatchManager::UserMatches UserMatchManager::getList() const {
 	return list;
 }
 
+Style UserMatchManager::getStyle(const string& name) const {
+	std::shared_lock<std::shared_mutex> lock(mutex);
+	for(const auto& match : list) if(match.name == name) return match.style;
+	return Style();
+}
+
 void UserMatchManager::setList(UserMatches&& newList, bool updateUsers) {
 	if(list.empty() && newList.empty())
 		return;
@@ -73,14 +79,17 @@ void UserMatchManager::match(OnlineUser& user) const {
 
 			if(style.font.empty() && !i.style.font.empty()) {
 				style.font = i.style.font;
+				style.fontSource = i.name;
 			}
 
 			if(style.textColor < 0 && i.style.textColor >= 0) {
 				style.textColor = i.style.textColor;
+				style.textSource = i.name;
 			}
 
 			if(style.bgColor < 0 && i.style.bgColor >= 0) {
 				style.bgColor = i.style.bgColor;
+				style.bgSource = i.name;
 			}
 		}
 	}

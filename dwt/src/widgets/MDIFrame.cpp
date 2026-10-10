@@ -58,7 +58,7 @@ void MDIFrame::create( const Seed& cs )
 void MDIFrame::layout()
 {
 	if(mdi && mdi->handle()) {
-		mdi->resize(Rectangle(getClientSize()));
+		mdi->resize(getContentRect());
 	}
 }
 

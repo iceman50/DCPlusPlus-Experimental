@@ -108,7 +108,8 @@ bool EmoticonPackDlg::handleInitDialog() {
 
 	setText(T_("Build emoticon package"));
 	updateButtons();
-	grid->resize(dwt::Rectangle(6, 6, getClientSize().x - 12, getClientSize().y - 12));
+	const auto content = getContentRect();
+	grid->resize(dwt::Rectangle(content.left() + 6, content.top() + 6, content.width() - 12, content.height() - 12));
 	centerWindow();
 	if(!initialImportPath.empty()) importPackage(std::move(initialImportPath));
 	return false;

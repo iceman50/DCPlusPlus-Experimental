@@ -106,6 +106,9 @@ public:
 
 	tstring getSelection() const;
 
+	/// Length in RichEdit character positions (one character per paragraph/line break).
+	size_t length() const;
+
 	Point getScrollPos() const;
 
 	void setScrollPos(Point& scrollPos);
@@ -123,8 +126,9 @@ public:
 	void addTextSteady(const tstring& txtRaw);
 
 	/** Append several independent RTF documents with one trim/redraw operation. Returns the
-	 * character range occupied by each inserted document. */
-	std::vector<std::pair<int, int>> addTextSteadyBatch(const std::vector<tstring>& documents);
+	 * character range occupied by each inserted document, including its optional paragraph separator. */
+	std::vector<std::pair<int, int>> addTextSteadyBatch(const std::vector<tstring>& documents,
+		bool separateParagraphs = false, std::vector<int>* insertedLengths = nullptr);
 
 	void findText(tstring const& needle);
 

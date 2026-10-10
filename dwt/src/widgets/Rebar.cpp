@@ -35,6 +35,7 @@
 #include <dwt/CanvasClasses.h>
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Pen.h>
+#include <dwt/widgets/Frame.h>
 
 namespace dwt {
 
@@ -69,6 +70,16 @@ void Rebar::create(const Seed& cs) {
 }
 
 int Rebar::refresh() {
+	if(auto frame = dynamic_cast<Frame*>(getParent())) {
+		const auto content = frame->getContentRect();
+		addRemoveStyle(CCS_NOPARENTALIGN, true);
+		::MoveWindow(handle(), content.left(), content.top(), content.width(), static_cast<int>(sendMessage(RB_GETBARHEIGHT)), TRUE);
+		const auto height = static_cast<int>(sendMessage(RB_GETBARHEIGHT));
+		if(getWindowSize().y != height) {
+			::SetWindowPos(handle(), nullptr, 0, 0, content.width(), height, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+		}
+		return height;
+	}
 	// use dummy sizes to avoid flickering; the rebar will figure out the proper sizes by itself.
 	::MoveWindow(handle(), 0, 0, 0, 0, TRUE);
 	return BaseType::getWindowSize().y;

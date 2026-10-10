@@ -14,6 +14,10 @@
 #include <cstdint>
 
 #include <dcpp/File.h>
+#include <dcpp/FontStyle.h>
+#include <dcpp/SettingsManager.h>
+#include <dcpp/StringTokenizer.h>
+#include <dcpp/UserMatchManager.h>
 #include <dcpp/SimpleXML.h>
 #include <dcpp/Util.h>
 
@@ -59,6 +63,88 @@ std::string writeColor(COLORREF color) {
 	return "#" + Util::cssColor(color);
 }
 
+std::string readFont(const std::string& value) {
+	if(value.empty()) return value;
+	StringTokenizer<std::string> tokens(value, ',');
+	const auto& fields = tokens.getTokens();
+	if(fields.size() < 5 || fields.size() > 12 || fields[0].empty() || fields[0].size() > 120 ||
+		fields[0].find_first_of(";\r\n\t") != std::string::npos)
+		throw Exception("Invalid theme font");
+	for(size_t i = 1; i < fields.size(); ++i) {
+		const auto& field = fields[i];
+		const auto start = !field.empty() && field[0] == '-' ? 1U : 0U;
+		if(start == field.size() || field.size() > 7 || field.find_first_not_of("0123456789", start) != std::string::npos)
+			throw Exception("Invalid numeric theme font field");
+	}
+	if(std::abs(Util::toInt(fields[1])) < 1 || std::abs(Util::toInt(fields[1])) > 256 ||
+		Util::toInt(fields[2]) < 0 || Util::toInt(fields[2]) > 1000 ||
+		Util::toInt(fields[3]) < 0 || Util::toInt(fields[3]) > 1 ||
+		Util::toInt(fields[4]) < 0 || Util::toInt(fields[4]) > 255) throw Exception("Theme font is out of range");
+	return FontStyle::decode(value).encode(value);
+}
+
+int settingKey(const std::string& name, const std::vector<int>& allowed) {
+	const auto& tags = SettingsManager::getInstance()->getSettingTags();
+	for(int key : allowed) if(tags[key] == name) return key;
+	throw Exception("Unknown theme appearance setting: " + name);
+}
+
+}
+
+const std::vector<int>& ThemeManager::fontSettings() {
+	using S = SettingsManager;
+	static const std::vector<int> values { S::MAIN_FONT, S::TEXT_VIEWER_FONT, S::UPLOAD_FONT, S::DOWNLOAD_FONT,
+		S::LINK_FONT, S::LOG_FONT, S::CHAT_TIMESTAMP_FONT, S::CHAT_NICK_FONT, S::CHAT_TEXT_FONT,
+		S::CHAT_SYSTEM_FONT, S::CHAT_OWN_TIMESTAMP_FONT, S::CHAT_OWN_NICK_FONT, S::CHAT_OWN_TEXT_FONT, S::CHAT_MENTION_FONT };
+	return values;
+}
+
+const std::vector<int>& ThemeManager::colorSettings() {
+	using S = SettingsManager;
+	static const std::vector<int> values { S::TEXT_COLOR, S::BACKGROUND_COLOR,
+		S::UPLOAD_TEXT_COLOR, S::UPLOAD_BG_COLOR, S::DOWNLOAD_TEXT_COLOR, S::DOWNLOAD_BG_COLOR,
+		S::LINK_COLOR, S::LINK_BG_COLOR, S::LOG_COLOR, S::LOG_BG_COLOR,
+		S::SYSTEM_LOG_VERBOSE_COLOR, S::SYSTEM_LOG_INFO_COLOR, S::SYSTEM_LOG_WARNING_COLOR,
+		S::SYSTEM_LOG_ERROR_COLOR, S::SYSTEM_LOG_AREA_COLOR,
+		S::CHAT_TIMESTAMP_COLOR, S::CHAT_TIMESTAMP_BG_COLOR, S::CHAT_NICK_COLOR, S::CHAT_NICK_BG_COLOR,
+		S::CHAT_TEXT_COLOR, S::CHAT_TEXT_BG_COLOR, S::CHAT_SYSTEM_COLOR, S::CHAT_SYSTEM_BG_COLOR,
+		S::CHAT_OWN_TIMESTAMP_COLOR, S::CHAT_OWN_TIMESTAMP_BG_COLOR, S::CHAT_OWN_NICK_COLOR, S::CHAT_OWN_NICK_BG_COLOR,
+		S::CHAT_OWN_TEXT_COLOR, S::CHAT_OWN_TEXT_BG_COLOR, S::CHAT_MENTION_COLOR, S::CHAT_MENTION_BG_COLOR };
+	return values;
+}
+
+ThemeManager::Theme::Theme(const dwt::tstring& name_, const dwt::Appearance::Palette& palette_, const std::string& path_) :
+	name(name_), palette(palette_), path(path_) {
+	auto settings = SettingsManager::getInstance();
+	for(int key : fontSettings()) fonts[key] = key == SettingsManager::MAIN_FONT ? settings->getDefault(SettingsManager::MAIN_FONT) : std::string();
+	const auto& tags = settings->getSettingTags();
+	for(int key : colorSettings()) {
+		const auto& tag = tags[key];
+		colors[key] = tag.find("BgColor") != std::string::npos || key == SettingsManager::BACKGROUND_COLOR ? palette.background : palette.text;
+	}
+	for(int key : { SettingsManager::LINK_COLOR, SettingsManager::CHAT_NICK_COLOR, SettingsManager::CHAT_OWN_NICK_COLOR,
+		SettingsManager::CHAT_MENTION_COLOR, SettingsManager::SYSTEM_LOG_AREA_COLOR }) colors[key] = palette.accent;
+	colors[SettingsManager::CHAT_TIMESTAMP_COLOR] = palette.disabledText;
+	colors[SettingsManager::CHAT_OWN_TIMESTAMP_COLOR] = palette.disabledText;
+	colors[SettingsManager::SYSTEM_LOG_VERBOSE_COLOR] = palette.disabledText;
+	colors[SettingsManager::SYSTEM_LOG_WARNING_COLOR] = RGB(220, 150, 40);
+	colors[SettingsManager::SYSTEM_LOG_ERROR_COLOR] = RGB(230, 80, 80);
+	const int keys[] = { SettingsManager::THEME_BACKGROUND_COLOR, SettingsManager::THEME_SURFACE_COLOR,
+		SettingsManager::THEME_TEXT_COLOR, SettingsManager::THEME_DISABLED_TEXT_COLOR, SettingsManager::THEME_BORDER_COLOR,
+		SettingsManager::THEME_ACCENT_COLOR, SettingsManager::THEME_HIGHLIGHT_TEXT_COLOR };
+	const COLORREF values[] = { palette.background, palette.surface, palette.text, palette.disabledText, palette.border, palette.accent, palette.highlightText };
+	for(size_t i = 0; i < std::size(keys); ++i) colors[keys[i]] = values[i];
+}
+
+ThemeManager::Theme ThemeManager::capture() {
+	auto settings = SettingsManager::getInstance();
+	Theme theme(T_("Custom"), { static_cast<COLORREF>(SETTING(THEME_BACKGROUND_COLOR)), static_cast<COLORREF>(SETTING(THEME_SURFACE_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_TEXT_COLOR)), static_cast<COLORREF>(SETTING(THEME_DISABLED_TEXT_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_BORDER_COLOR)), static_cast<COLORREF>(SETTING(THEME_ACCENT_COLOR)), static_cast<COLORREF>(SETTING(THEME_HIGHLIGHT_TEXT_COLOR)) });
+	for(int key : fontSettings()) theme.fonts[key] = settings->get(static_cast<SettingsManager::StrSetting>(key));
+	for(int key : colorSettings()) theme.colors[key] = settings->get(static_cast<SettingsManager::IntSetting>(key));
+	for(const auto& match : UserMatchManager::getInstance()->getList()) theme.userStyles[match.name] = match.style;
+	return theme;
 }
 
 std::string ThemeManager::getDirectory() {
@@ -125,7 +211,34 @@ ThemeManager::Theme ThemeManager::load(const std::string& path) {
 		readColor(xml, "Accent", path),
 		readColor(xml, "HighlightText", path)
 	};
-	return Theme(name, palette, path);
+	Theme result(name, palette, path);
+	xml.resetCurrentChild();
+	if(xml.findChild("Fonts")) {
+		xml.stepIn();
+		while(xml.findChild("Font")) result.fonts[settingKey(xml.getChildAttrib("Setting"), fontSettings())] = readFont(xml.getChildAttrib("Value"));
+		xml.stepOut();
+	}
+	xml.resetCurrentChild();
+	if(xml.findChild("Colors")) {
+		xml.stepIn();
+		while(xml.findChild("Color")) result.colors[settingKey(xml.getChildAttrib("Setting"), colorSettings())] = readColor(xml, "Value", path);
+		xml.stepOut();
+	}
+	xml.resetCurrentChild();
+	if(xml.findChild("UserStyles")) {
+		xml.stepIn();
+		while(xml.findChild("Style")) {
+			const auto key = xml.getChildAttrib("Name");
+			if(key.empty() || result.userStyles.count(key)) throw Exception("Empty or duplicate user style name in " + path);
+			Style style;
+			style.font = readFont(xml.getChildAttrib("Font"));
+			if(!xml.getChildAttrib("TextColor").empty()) style.textColor = readColor(xml, "TextColor", path);
+			if(!xml.getChildAttrib("BgColor").empty()) style.bgColor = readColor(xml, "BgColor", path);
+			result.userStyles.emplace(key, std::move(style));
+		}
+		xml.stepOut();
+	}
+	return result;
 }
 
 std::string ThemeManager::getImportPath(const std::string& source) {
@@ -142,7 +255,8 @@ std::string ThemeManager::importTheme(const std::string& source) {
 	return target;
 }
 
-std::string ThemeManager::saveTheme(const std::string& target, const dwt::Appearance::Palette& palette) {
+std::string ThemeManager::saveTheme(const std::string& target, const Theme& theme) {
+	const auto& palette = theme.palette;
 	auto path = target;
 	if(Text::toLower(Util::getFileExt(path)) != ".xml") path += ".xml";
 	File::ensureDirectory(path);
@@ -150,6 +264,7 @@ std::string ThemeManager::saveTheme(const std::string& target, const dwt::Appear
 	SimpleXML xml;
 	xml.addTag("DCPlusPlusTheme");
 	xml.addChildAttrib("Name", Text::fromT(fileThemeName(path)));
+	xml.addChildAttrib("Version", 2);
 	xml.stepIn();
 	xml.addTag("Palette");
 	xml.addChildAttrib("Background", writeColor(palette.background));
@@ -159,13 +274,42 @@ std::string ThemeManager::saveTheme(const std::string& target, const dwt::Appear
 	xml.addChildAttrib("Border", writeColor(palette.border));
 	xml.addChildAttrib("Accent", writeColor(palette.accent));
 	xml.addChildAttrib("HighlightText", writeColor(palette.highlightText));
+	const auto& tags = SettingsManager::getInstance()->getSettingTags();
+	xml.addTag("Fonts");
+	xml.stepIn();
+	for(int key : fontSettings()) {
+		xml.addTag("Font");
+		xml.addChildAttrib("Setting", tags[key]);
+		xml.addChildAttrib("Value", theme.fonts.at(key));
+	}
+	xml.stepOut();
+	xml.addTag("Colors");
+	xml.stepIn();
+	for(int key : colorSettings()) {
+		xml.addTag("Color");
+		xml.addChildAttrib("Setting", tags[key]);
+		xml.addChildAttrib("Value", writeColor(theme.colors.at(key)));
+	}
+	xml.stepOut();
+	xml.addTag("UserStyles");
+	xml.stepIn();
+	for(const auto& item : theme.userStyles) {
+		xml.addTag("Style");
+		xml.addChildAttrib("Name", item.first);
+		xml.addChildAttrib("Font", item.second.font);
+		if(item.second.textColor >= 0) xml.addChildAttrib("TextColor", writeColor(item.second.textColor));
+		if(item.second.bgColor >= 0) xml.addChildAttrib("BgColor", writeColor(item.second.bgColor));
+	}
+	xml.stepOut();
 	xml.stepOut();
 
 	const auto temporary = path + ".tmp";
 	try {
 		File output(temporary, File::WRITE, File::CREATE | File::TRUNCATE);
 		output.write(SimpleXML::utf8Header);
-		output.write(xml.toXML());
+		const auto document = xml.toXML();
+		if(document.size() + SimpleXML::utf8Header.size() > MAX_THEME_FILE_SIZE) throw Exception("Theme is larger than 64 KiB");
+		output.write(document);
 		output.close();
 		File::renameFile(temporary, path);
 	} catch(...) {

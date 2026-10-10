@@ -48,8 +48,13 @@ messageTimestamp(messageTimestamp)
 	string tmp;
 	string xmlTmp;
 
-	auto addSpan = [&xmlTmp](string id, const string& content, const string& style) -> string {
+	auto addSpan = [&xmlTmp](string id, const string& content, const string& style, const Style* source = nullptr) -> string {
 		string ret = "<span id=\"" + move(id) + "\"";
+		if(source) {
+			if(!source->fontSource.empty()) ret += " themeFontStyle=\"" + SimpleXML::escape(source->fontSource, xmlTmp, true) + "\"";
+			if(!source->textSource.empty()) ret += " themeTextStyle=\"" + SimpleXML::escape(source->textSource, xmlTmp, true) + "\"";
+			if(!source->bgSource.empty()) ret += " themeBgStyle=\"" + SimpleXML::escape(source->bgSource, xmlTmp, true) + "\"";
+		}
 		if(!style.empty()) { ret += " style=\"" + SimpleXML::escape(style, xmlTmp, true) + "\""; }
 		ret += ">" + SimpleXML::escape(content, xmlTmp, false) + "</span>";
 		return ret;
@@ -83,11 +88,11 @@ messageTimestamp(messageTimestamp)
 
 	auto style = from->getIdentity().getStyle();
 	string styleAttr;
-	if(!style.font.empty()) { styleAttr += "font: " + Util::cssFont(style.font) + ";"; }
+	if(!style.font.empty()) { styleAttr += "font: " + Util::cssFont(style.font) + ";dc-font: " + style.font + ";"; }
 	if(style.textColor != -1 && !ownMessage) { styleAttr += "color: #" + Util::cssColor(style.textColor) + ";"; }
 	if(style.bgColor != -1) { styleAttr += "background-color: #" + Util::cssColor(style.bgColor) + ";"; }
 	// The configured own-nickname color intentionally takes precedence over user-match text color.
-	htmlMessage += addSpan(ownMessage ? "ownNick" : "nick", tmp, styleAttr) + " ";
+	htmlMessage += addSpan(ownMessage ? "ownNick" : "nick", tmp, styleAttr, &style) + " ";
 
 	// Check all '<' and '[' after newlines in plain messages as they're probably
 	// pastes. RTF0 whitespace and markers must reach the CommonMark parser

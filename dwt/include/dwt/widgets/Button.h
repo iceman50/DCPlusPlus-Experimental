@@ -101,6 +101,11 @@ public:
 	void onFocusChanged(std::function<void (bool)> f);
 	bool isHot() const;
 
+	/** Use the theme's surface color behind a checkbox/radio label when the
+	 * button is embedded in chrome such as a status bar. */
+	void setSurfaceBackground(bool value);
+	bool hasSurfaceBackground() const { return surfaceBackground; }
+
 	virtual Point getPreferredSize();
 
 	using aspects::Clickable<ThisType>::onClicked;
@@ -124,6 +129,7 @@ private:
 	Rectangle textMargin;
 	bool dropDownState;
 	bool nativeDropDownState;
+	bool surfaceBackground;
 
 	// aspects::Clickable
 	static Message getClickMessage();
