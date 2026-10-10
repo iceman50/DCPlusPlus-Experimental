@@ -14,6 +14,7 @@
 #include <vector>
 #include <map>
 #include <dcpp/Style.h>
+#include <dcpp/UserMatch.h>
 
 #include <dwt/Appearance.h>
 #include <dwt/tstring.h>
@@ -29,7 +30,12 @@ public:
 		std::string path;
 		std::map<int, std::string> fonts;
 		std::map<int, int> colors;
-		std::map<std::string, dcpp::Style> userStyles;
+		// Occurrence 0 is a legacy name-wide style; duplicates use 1-based order.
+		std::map<std::pair<std::string, unsigned>, dcpp::Style> userStyles;
+		// Draft preview resolution only; session identities never enter theme XML.
+		std::map<std::string, dcpp::Style> liveUserStyles;
+		void captureUserStyles(const std::vector<dcpp::UserMatch>& matches);
+		void applyUserStyles(std::vector<dcpp::UserMatch>& matches) const;
 	};
 	static const std::vector<int>& fontSettings();
 	static const std::vector<int>& colorSettings();

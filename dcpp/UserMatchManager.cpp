@@ -39,13 +39,21 @@ UserMatchManager::UserMatches UserMatchManager::getList() const {
 	return list;
 }
 
-Style UserMatchManager::getStyle(const string& name) const {
+Style UserMatchManager::getStyle(const string& styleId) const {
 	std::shared_lock<std::shared_mutex> lock(mutex);
-	for(const auto& match : list) if(match.name == name) return match.style;
+	for(const auto& match : list) if(match.styleId == styleId) return match.style;
 	return Style();
 }
 
 void UserMatchManager::setList(UserMatches&& newList, bool updateUsers) {
+	// A caller may clone a definition. Keep the first identity and give each
+	// additional copy a new one so retained chat never resolves to its sibling.
+	unordered_set<string> ids;
+	for(auto& match : newList) {
+		if(match.styleId.empty() || !ids.insert(match.styleId).second) {
+			do { match.styleId = UserMatch().styleId; } while(!ids.insert(match.styleId).second);
+		}
+	}
 	if(list.empty() && newList.empty())
 		return;
 
@@ -79,17 +87,17 @@ void UserMatchManager::match(OnlineUser& user) const {
 
 			if(style.font.empty() && !i.style.font.empty()) {
 				style.font = i.style.font;
-				style.fontSource = i.name;
+				style.fontSource = i.styleId;
 			}
 
 			if(style.textColor < 0 && i.style.textColor >= 0) {
 				style.textColor = i.style.textColor;
-				style.textSource = i.name;
+				style.textSource = i.styleId;
 			}
 
 			if(style.bgColor < 0 && i.style.bgColor >= 0) {
 				style.bgColor = i.style.bgColor;
-				style.bgSource = i.name;
+				style.bgSource = i.styleId;
 			}
 		}
 	}
@@ -167,6 +175,7 @@ void UserMatchManager::ignoreChat(const HintedUser& user, bool ignore) {
 	// see if an automatic matcher with these rules already exists.
 	for(auto i = newList.begin(), iend = newList.end(); i != iend; ++i) {
 		if(i->isSet(UserMatch::GENERATED) && i->rules == matcher.rules) {
+			matcher.styleId = i->styleId;
 			matcher.style = i->style;
 			newList.erase(i);
 			break;

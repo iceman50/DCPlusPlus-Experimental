@@ -1,4 +1,5 @@
 == 09-13-2026 - 0.8842 !!!Experimental!!! ==
+* Keep duplicate-named user matching definitions distinct when rendering and refreshing chat or previewing and exporting themes; preserve live appearance references across renaming and reordering, and retain compatibility with name-only themes (iceman50)
 * Fix hub-chat RichEdit paragraph separation, character ranges and trimming when appending batches of formatted messages (iceman50)
 * Apply chat color and font changes immediately to retained messages without requiring a scroll; preserve the selection, scroll position, read-only state and trimmed history (iceman50)
 * Consolidate interface, chat and user-style colors and fonts under Appearance > Themes; retain Styles / User matching for matching rules and actions, and remove the duplicate Experimental palette controls (iceman50)

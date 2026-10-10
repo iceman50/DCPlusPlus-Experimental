@@ -128,6 +128,7 @@ bool UserMatchDlg::handleInitDialog(const UserMatch* initialMatcher) {
 		else if(initialMatcher->isSet(UserMatch::IGNORE_CHAT)) { ignoreChat->setChecked(true); }
 
 		result.style = initialMatcher->style;
+		result.styleId = initialMatcher->styleId;
 	}
 
 	setText(T_("User matching definition"));

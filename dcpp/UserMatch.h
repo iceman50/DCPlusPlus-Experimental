@@ -33,6 +33,7 @@ using std::vector;
 
 /** Defines rules to match users. */
 struct UserMatch : public Flags {
+	UserMatch();
 	enum {
 		PREDEFINED_BIT,
 		GENERATED_BIT,
@@ -58,6 +59,9 @@ struct UserMatch : public Flags {
 	};
 
 	string name;
+	// Session-local identity, retained when editing/reordering a definition.
+	// Not exported: portable themes associate appearances by name and occurrence.
+	string styleId;
 
 	struct Rule : StringMatch {
 		enum {

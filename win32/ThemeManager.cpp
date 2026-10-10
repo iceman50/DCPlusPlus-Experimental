@@ -136,6 +136,28 @@ ThemeManager::Theme::Theme(const dwt::tstring& name_, const dwt::Appearance::Pal
 	for(size_t i = 0; i < std::size(keys); ++i) colors[keys[i]] = values[i];
 }
 
+void ThemeManager::Theme::captureUserStyles(const std::vector<UserMatch>& matches) {
+	userStyles.clear();
+	liveUserStyles.clear();
+	std::map<std::string, unsigned> counts, occurrences;
+	for(const auto& match : matches) ++counts[match.name];
+	for(const auto& match : matches) {
+		const auto occurrence = counts[match.name] > 1 ? ++occurrences[match.name] : 0;
+		userStyles[{ match.name, occurrence }] = match.style;
+		liveUserStyles[match.styleId] = match.style;
+	}
+}
+
+void ThemeManager::Theme::applyUserStyles(std::vector<UserMatch>& matches) const {
+	std::map<std::string, unsigned> occurrences;
+	for(auto& match : matches) {
+		const auto occurrence = ++occurrences[match.name];
+		auto found = userStyles.find({ match.name, occurrence });
+		if(found == userStyles.end()) found = userStyles.find({ match.name, 0 });
+		match.style = found == userStyles.end() ? Style() : found->second;
+	}
+}
+
 ThemeManager::Theme ThemeManager::capture() {
 	auto settings = SettingsManager::getInstance();
 	Theme theme(T_("Custom"), { static_cast<COLORREF>(SETTING(THEME_BACKGROUND_COLOR)), static_cast<COLORREF>(SETTING(THEME_SURFACE_COLOR)),
@@ -143,7 +165,7 @@ ThemeManager::Theme ThemeManager::capture() {
 		static_cast<COLORREF>(SETTING(THEME_BORDER_COLOR)), static_cast<COLORREF>(SETTING(THEME_ACCENT_COLOR)), static_cast<COLORREF>(SETTING(THEME_HIGHLIGHT_TEXT_COLOR)) });
 	for(int key : fontSettings()) theme.fonts[key] = settings->get(static_cast<SettingsManager::StrSetting>(key));
 	for(int key : colorSettings()) theme.colors[key] = settings->get(static_cast<SettingsManager::IntSetting>(key));
-	for(const auto& match : UserMatchManager::getInstance()->getList()) theme.userStyles[match.name] = match.style;
+	theme.captureUserStyles(UserMatchManager::getInstance()->getList());
 	return theme;
 }
 
@@ -228,8 +250,15 @@ ThemeManager::Theme ThemeManager::load(const std::string& path) {
 	if(xml.findChild("UserStyles")) {
 		xml.stepIn();
 		while(xml.findChild("Style")) {
-			const auto key = xml.getChildAttrib("Name");
-			if(key.empty() || result.userStyles.count(key)) throw Exception("Empty or duplicate user style name in " + path);
+			const auto name = xml.getChildAttrib("Name");
+			const auto number = xml.getChildAttrib("Occurrence");
+			unsigned occurrence = 0;
+			if(!number.empty()) {
+				if(number.size() > 6 || number.find_first_not_of("0123456789") != std::string::npos ||
+					(occurrence = Util::toInt(number)) == 0) throw Exception("Invalid user style occurrence in " + path);
+			}
+			const auto key = std::make_pair(name, occurrence);
+			if(name.empty() || result.userStyles.count(key)) throw Exception("Empty or duplicate user style identity in " + path);
 			Style style;
 			style.font = readFont(xml.getChildAttrib("Font"));
 			if(!xml.getChildAttrib("TextColor").empty()) style.textColor = readColor(xml, "TextColor", path);
@@ -237,6 +266,12 @@ ThemeManager::Theme ThemeManager::load(const std::string& path) {
 			result.userStyles.emplace(key, std::move(style));
 		}
 		xml.stepOut();
+		std::map<std::string, unsigned> occurrences;
+		for(const auto& item : result.userStyles) {
+			if(item.first.second && (result.userStyles.count({ item.first.first, 0 }) ||
+				item.first.second != ++occurrences[item.first.first]))
+				throw Exception("Ambiguous or nonconsecutive user style occurrences in " + path);
+		}
 	}
 	return result;
 }
@@ -264,7 +299,9 @@ std::string ThemeManager::saveTheme(const std::string& target, const Theme& them
 	SimpleXML xml;
 	xml.addTag("DCPlusPlusTheme");
 	xml.addChildAttrib("Name", Text::fromT(fileThemeName(path)));
-	xml.addChildAttrib("Version", 2);
+	const bool duplicates = std::any_of(theme.userStyles.begin(), theme.userStyles.end(),
+		[](const auto& item) { return item.first.second != 0; });
+	xml.addChildAttrib("Version", duplicates ? 3 : 2);
 	xml.stepIn();
 	xml.addTag("Palette");
 	xml.addChildAttrib("Background", writeColor(palette.background));
@@ -295,7 +332,8 @@ std::string ThemeManager::saveTheme(const std::string& target, const Theme& them
 	xml.stepIn();
 	for(const auto& item : theme.userStyles) {
 		xml.addTag("Style");
-		xml.addChildAttrib("Name", item.first);
+		xml.addChildAttrib("Name", item.first.first);
+		if(item.first.second) xml.addChildAttrib("Occurrence", item.first.second);
 		xml.addChildAttrib("Font", item.second.font);
 		if(item.second.textColor >= 0) xml.addChildAttrib("TextColor", writeColor(item.second.textColor));
 		if(item.second.bgColor >= 0) xml.addChildAttrib("BgColor", writeColor(item.second.bgColor));

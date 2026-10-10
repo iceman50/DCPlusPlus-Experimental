@@ -22,6 +22,8 @@ The preview is an actual RichEdit control using the same renderer as chat. It sh
 
 **Styles / User matching** retains the matching definitions, order and ignore behavior. Their appearance is edited in **Themes > Users**. Theme files associate appearance with exact definition names; they do not contain or change matching rules. Applying a theme without an appearance entry for a definition resets that definition's appearance to inherited values.
 
+Definitions may share a name. Exports preserve their separate appearances using one-based `Occurrence` attributes in theme XML version 3. On import, those entries apply in the current order of definitions with that exact name, including generated definitions hidden from the editor. Keep that relative order when transferring a theme between installations. Existing version 2 name-only entries apply the same appearance to every definition with that name. Exports without duplicate names remain version 2. Live chat uses session-local rule identities, so renaming or reordering definitions does not redirect retained messages to a different rule; these identities and the rules themselves are never exported.
+
 **Import theme** validates a file and loads it into the settings draft. **Save theme** exports the draft to the selected file, even before Settings is applied. Save in the per-user Themes folder to make it available in the preset list; **Open folder** and **Reload themes** manage that list.
 
 Theme XML version 2 retains the seven-field `Palette` and adds `Fonts`, `Colors` and `UserStyles`. Files must be UTF-8 and no larger than 64 KiB. The exporter writes every supported appearance setting. For example:

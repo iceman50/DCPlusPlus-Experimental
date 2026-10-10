@@ -31,6 +31,7 @@
 #include <dcpp/QueueManager.h>
 #include <dcpp/SearchManager.h>
 #include <dcpp/SettingsManager.h>
+#include <dcpp/UserMatchManager.h>
 
 using namespace dcpp;
 
@@ -175,6 +176,46 @@ TEST(testconnections, ambiguous_nmdc_hubs_are_still_rejected) {
 	EXPECT_TRUE(expected.remove("Alice").second.empty());
 	expected.add("Alice", "Me", "dchub://one.example");
 	EXPECT_EQ("dchub://one.example", expected.remove("Alice").second);
+}
+
+TEST_F(ConnectionManagerTest, duplicate_named_user_rules_keep_independent_appearance_sources) {
+	UserMatchManager::newInstance();
+	struct Cleanup { ~Cleanup() { UserMatchManager::deleteInstance(); } } cleanup;
+	auto matching = UserMatchManager::getInstance();
+	UserMatch alice, bob, background;
+	alice.name = bob.name = background.name = "Friends";
+	auto nickRule = [](UserMatch& match, const string& nick) {
+		UserMatch::Rule rule;
+		rule.field = UserMatch::Rule::NICK;
+		rule.pattern = nick;
+		rule.setMethod(StringMatch::EXACT);
+		match.addRule(std::move(rule));
+	};
+	nickRule(alice, "Alice");
+	nickRule(bob, "Bob");
+	alice.style.textColor = 0x0000ff;
+	bob.style.textColor = 0xff0000;
+	bob.style.font = "Segoe UI,-16,700,0,1";
+	background.style.bgColor = 0xeeeeee;
+	matching->setList({ alice, bob, background }, false);
+	auto& onlineBob = online(user(1), "dchub://styles.example");
+	onlineBob.getIdentity().setNick("Bob");
+	matching->match(onlineBob);
+	const auto style = onlineBob.getIdentity().getStyle();
+	EXPECT_EQ(bob.style.textColor, style.textColor);
+	EXPECT_EQ(bob.styleId, style.textSource);
+	EXPECT_EQ(bob.styleId, style.fontSource);
+	EXPECT_EQ(background.styleId, style.bgSource);
+	EXPECT_EQ(bob.style.font, matching->getStyle(style.fontSource).font);
+	EXPECT_EQ(background.style.bgColor, matching->getStyle(style.bgSource).bgColor);
+	bob.name = "Renamed";
+	bob.style.textColor = 0x00ff00;
+	matching->setList({ background, bob, alice }, false);
+	EXPECT_EQ(bob.style.textColor, matching->getStyle(style.textSource).textColor);
+	matching->setList({ alice, alice }, false);
+	const auto cloned = matching->getList();
+	EXPECT_NE(cloned[0].styleId, cloned[1].styleId);
+	EXPECT_EQ(-1, matching->getStyle(style.textSource).textColor);
 }
 
 TEST_F(ConnectionManagerTest, nmdc_transfers_to_multiple_users_have_independent_ids) {

@@ -28,7 +28,7 @@ struct Style {
 	string font;
 	int textColor;
 	int bgColor;
-	// Source definitions for live theme refresh; each component can come from
+	// Session-local definition identities for live refresh; each component can come from
 	// a different matching rule. These are derived, not persisted rule data.
 	string fontSource, textSource, bgSource;
 

@@ -21,7 +21,8 @@
 	the draft. Save in the per-user Themes folder to add a preset; Open folder and Reload themes
 	manage the preset list. Files in this folder override application themes with the same filename.</p>
 	<p>Theme XML version 2 includes the interface palette, fonts, content colors and user-match
-	appearance. Files are UTF-8 XML, limited to 64 KiB. Matching rules and ignore behavior remain in
+	appearance. Exports with duplicate definition names use version 3 to retain each appearance.
+	Files are UTF-8 XML, limited to 64 KiB. Matching rules and ignore behavior remain in
 	<placeholder><a href="settings_user_matching.html">Styles / User matching</a></placeholder>.</p>
 
 	<h2>General</h2>
@@ -56,7 +57,9 @@
 	<h2>Users</h2>
 	<p cshelp="IDH_SETTINGS_STYLES_USER_MATCH">
 	The appearance of users that match definitions. Theme files associate these styles with exact
-	definition names without changing matching rules. A definition absent from an imported theme
+	definition names without changing matching rules. Duplicate names are associated by their order
+	in Styles / User matching, including hidden generated definitions. Older name-only themes apply
+	the same appearance to every definition with that name. A definition absent from an imported theme
 	inherits its appearance. Edit definitions in Styles / User matching.
 	</p>
 

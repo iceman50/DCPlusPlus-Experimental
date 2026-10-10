@@ -6,11 +6,15 @@ Baseline: `7fb2dc1` (`System process information`). Snapshot taken before review
 
 ## Review findings
 
-### P2: Duplicate user-match names resolve to the wrong appearance (open)
+### P2: Duplicate user-match names resolve to the wrong appearance (resolved in follow-up)
 
-`dcpp/UserMatchManager.cpp:42` resolves a style by the first matching **name**, although the rule editor permits duplicate names (`win32/UserMatchDlg.cpp:144`, `win32/UserMatchPage.cpp:237`). `match()` correctly finds a matching rule but records only its name; `win32/HtmlToRtf.cpp:301` then skips the embedded style and resolves that name again. With two definitions named Friends, one matching Alice with red text and the other matching Bob with blue text, Bob can render red because the first Friends definition wins even though it does not match Bob.
+The initial implementation used display names for both live style lookup and exported appearance keys, although the editor allowed duplicate names. Chat resolved the first definition with a given name; export overwrote earlier definitions with the last. Two Friends definitions matching Alice and Bob could therefore render Bob with Alice's color or lose one appearance on export. A regression test reproduced the export failure before the fix.
 
-Export/preview has the opposite collision policy: `win32/ThemeManager.cpp:146` and `win32/ThemePage.cpp:646` overwrite earlier appearances in a map keyed by name. Saving and reapplying a theme can therefore collapse distinct existing styles. Use an unambiguous identity for live resolution and define backward-compatible handling for duplicate names in exported themes. Add coverage for duplicate names with different rules and styles. This finding is based on the code path; it is not covered by the passing tests below. No application-code fix was made in this review.
+The follow-up uses session-local definition identities for each live font/color component. Copies used for editing and reordering retain those identities; cloned definitions are assigned separate identities when installed. Generated-rule updates retain identity as well. Deleted definitions no longer redirect retained messages to a same-named sibling.
+
+Theme capture/export now preserves duplicate names through one-based occurrences in version 3 XML. Import applies those entries in the current order of definitions with that exact name, including hidden generated definitions, without changing rules, actions or runtime identities. Old name-only entries still apply to every same-named definition; unique-name exports remain version 2. Reordered definitions on another installation must retain their relative duplicate-name order for the intended imported appearance. See `Themes/README.md`.
+
+Follow-up validation: the MinGW x64 release executable built successfully; all **194 core tests** passed (10 disabled), including the duplicate-name matching regression. `ThemeTest` exited successfully with new coverage for duplicate export/import, legacy name-only themes, invalid occurrences, component-specific rendering, draft preview, retained-message rename/reorder/deletion, and unchanged rules/actions. Logs are `build/duplicate-style-final-build.log` and `build/duplicate-style-theme.log`.
 
 ### P2: Relocated byte-exact fixture lost its LF checkout rule (fixed)
 
@@ -36,17 +40,17 @@ scons tools=mingw arch=x64 mode=release -j8 test zlib/test theme-test dwt/test b
 - Parsed all 25 supplied XML themes; verified the legacy fixture against compressed archive data; parsed both benchmark Python scripts for syntax.
 - Logs: `build/uncommitted-review-build.log` and `build/review-<test-name>.log` / `.err`.
 
-This is an initial integration and first-party code review, not an exhaustive line-by-line audit of all imported dependency code. No clean rebuild, x86/MSVC run, Windows 7 run, real-network compression benchmark or interactive accessibility review was performed. Passing automated UI tests do not close the duplicate-name finding.
+This is an initial integration and first-party code review, not an exhaustive line-by-line audit of all imported dependency code. No clean rebuild, x86/MSVC run, Windows 7 run, real-network compression benchmark or interactive accessibility review was performed. These original validation results predate the duplicate-name follow-up.
 
 ## Changelog edits made in this review
 
-Updated `changelog-bfe.txt` within its existing 0.8842 section: describe client-area title/menu bars separately from native-dialog flicker fixes; add status-bar/control layout work; mention previous allocation size; add dependency updates with platform scope and benchmark tooling. Kept the existing release heading/date and older committed entries. No entry claims that the duplicate-name bug is fixed.
+Updated `changelog-bfe.txt` within its existing 0.8842 section: describe client-area title/menu bars separately from native-dialog flicker fixes; add status-bar/control layout work; mention previous allocation size; add dependency updates with platform scope and benchmark tooling. Kept the existing release heading/date and older committed entries. The follow-up adds a separate entry for the duplicate-name fix.
 
 ## Suggested review/commit groups
 
 1. Dependency refresh, licensing, build instructions, OpenSSL script, framework migration and immutable fixtures.
 2. Windows file allocation safety, error diagnostics and regression tests.
-3. Unified Themes page, font effects, live RichEdit restyling, supplied themes and help (resolve duplicate-name handling before committing).
+3. Unified Themes page, font effects, live RichEdit restyling, supplied themes and help (duplicate-name handling was resolved in the follow-up).
 4. Client-area title/menu bars, native-dialog/toolbar/settings painting, content geometry and UI tests.
 5. Opt-in compression benchmark and its preparation/summary scripts.
 

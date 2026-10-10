@@ -147,7 +147,7 @@ private:
 		SettingsManager::IntSetting textColorSetting, SettingsManager::IntSetting bgColorSetting);
 	bool applySemanticStyle(Context& context, const string& id);
 	bool defaultFont(SettingsManager::StrSetting setting) const;
-	Style userStyle(const string& name) const;
+	Style userStyle(const string& styleId) const;
 	void ensureContrast(Context& context);
 	static tstring rtfEscape(const string& s);
 
@@ -332,12 +332,12 @@ void Parser::startTag(const string& name_, StringPairList& attribs, bool simple)
 		ensureContrast(contexts.back());
 }
 
-Style Parser::userStyle(const string& name) const {
+Style Parser::userStyle(const string& styleId) const {
 	if(theme) {
-		const auto found = theme->userStyles.find(name);
-		if(found != theme->userStyles.end()) return found->second;
+		const auto found = theme->liveUserStyles.find(styleId);
+		if(found != theme->liveUserStyles.end()) return found->second;
 	} else if(auto manager = UserMatchManager::getInstance()) {
-		return manager->getStyle(name);
+		return manager->getStyle(styleId);
 	}
 	return Style();
 }

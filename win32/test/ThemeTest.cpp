@@ -156,6 +156,63 @@ int dwtMain(dwt::Application& app) {
 		WinUtil::bgColor = RGB(255, 255, 255);
 		File::ensureDirectory(directory);
 
+		UserMatch alice, bob;
+		alice.name = bob.name = "Friends";
+		alice.style.textColor = RGB(200, 30, 40);
+		bob.style.textColor = RGB(20, 40, 210);
+		alice.style.font = "Segoe UI,-12,400,0,1";
+		bob.style.font = "Segoe UI,-16,700,1,1";
+		alice.style.bgColor = RGB(230, 220, 210);
+		bob.style.bgColor = RGB(210, 220, 230);
+		UserMatchManager::getInstance()->setList({ alice, bob }, false);
+		const auto duplicates = ThemeManager::capture();
+		check(duplicates.userStyles.size() == 2, "Theme capture collapsed duplicate user-match names");
+		const auto duplicatePath = ThemeManager::saveTheme(directory + "duplicates.xml", duplicates);
+		const auto duplicateXml = File(duplicatePath, File::READ, File::OPEN).read();
+		check(duplicateXml.find("Version=\"3\"") != string::npos, "Duplicate appearances did not use theme version 3");
+		const auto duplicateTheme = ThemeManager::load(duplicatePath);
+		check(duplicateTheme.userStyles.at({ "Friends", 1 }).textColor == alice.style.textColor &&
+			duplicateTheme.userStyles.at({ "Friends", 2 }).textColor == bob.style.textColor,
+			"Export/import merged duplicate appearances");
+		// A separate session has different runtime identities but the same rule order.
+		std::vector<UserMatch> imported(3);
+		for(auto& match : imported) match.name = "Friends";
+		imported[2].style.textColor = RGB(90, 90, 90);
+		imported[1].setFlag(UserMatch::IGNORE_CHAT | UserMatch::GENERATED);
+		UserMatch::Rule bobRule;
+		bobRule.field = UserMatch::Rule::NICK;
+		bobRule.pattern = "Bob";
+		bobRule.setMethod(StringMatch::EXACT);
+		imported[1].addRule(std::move(bobRule));
+		const auto rulesBefore = imported[1].rules;
+		const auto idBefore = imported[1].styleId;
+		duplicateTheme.applyUserStyles(imported);
+		check(imported[0].style.textColor == alice.style.textColor &&
+			imported[1].style.font == FontStyle::decode(bob.style.font).encode(bob.style.font) &&
+			imported[1].style.bgColor == bob.style.bgColor, "Applying duplicate appearances lost style components");
+		check(imported[2].style.textColor == -1, "Missing occurrence reused a sibling's appearance");
+		check(imported[1].rules == rulesBefore && imported[1].styleId == idBefore &&
+			imported[1].isSet(UserMatch::IGNORE_CHAT | UserMatch::GENERATED), "Theme import changed matching rules or identity");
+		auto nameOnly = duplicates;
+		nameOnly.userStyles.clear();
+		nameOnly.userStyles[{ "Friends", 0 }] = alice.style;
+		const auto legacyNames = ThemeManager::load(ThemeManager::saveTheme(directory + "name-only.xml", nameOnly));
+		legacyNames.applyUserStyles(imported);
+		check(imported[0].style.textColor == alice.style.textColor && imported[1].style.textColor == alice.style.textColor,
+			"Legacy name-only theme stopped applying to every matching name");
+		for(const auto& replacement : { "", "0", "-1", "bad", "1", "3", "9999999" }) {
+			auto malformed = duplicateXml;
+			const auto at = malformed.find("Occurrence=\"2\"");
+			check(at != string::npos, "Duplicate export omitted occurrence");
+			malformed.replace(at, 14, string("Occurrence=\"") + replacement + "\"");
+			const auto invalidPath = directory + "invalid-occurrence.xml";
+			File(invalidPath, File::WRITE, File::CREATE | File::TRUNCATE).write(malformed);
+			bool rejected = false;
+			try { ThemeManager::load(invalidPath); } catch(const Exception&) { rejected = true; }
+			check(rejected, "Invalid/duplicate/nonconsecutive occurrence was accepted");
+		}
+		UserMatchManager::getInstance()->setList({}, false);
+
 		FontStyle effects;
 		effects.underline = 2;
 		effects.strike = 1;
@@ -175,12 +232,12 @@ int dwtMain(dwt::Application& app) {
 		Style userStyle;
 		userStyle.font = font;
 		userStyle.textColor = RGB(40, 70, 90);
-		theme.userStyles["Operators & friends"] = userStyle;
+		theme.userStyles[{ "Operators & friends", 0 }] = userStyle;
 		const auto path = ThemeManager::saveTheme(directory + "roundtrip.xml", theme);
 		const auto loaded = ThemeManager::load(path);
 		check(loaded.fonts.at(SettingsManager::CHAT_TEXT_FONT) == font, "Theme export dropped font effects");
 		check(loaded.colors == theme.colors, "Theme export changed colors");
-		check(loaded.userStyles.at("Operators & friends").font == font, "Theme export dropped user appearance");
+		check(loaded.userStyles.at({ "Operators & friends", 0 }).font == font, "Theme export dropped user appearance");
 		check(UserMatchManager::getInstance()->getList().empty(), "Theme loading changed matching definitions");
 		const auto legacy = directory + "legacy.xml";
 		File(legacy, File::WRITE, File::CREATE | File::TRUNCATE).write(
@@ -231,7 +288,9 @@ int dwtMain(dwt::Application& app) {
 		plain.fonts[SettingsManager::CHAT_TEXT_FONT] = "Segoe UI,-12,400,0,1";
 		render(box, plain, "<b><i><span id=\"text\">Normal</span></i></b>");
 		check((formatAt(box, 0).dwEffects & (CFE_BOLD | CFE_ITALIC)) == 0, "Explicit normal font inherited bold/italic");
-		render(box, loaded, "<span id=\"nick\" themeFontStyle=\"Operators &amp; friends\" themeTextStyle=\"Operators &amp; friends\" style=\"color:#FF0000\">Alice</span>");
+		auto previewTheme = loaded;
+		previewTheme.liveUserStyles[alice.styleId] = userStyle;
+		render(box, previewTheme, "<span id=\"nick\" themeFontStyle=\"" + alice.styleId + "\" themeTextStyle=\"" + alice.styleId + "\" style=\"color:#FF0000\">Alice</span>");
 		check(formatAt(box, 0).crTextColor == static_cast<COLORREF>(userStyle.textColor), "User-match preview retained stale inline colors");
 
 		auto chat = new RichTextBox(window);
@@ -241,6 +300,30 @@ int dwtMain(dwt::Application& app) {
 		chat->resize(dwt::Rectangle(0, 0, 700, 200));
 		chat->setReadOnly();
 		WinUtil::setColor(chat);
+		UserMatchManager::getInstance()->setList({ alice, bob }, false);
+		const auto bobHtml = "<span id=\"nick\" themeFontStyle=\"" + bob.styleId + "\" themeTextStyle=\"" + bob.styleId +
+			"\" themeBgStyle=\"" + alice.styleId + "\">Bob</span>";
+		chat->appendMessages({ { L"", L"Bob", L"Bob", "", 0, bobHtml, "" } });
+		check(formatAt(chat, 0).crTextColor == static_cast<COLORREF>(bob.style.textColor) &&
+			formatAt(chat, 0).crBackColor == static_cast<COLORREF>(alice.style.bgColor) &&
+			(formatAt(chat, 0).dwEffects & (CFE_BOLD | CFE_ITALIC)) == (CFE_BOLD | CFE_ITALIC),
+			"Duplicate-name chat resolved the wrong component source");
+		render(box, duplicates, bobHtml);
+		check(formatAt(box, 0).crTextColor == static_cast<COLORREF>(bob.style.textColor), "Draft preview merged duplicate names");
+		auto renamedBob = bob;
+		renamedBob.name = "Renamed";
+		renamedBob.style.textColor = RGB(40, 150, 70);
+		UserMatchManager::getInstance()->setList({ renamedBob, alice }, false);
+		chat->refreshMessageStyles();
+		check(formatAt(chat, 0).crTextColor == static_cast<COLORREF>(renamedBob.style.textColor),
+			"Reordering/renaming detached retained chat from its appearance");
+		UserMatchManager::getInstance()->setList({ alice }, false);
+		chat->refreshMessageStyles();
+		check(formatAt(chat, 0).crTextColor == static_cast<COLORREF>(SETTING(CHAT_NICK_COLOR)),
+			"Deleting a definition retargeted retained chat to another duplicate");
+		UserMatchManager::getInstance()->setList({}, false);
+		chat->setText(L"");
+		chat->clearMessageMetadata();
 		chat->appendMessages({ { L"", L"Hello", L"", "", 0, "<span id=\"text\">Hello</span>", "" },
 			{ L"", L"World", L"", "", 0, "<span id=\"text\">World</span>", "" } });
 		chat->setSelection(1, 3);

@@ -622,13 +622,8 @@ void ThemePage::SettingsData::load(const ThemeManager::Theme& theme) {
 	if(bgColorSetting >= 0) { customBgColor = true; bgColor = theme.colors.at(bgColorSetting); }
 }
 
-void ThemePage::UserMatchData::capture(ThemeManager::Theme& theme) const {
-	theme.userStyles[matcher.name] = matcher.style;
-}
-
-void ThemePage::UserMatchData::load(const ThemeManager::Theme& theme) {
-	const auto found = theme.userStyles.find(matcher.name);
-	matcher.style = found == theme.userStyles.end() ? Style() : found->second;
+void ThemePage::UserMatchData::load(const ThemeManager::Theme&) {
+	// applyUserStyles already updated every definition, including hidden rows.
 	customFont = !matcher.style.font.empty();
 	font.first.reset();
 	makeFont(font, matcher.style.font);
@@ -641,10 +636,7 @@ void ThemePage::UserMatchData::load(const ThemeManager::Theme& theme) {
 
 ThemeManager::Theme ThemePage::snapshot() const {
 	auto result = ThemeManager::capture();
-	if(matches) {
-		result.userStyles.clear();
-		for(const auto& match : *matches) result.userStyles[match.name] = match.style;
-	}
+	if(matches) result.captureUserStyles(*matches);
 	for(size_t i = 0; i < table->size(); ++i) table->getData(static_cast<int>(i))->capture(result);
 	result.palette = { static_cast<COLORREF>(result.colors.at(SettingsManager::THEME_BACKGROUND_COLOR)),
 		static_cast<COLORREF>(result.colors.at(SettingsManager::THEME_SURFACE_COLOR)),
@@ -670,10 +662,7 @@ void ThemePage::applyTheme(const ThemeManager::Theme& theme) {
 	auto definitions = static_cast<SettingsDialog*>(getRoot())->getPage<UserMatchPage>();
 	definitions->updateStyles();
 	loading = true;
-	if(matches) for(auto& match : *matches) {
-		const auto found = theme.userStyles.find(match.name);
-		match.style = found == theme.userStyles.end() ? Style() : found->second;
-	}
+	if(matches) theme.applyUserStyles(*matches);
 	for(size_t i = 0; i < table->size(); ++i) table->getData(static_cast<int>(i))->load(theme);
 	definitions->setDirty();
 	update(globalData);

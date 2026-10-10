@@ -120,7 +120,6 @@ private:
 		int getBgColor() const;
 
 		void update();
-		void capture(ThemeManager::Theme& theme) const override;
 		void load(const ThemeManager::Theme& theme) override;
 
 	private:

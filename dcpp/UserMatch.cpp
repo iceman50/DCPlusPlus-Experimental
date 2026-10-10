@@ -21,8 +21,14 @@
 #include "Client.h"
 #include "FavoriteManager.h"
 #include "OnlineUser.h"
+#include <atomic>
 
 namespace dcpp {
+
+UserMatch::UserMatch() {
+	static std::atomic<uint64_t> nextId { 0 };
+	styleId = std::to_string(++nextId);
+}
 
 bool UserMatch::Rule::operator==(const Rule& rhs) const {
 	return field == rhs.field && StringMatch::operator==(rhs);
