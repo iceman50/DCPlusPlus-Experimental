@@ -184,8 +184,30 @@ void Download::open(int64_t bytes, bool z, bool zstd) {
 
 		unique_ptr<File> f(new File(target, File::WRITE, File::OPEN | File::CREATE | File::SHARED));
 
-		if(f->getSize() != fullSize) {
-			f->setSize(fullSize);
+		const auto previousSize = f->getSize();
+		if(previousSize != fullSize) {
+			try {
+				f->setSize(fullSize);
+			} catch(const FileException& e) {
+				auto error = str(F_("Could not allocate download file \"%1%\" (size: %2% bytes, previous size: %3% bytes): %4%") %
+					target % fullSize % previousSize % e.getError());
+#ifdef _WIN32
+				// Query the actual unfinished-file directory, including mounted folders
+				// and network shares. Caller-available space accounts for user quotas.
+				const auto directory = Util::getFilePath(target);
+				ULARGE_INTEGER available, free;
+				if(::GetDiskFreeSpaceEx(File::toNativePath(directory.empty() ? "." : directory).c_str(),
+					&available, nullptr, &free))
+				{
+					error += str(F_(" Available space: %1% bytes; total free space: %2% bytes.") %
+						available.QuadPart % free.QuadPart);
+				} else {
+					const auto spaceError = GetLastError();
+					error += str(F_(" Free space unavailable (Windows error %1%).") % spaceError);
+				}
+#endif
+				throw FileException(error);
+			}
 		}
 
 		f->setPos(getSegment().getStart());

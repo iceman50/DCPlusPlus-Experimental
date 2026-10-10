@@ -22,6 +22,8 @@ using namespace dcpp;
 
 #ifdef _WIN32
 
+#include <winioctl.h>
+
 namespace {
 
 struct LongPathFixture {
@@ -112,6 +114,93 @@ TEST(FileTest, opensLongPathsInIntegratedFileConsumers) {
 	File::deleteFile(extracted);
 	File::deleteFile(archive);
 	::RemoveDirectory(File::toNativePath(outputDirectory.substr(0, outputDirectory.size() - 1)).c_str());
+}
+
+TEST(FileTest, resizeRejectsNegativeSizeWithoutTruncatingData) {
+	LongPathFixture fixture;
+	File::ensureDirectory(fixture.file);
+	File file(fixture.file, File::RW, File::CREATE | File::TRUNCATE);
+	file.write("keep this data");
+	file.setPos(4);
+	EXPECT_THROW(file.setSize(-1), FileException);
+	EXPECT_EQ(4, file.getPos());
+	EXPECT_EQ("keep this data", file.read());
+}
+
+TEST(FileTest, failedResizePreservesPositionAndReportsWindowsError) {
+	LongPathFixture fixture;
+	File::ensureDirectory(fixture.file);
+	File(fixture.file, File::WRITE, File::CREATE | File::TRUNCATE).write("keep this data");
+	File file(fixture.file, File::READ, File::OPEN);
+	file.setPos(4);
+	try {
+		file.setSize(100);
+		FAIL() << "Resizing a read-only handle should fail";
+	} catch(const FileException& e) {
+		EXPECT_NE(string::npos, e.getError().find("SetEndOfFile"));
+		EXPECT_NE(string::npos, e.getError().find("Windows error 5"));
+	}
+	EXPECT_EQ(4, file.getPos());
+	EXPECT_EQ("keep this data", file.read());
+}
+
+namespace {
+class AllocationTestFile : public File {
+public:
+	explicit AllocationTestFile(const string& path) : File(path, File::RW, File::CREATE | File::SHARED) { }
+	bool makeSparse() {
+		DWORD returned = 0;
+		return ::DeviceIoControl(h, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &returned, nullptr) != 0;
+	}
+};
+
+void checkLargeFileSizes(File& file, const string& path) {
+	// Exact search-result sizes, plus DWORD boundaries and a file above 20 GiB.
+	const int64_t sizes[] = { 0xffffffffLL, 0x100000000LL, 13294717994LL, 12416007017LL,
+		13208887396LL, 12840916094LL, 14645412583LL, 13455705289LL, 11587322376LL,
+		12838835076LL, 15245217193LL, 24LL * 1024 * 1024 * 1024 + 123 };
+	file.write("keep this data");
+	for(auto size: sizes) {
+		SCOPED_TRACE(size);
+		file.setPos(4);
+		file.setSize(size);
+		EXPECT_EQ(4, file.getPos());
+		EXPECT_EQ(size, file.getSize());
+		EXPECT_EQ(size, File::getSize(path));
+		// Segments use separate shared handles to the same preallocated file.
+		File segment(path, File::WRITE, File::OPEN | File::SHARED);
+		segment.setPos(size - 1);
+		EXPECT_EQ(size - 1, segment.getPos());
+	}
+	file.setPos(0);
+	EXPECT_EQ("keep this data", file.read(14));
+}
+}
+
+TEST(FileTest, resizesLargeSparseFilesWithLongDownloadNames) {
+	LongPathFixture fixture;
+	fixture.file = fixture.directory + PATH_SEPARATOR_STR
+		"Les.Soprano-The.Sopranos.S01E01.MULTi.TRUEFRENCH.1080p.BluRay.REMUX.AVC.DTS-TheTruth.mkv."
+		"X25BREV6HMZXRKYZQXYSBK3J7GK3PQ5JZ5OMITQ.dctmp";
+	File::ensureDirectory(fixture.file);
+	AllocationTestFile file(fixture.file);
+	if(!file.makeSparse()) GTEST_SKIP() << "Test filesystem does not support sparse files";
+	checkLargeFileSizes(file, fixture.file);
+	file.setPos(file.getSize() - 1);
+	file.write("x");
+	file.setEndPos(-1);
+	EXPECT_EQ("x", file.read(1));
+}
+
+// Explicit opt-in: reserves up to 24 GiB temporarily. Normal test runs use sparse files.
+TEST(FileTest, DISABLED_reservesLargeDownloadFilesWithoutSparseAllocation) {
+	LongPathFixture fixture;
+	File::ensureDirectory(fixture.file);
+	ULARGE_INTEGER available;
+	ASSERT_TRUE(::GetDiskFreeSpaceEx(File::toNativePath(fixture.directory).c_str(), &available, nullptr, nullptr));
+	if(available.QuadPart < 26ULL * 1024 * 1024 * 1024) GTEST_SKIP() << "Requires 26 GiB free";
+	AllocationTestFile file(fixture.file);
+	checkLargeFileSizes(file, fixture.file);
 }
 
 #endif

@@ -119,10 +119,31 @@ int64_t File::getPos() noexcept {
 }
 
 void File::setSize(int64_t newSize) {
-	int64_t pos = getPos();
-	setPos(newSize);
-	setEOF();
-	setPos(pos);
+	auto failure = [](const char* operation, DWORD error) {
+		return FileException(string(operation) + " (Windows error " + std::to_string(error) + "): " +
+			Util::translateError(error));
+	};
+	if(newSize < 0) {
+		throw failure("SetFilePointerEx", ERROR_NEGATIVE_SEEK);
+	}
+
+	LARGE_INTEGER zero = {}, pos, end;
+	end.QuadPart = newSize;
+	if(!::SetFilePointerEx(h, zero, &pos, FILE_CURRENT)) {
+		throw failure("SetFilePointerEx", GetLastError());
+	}
+	// Never resize at the old position if seeking to the requested size fails.
+	if(!::SetFilePointerEx(h, end, nullptr, FILE_BEGIN)) {
+		throw failure("SetFilePointerEx", GetLastError());
+	}
+	if(!::SetEndOfFile(h)) {
+		const auto error = GetLastError();
+		::SetFilePointerEx(h, pos, nullptr, FILE_BEGIN);
+		throw failure("SetEndOfFile", error);
+	}
+	if(!::SetFilePointerEx(h, pos, nullptr, FILE_BEGIN)) {
+		throw failure("SetFilePointerEx", GetLastError());
+	}
 }
 void File::setPos(int64_t pos) noexcept {
 	LONG x = (LONG) (pos>>32);
