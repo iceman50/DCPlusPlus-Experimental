@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 iceman50. Distributed under the DWT BSD license. */
+/* Copyright (c) 2026 iceman50. Distributed under GPL-3.0-or-later. */
 #include "ClientFrame.h"
 
 #include <dwt/CanvasClasses.h>

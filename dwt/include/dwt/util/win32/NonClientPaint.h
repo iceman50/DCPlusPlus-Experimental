@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 iceman50. Distributed under the DWT BSD license. */
+/* Copyright (c) 2026 iceman50. Distributed under GPL-3.0-or-later. */
 #ifndef DWT_NON_CLIENT_PAINT_H
 #define DWT_NON_CLIENT_PAINT_H
 
