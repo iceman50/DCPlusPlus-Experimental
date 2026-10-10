@@ -1,5 +1,10 @@
 Import("dev source_path")
 
+# Modern runtime configuration is validated for MinGW x64.
+if "mingw" in dev.env["TOOLS"] and dev.env["arch"] == "x64":
+    ret = dev.env.SConscript("modern/SConscript", exports={"dev": dev, "source_path": "intl/modern/"})
+    Return("ret")
+
 env, target, sources = dev.prepare_build(source_path, "aintl", "*.c", in_bin=False)
 
 if "gcc" in env["TOOLS"]:

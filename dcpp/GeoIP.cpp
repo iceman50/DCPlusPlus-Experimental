@@ -83,7 +83,7 @@ bool GeoIP::decompress() const {
 
 void GeoIP::open() {
 #ifdef _WIN32
-	geo = GeoIP_open(File::toNativePath(path).c_str(), GEOIP_STANDARD);
+	geo = GeoIP_open(Text::fromT(File::toNativePath(path)).c_str(), GEOIP_STANDARD);
 #else
 	geo = GeoIP_open(path.c_str(), GEOIP_STANDARD);
 #endif
@@ -191,7 +191,7 @@ void GeoIP::rebuild_cities() {
 	while(!GeoIP_next_record(geo, &record, &id) && record) {
 
 		ParamMap params;
-		countryParams(params, record->country);
+		countryParams(params, GeoIP_id_by_code(record->country_code));
 
 		params["areacode"] = [record] { return Util::toString(record->area_code); };
 		params["city"] = [record] { return forwardRet(record->city); };
@@ -200,7 +200,7 @@ void GeoIP::rebuild_cities() {
 		params["metrocode"] = [record] { return Util::toString(record->metro_code); };
 		params["postcode"] = [record] { return forwardRet(record->postal_code); };
 		params["region"] = [record, &regions]() -> string {
-			auto country = GeoIP_code_by_id(record->country);
+			auto country = record->country_code;
 			auto region = record->region;
 			if(country && region) {
 				return regionName(regions, country, region);

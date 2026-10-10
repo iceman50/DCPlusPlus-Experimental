@@ -1,0 +1,11 @@
+Copyright (C) 2026 iceman50
+
+GoogleTest 1.18.0, upstream googletest/include and googletest/src directories.
+https://github.com/google/googletest/releases/tag/v1.18.0
+License: ../gtest-LICENSE (upstream BSD 3-Clause).
+
+../gtest.h and ../gtest-all.cpp preserve the project's existing include/build
+entry points. SCons compiles only the aggregate gtest-all.cc translation unit.
+The test data file ../data/gtest_h_original.txt is an unchanged older upstream
+header extracted from ../data/gtest_h.zip; it is deliberately independent of
+the framework sources used to compile the tests.

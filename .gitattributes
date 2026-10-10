@@ -1,6 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=eol=lf
 
-# These zlib tests compare exact bytes against a checked-in compressed fixture.
+# Archive and zlib tests compare this immutable input with binary fixtures.
+test/data/gtest_h_original.txt text eol=lf
 test/gtest.h text eol=lf
 test/data/gtest_h_compressed binary

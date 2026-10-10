@@ -1,38 +1,73 @@
-Patches for DC++:
-* Header includes have been slightly changed.
-* The non-UTF-8 country name list has been removed.
-* A list of Windows GEOID and a conversion function (GeoIP_Win_GEOID_by_id) have been added.
-* The inet_pton implementation for Windows has been rewritten to use WSAStringToAddressA (the
-getaddrinfo variant in the original file was causing crashes).
-* Records coming from city-level databases only store a country id instead of strings.
+DC++ integration changes against GeoIP C API v1.6.12.
+Copyright (C) 2026 iceman50 (integration changes).
+Upstream copyright and LGPL notices are preserved.
 
-diff -u libGeoIP/GeoIP.c ./GeoIP.c
---- libGeoIP/GeoIP.c	2013-02-27 21:13:12.000000000 +0100
-+++ ./GeoIP.c	2013-04-15 21:30:50.641336400 +0200
-@@ -20,6 +20,8 @@
- 
+* Retain Windows GEOIDs and GeoIP_Win_GEOID_by_id.
+* Interpret database paths as UTF-8 and use wide Windows file APIs.
+* Parse IPv6 literals with InetPtonA instead of the upstream Windows fallback.
+* City record structures are now unchanged upstream; application adapters use
+  country_code instead of the removed local country member.
+
+--- libGeoIP/GeoIP.c
++++ geoip/GeoIP.c
+@@ -2,6 +2,7 @@
+ /* GeoIP.c
+  *
+  * Copyright (C) 2016 MaxMind, Inc.
++ * Copyright (C) 2026 iceman50 (DC++ integration changes).
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -21,7 +22,92 @@
  #include "GeoIP.h"
+ #include "GeoIP_internal.h"
  
-+#include "incl.h"
++#include <sys/stat.h>
 +
- static geoipv6_t IPV6_NULL;
- 
- #if !defined(_WIN32) 
-@@ -51,6 +53,10 @@
- #define _UNUSED
- #endif
- 
-+#ifndef _DEBUG
-+#define fprintf
++
++#ifdef _WIN32
++/* DC++ integration: preserve Unicode database paths for open and cache reload. */
++static wchar_t *GeoIP_native_path(const char *path) {
++    int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
++    wchar_t *native;
++    if (!length) return NULL;
++    native = (wchar_t *)malloc((size_t)length * sizeof(wchar_t));
++    if (!native) return NULL;
++    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, native, length)) {
++        free(native);
++        return NULL;
++    }
++    return native;
++}
++static FILE *GeoIP_fopen(const char *path, const char *mode) {
++    wchar_t *native = GeoIP_native_path(path);
++    FILE *file;
++    (void)mode; /* All callers open databases for binary reads. */
++    if (!native) return NULL;
++    file = _wfopen(native, L"rb");
++    free(native);
++    return file;
++}
++static int GeoIP_stat(const char *path, struct stat *result) {
++    wchar_t *native = GeoIP_native_path(path);
++    struct _stat info;
++    int status;
++    if (!native) return -1;
++    status = _wstat(native, &info);
++    free(native);
++    if (status == 0) {
++        memset(result, 0, sizeof(*result));
++        result->st_size = info.st_size;
++        result->st_mtime = info.st_mtime;
++    }
++    return status == 0 ? 0 : -1;
++}
++#define fopen GeoIP_fopen
++#define stat(path, result) GeoIP_stat(path, result)
 +#endif
 +
- #ifndef        INADDR_NONE
- #define        INADDR_NONE     -1
- #endif
-@@ -141,6 +147,36 @@
- 	"ZMB","MNE","ZWE","A1","A2","O1","ALA","GGY","IMN","JEY",
-   "BLM","MAF", "BES", "SSD", "O1" };
- 
+ static geoipv6_t IPV6_NULL;
++
 +#ifdef _WIN32
 +// from <http://msdn.microsoft.com/en-us/library/dd374073.aspx>
 +int GeoIP_Win_GEOID[256] = { 0x0,0x0,0x0,0x8,0xE0,0x3,0x2,0x12C,0x6,0x7,0x111,
@@ -63,271 +98,63 @@ diff -u libGeoIP/GeoIP.c ./GeoIP.c
 +	0x9A55C4F,0x7BDA,0x9A55D42,0x114,0x0 };
 +#endif
 +
- const char * GeoIP_utf8_country_name[256] = {"N/A","Asia/Pacific Region","Europe","Andorra","United Arab Emirates","Afghanistan","Antigua and Barbuda","Anguilla","Albania","Armenia","Cura" "\xc3\xa7" "ao",
- 	"Angola","Antarctica","Argentina","American Samoa","Austria","Australia","Aruba","Azerbaijan","Bosnia and Herzegovina","Barbados",
- 	"Bangladesh","Belgium","Burkina Faso","Bulgaria","Bahrain","Burundi","Benin","Bermuda","Brunei Darussalam","Bolivia",
-@@ -168,33 +204,6 @@
- 	"Zambia","Montenegro","Zimbabwe","Anonymous Proxy","Satellite Provider","Other","Aland Islands","Guernsey","Isle of Man","Jersey",
-   "Saint Barthelemy","Saint Martin", "Bonaire, Saint Eustatius and Saba", "South Sudan", "Other" };
- 
--const char * GeoIP_country_name[256] = {"N/A","Asia/Pacific Region","Europe","Andorra","United Arab Emirates","Afghanistan","Antigua and Barbuda","Anguilla","Albania","Armenia","Curacao",
--	"Angola","Antarctica","Argentina","American Samoa","Austria","Australia","Aruba","Azerbaijan","Bosnia and Herzegovina","Barbados",
--	"Bangladesh","Belgium","Burkina Faso","Bulgaria","Bahrain","Burundi","Benin","Bermuda","Brunei Darussalam","Bolivia",
--	"Brazil","Bahamas","Bhutan","Bouvet Island","Botswana","Belarus","Belize","Canada","Cocos (Keeling) Islands","Congo, The Democratic Republic of the",
--	"Central African Republic","Congo","Switzerland","Cote D'Ivoire","Cook Islands","Chile","Cameroon","China","Colombia","Costa Rica",
--	"Cuba","Cape Verde","Christmas Island","Cyprus","Czech Republic","Germany","Djibouti","Denmark","Dominica","Dominican Republic",
--	"Algeria","Ecuador","Estonia","Egypt","Western Sahara","Eritrea","Spain","Ethiopia","Finland","Fiji",
--	"Falkland Islands (Malvinas)","Micronesia, Federated States of","Faroe Islands","France","Sint Maarten (Dutch part)","Gabon","United Kingdom","Grenada","Georgia","French Guiana",
--	"Ghana","Gibraltar","Greenland","Gambia","Guinea","Guadeloupe","Equatorial Guinea","Greece","South Georgia and the South Sandwich Islands","Guatemala",
--	"Guam","Guinea-Bissau","Guyana","Hong Kong","Heard Island and McDonald Islands","Honduras","Croatia","Haiti","Hungary","Indonesia",
--	"Ireland","Israel","India","British Indian Ocean Territory","Iraq","Iran, Islamic Republic of","Iceland","Italy","Jamaica","Jordan",
--	"Japan","Kenya","Kyrgyzstan","Cambodia","Kiribati","Comoros","Saint Kitts and Nevis","Korea, Democratic People's Republic of","Korea, Republic of","Kuwait",
--	"Cayman Islands","Kazakhstan","Lao People's Democratic Republic","Lebanon","Saint Lucia","Liechtenstein","Sri Lanka","Liberia","Lesotho","Lithuania",
--	"Luxembourg","Latvia","Libya","Morocco","Monaco","Moldova, Republic of","Madagascar","Marshall Islands","Macedonia","Mali",
--	"Myanmar","Mongolia","Macau","Northern Mariana Islands","Martinique","Mauritania","Montserrat","Malta","Mauritius","Maldives",
--	"Malawi","Mexico","Malaysia","Mozambique","Namibia","New Caledonia","Niger","Norfolk Island","Nigeria","Nicaragua",
--	"Netherlands","Norway","Nepal","Nauru","Niue","New Zealand","Oman","Panama","Peru","French Polynesia",
--	"Papua New Guinea","Philippines","Pakistan","Poland","Saint Pierre and Miquelon","Pitcairn Islands","Puerto Rico","Palestinian Territory","Portugal","Palau",
--	"Paraguay","Qatar","Reunion","Romania","Russian Federation","Rwanda","Saudi Arabia","Solomon Islands","Seychelles","Sudan",
--	"Sweden","Singapore","Saint Helena","Slovenia","Svalbard and Jan Mayen","Slovakia","Sierra Leone","San Marino","Senegal","Somalia","Suriname",
--	"Sao Tome and Principe","El Salvador","Syrian Arab Republic","Swaziland","Turks and Caicos Islands","Chad","French Southern Territories","Togo","Thailand",
--	"Tajikistan","Tokelau","Turkmenistan","Tunisia","Tonga","Timor-Leste","Turkey","Trinidad and Tobago","Tuvalu","Taiwan",
--	"Tanzania, United Republic of","Ukraine","Uganda","United States Minor Outlying Islands","United States","Uruguay","Uzbekistan","Holy See (Vatican City State)","Saint Vincent and the Grenadines","Venezuela",
--	"Virgin Islands, British","Virgin Islands, U.S.","Vietnam","Vanuatu","Wallis and Futuna","Samoa","Yemen","Mayotte","Serbia","South Africa",
--	"Zambia","Montenegro","Zimbabwe","Anonymous Proxy","Satellite Provider","Other","Aland Islands","Guernsey","Isle of Man","Jersey",
--  "Saint Barthelemy","Saint Martin", "Bonaire, Saint Eustatius and Saba", "South Sudan", "Other"};
--
- /* Possible continent codes are AF, AS, EU, NA, OC, SA for Africa, Asia, Europe, North America, Oceania
- and South America. */
- 
-@@ -266,27 +275,14 @@
-  
- static int _GeoIP_inet_pton(int af, const char *src, void *dst) 
- { 
--        struct addrinfo hints, *res, *ressave; 
-- 
--        memset(&hints, 0, sizeof(struct addrinfo)); 
--        hints.ai_family = af; 
-- 
--        if (getaddrinfo(src, NULL, &hints, &res) != 0) 
--        { 
--                fprintf(stderr, "Couldn't resolve host %s\n", src); 
--                return -1; 
--        } 
-- 
--        ressave = res; 
-- 
--        while (res) 
--        { 
--                memcpy(dst, res->ai_addr, res->ai_addrlen); 
--                res = res->ai_next; 
--        } 
-- 
--        freeaddrinfo(ressave); 
--        return 0; 
-+	struct sockaddr_storage ss;
-+	int sslen = sizeof(ss);
-+	if(WSAStringToAddressA((char*)src, af, 0, (struct sockaddr*)&ss, &sslen) == 0) {
-+		struct sockaddr_in6* ss6 = (struct sockaddr_in6*)(&ss);
-+		memcpy(dst, &ss6->sin6_addr, sizeof(struct in6_addr));
-+		return 1;
-+	}
-+	return -1;
- }
- #else
- static int _GeoIP_inet_pton(int af, const char *src, void *dst) {
-@@ -954,7 +950,11 @@
- 	return gi;
- }
- 
-+#ifdef _WIN32
-+GeoIP* GeoIP_open (const wchar_t * filename, int flags) {
-+#else
- GeoIP* GeoIP_open (const char * filename, int flags) {
-+#endif
- 	struct stat buf;
- 	GeoIP * gi;
- 	size_t len;
-@@ -962,6 +962,10 @@
- 	gi = (GeoIP *)malloc(sizeof(GeoIP));
- 	if (gi == NULL)
- 		return NULL;
-+#ifdef _WIN32
-+	gi->GeoIPDatabase = _wfopen(filename,L"rb");
-+	gi->file_path = malloc(0);
-+#else
-        	len = sizeof(char) * (strlen(filename)+1);
- 	gi->file_path = malloc(len);
- 	if (gi->file_path == NULL) {
-@@ -970,6 +974,7 @@
- 	}
- 	strncpy(gi->file_path, filename, len);
- 	gi->GeoIPDatabase = fopen(filename,"rb");
-+#endif
- 	if (gi->GeoIPDatabase == NULL) {
- 		fprintf(stderr,"Error Opening file %s\n",filename);
- 		free(gi->file_path);
-@@ -1905,18 +1910,16 @@
-        /* return NULL also even for index 0 for backward compatibility */
-        if (id <= 0 || id >= (int) num_GeoIP_countries)
-                return NULL;
--       return ((gi->charset == GEOIP_CHARSET_UTF8)
--         ? GeoIP_utf8_country_name[id]
--         : GeoIP_country_name[id]);
-+       return GeoIP_utf8_country_name[id];
- }
- 
--/** return full name of country in iso-8859-1 */
-+/** return full name of country in utf-8 */
- const char* GeoIP_name_by_id(int id)
- {
-        if (id < 0 || id >= (int) num_GeoIP_countries)
-                return NULL;
- 
--       return GeoIP_country_name[id];
-+       return GeoIP_utf8_country_name[id];
- }
- 
- /** return continent of country */
-@@ -1928,6 +1931,17 @@
-        return GeoIP_country_continent[id];
- }
- 
 +#ifdef _WIN32
 +/** return a Windows GEOID */
 +int GeoIP_Win_GEOID_by_id(int id)
 +{
-+       if (id < 0 || id >= (int) num_GeoIP_countries)
++       if (id < 0 || id >= 256)
 +               return 0;
 +
 +       return GeoIP_Win_GEOID[id];
 +}
 +#endif
-+
- /** return id by country code **/
- int GeoIP_id_by_code(const char *country)
- {
-diff -u libGeoIP/GeoIP.h ./GeoIP.h
---- libGeoIP/GeoIP.h	2013-02-27 21:13:12.000000000 +0100
-+++ ./GeoIP.h	2013-04-15 21:30:50.641336400 +0200
-@@ -25,23 +25,8 @@
- extern "C" {
- #endif
  
-+#include <stdio.h>
- #include <sys/types.h>
--#if !defined(_WIN32)
--#include <sys/socket.h>
--#include <netinet/in.h>
--#include <arpa/inet.h>
--#else /* !defined(_WIN32) */ 
--#include <winsock2.h> 
--#include <ws2tcpip.h> 
--#define snprintf _snprintf 
--#define FILETIME_TO_USEC(ft) (((unsigned __int64) ft.dwHighDateTime << 32 | ft.dwLowDateTime) / 10) 
--#endif /* !defined(_WIN32) */ 
-- 
--#include<stdio.h>
--#include<stdlib.h>
--#include<string.h>
--#include <sys/types.h> /* for fstat */
--#include <sys/stat.h>	/* for fstat */
+ #if defined(_WIN32)
+ #include <io.h>
+@@ -742,24 +828,7 @@
+ }
  
- #define SEGMENT_RECORD_LENGTH 3
- #define LARGE_SEGMENT_RECORD_LENGTH 4
-@@ -170,7 +155,6 @@
-  * program with newer GeoIP versions */
- extern const char GeoIP_country_code[256][3];
- extern const char GeoIP_country_code3[256][4];
--extern const char * GeoIP_country_name[256];
- extern const char * GeoIP_utf8_country_name[256];
- extern const char GeoIP_country_continent[256][3];
+ static int _GeoIP_inet_pton(int af, const char *src, void *dst) {
+-    struct addrinfo hints, *res, *ressave;
+-
+-    memset(&hints, 0, sizeof(struct addrinfo));
+-    hints.ai_family = af;
+-
+-    if (getaddrinfo(src, NULL, &hints, &res) != 0) {
+-        return -1;
+-    }
+-
+-    ressave = res;
+-
+-    while (res) {
+-        memcpy(dst, res->ai_addr, res->ai_addrlen);
+-        res = res->ai_next;
+-    }
+-
+-    freeaddrinfo(ressave);
+-    return 0;
++    return InetPtonA(af, src, dst);
+ }
+ #else
+ static int _GeoIP_inet_pton(int af, const char *src, void *dst) {
+--- libGeoIP/GeoIP.h
++++ geoip/GeoIP.h
+@@ -2,6 +2,7 @@
+ /* GeoIP.h
+  *
+  * Copyright (C) 2016 MaxMind, Inc.
++ * Copyright (C) 2026 iceman50 (DC++ integration changes).
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -437,6 +438,10 @@
+ /* End deprecated */
  
-@@ -183,7 +167,11 @@
- GEOIP_API void GeoIP_setup_custom_directory(char *dir);
- GEOIP_API GeoIP* GeoIP_open_type (int type, int flags);
- GEOIP_API GeoIP* GeoIP_new(int flags);
+ #
 +#ifdef _WIN32
-+GEOIP_API GeoIP* GeoIP_open(const wchar_t * filename, int flags);
-+#else
- GEOIP_API GeoIP* GeoIP_open(const char * filename, int flags);
-+#endif
- GEOIP_API int GeoIP_db_avail(int type);
- GEOIP_API void GeoIP_delete(GeoIP* gi);
- 
-@@ -255,6 +243,11 @@
- /** return continent of country */
- GEOIP_API const char* GeoIP_continent_by_id(int id);
- 
-+#ifdef _WIN32
-+/** return a Windows GEOID */
 +GEOIP_API int GeoIP_Win_GEOID_by_id(int id);
 +#endif
 +
- /** return id by country code **/
- GEOIP_API int GeoIP_id_by_code(const char *country);
- 
-diff -u libGeoIP/GeoIPCity.c ./GeoIPCity.c
---- libGeoIP/GeoIPCity.c	2013-02-27 21:13:12.000000000 +0100
-+++ ./GeoIPCity.c	2013-04-15 21:30:50.641336400 +0200
-@@ -20,6 +20,7 @@
-  */
- 
- #include "GeoIP.h"
-+#include "incl.h"
- #include "GeoIP_internal.h"
- #include "GeoIPCity.h"
- #if !defined(_WIN32)
-@@ -86,10 +87,7 @@
-     }
- 
-   /* get country */
--  record->continent_code = (char *) GeoIP_country_continent[record_buf[0]];
--  record->country_code = (char *) GeoIP_country_code[record_buf[0]];
--  record->country_code3 = (char *) GeoIP_country_code3[record_buf[0]];
--  record->country_name = (char *) GeoIP_country_name_by_id(gi, record_buf[0]);
-+  record->country = record_buf[0];
-   record_buf++;
- 
-   /* get region */
-@@ -142,7 +140,7 @@
-    * locations
-    */
-   if (GEOIP_CITY_EDITION_REV1 == gi->databaseType) {
--    if (!strcmp(record->country_code, "US")) {
-+    if (!strcmp(GeoIP_code_by_id(record->country), "US")) {
-       record_buf += 3;
-       for (j = 0; j < 3; ++j)
- 	metroarea_combo += (record_buf[j] << (j * 8));
-diff -u libGeoIP/GeoIPCity.h ./GeoIPCity.h
---- libGeoIP/GeoIPCity.h	2013-02-27 21:13:12.000000000 +0100
-+++ ./GeoIPCity.h	2013-04-15 21:30:50.641336400 +0200
-@@ -30,9 +30,7 @@
- #define  GEOIP_UNKNOWN_CONF  ( 0x7f )
- 
- typedef struct GeoIPRecordTag {
--	char *country_code;
--	char *country_code3;
--	char *country_name;
-+	int country;
- 	char *region;
- 	char *city;
- 	char *postal_code;
-@@ -44,7 +42,6 @@
-         };
- 	int area_code;
- 	int charset;
--	char *continent_code;
-         int netmask;	
- } GeoIPRecord;
- 
-diff -u libGeoIP/GeoIP_depreciated.c ./GeoIP_depreciated.c
---- libGeoIP/GeoIP_depreciated.c	2013-02-27 21:13:12.000000000 +0100
-+++ ./GeoIP_depreciated.c	2013-04-15 21:30:50.641336400 +0200
-@@ -1,4 +1,6 @@
- 
-+#include "incl.h"
-+
- #include "GeoIP_internal.h"
- 
- char           *
+ #ifdef __cplusplus
+ }
+ #endif

@@ -4,7 +4,7 @@ env, target, sources = dev.prepare_build(
     source_path, "geoip", source_glob="*.c", in_bin=False
 )
 
-env.Append(CPPDEFINES=['GEOIPDATADIR=\\"\\"', "HAVE_STDINT_H=1", "PACKAGE_VERSION=0"])
+env.Append(CPPDEFINES=['GEOIPDATADIR=\\"\\"', "HAVE_STDINT_H=1", 'PACKAGE_VERSION=\\"1.6.12\\"'])
 
 if "msvc" in env["TOOLS"]:
     env.Append(CPPDEFINES=["ssize_t=SSIZE_T"])

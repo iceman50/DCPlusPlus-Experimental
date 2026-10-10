@@ -15,7 +15,7 @@ def runUnitTest(env, target, source):
 env, target, sources = dev.prepare_build(
     source_path, "gtest", source_glob="*.cpp", in_bin=False
 )
-env.Append(CPPDEFINES=["GTEST_LANG_CXX11=1"])
+env.Append(CPPPATH=["#/test/googletest/include", "#/test/googletest"])
 
 # not every lib is strictly required here but we want to match the main program
 # as much as possible.

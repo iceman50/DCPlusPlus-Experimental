@@ -11,7 +11,7 @@
 #define OPENSSL_OPENSSLCONF_H
 #pragma once
 
-#include <openssl/configuration.h>
+#include <openssl/configuration-mingw-x64.h>
 #include <openssl/macros.h>
 
 #endif /* OPENSSL_OPENSSLCONF_H */

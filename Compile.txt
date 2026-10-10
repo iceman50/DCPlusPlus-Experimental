@@ -51,8 +51,11 @@
 
 		Make sure that Perl is in your PATH environment variable.
 
-		* gettext runtime & tools - 0.17 or later
-		<https://ftp.gnome.org/pub/gnome/binaries/win32/dependencies/>
+		* gettext tools (msgfmt, xgettext)
+		<https://www.gnu.org/software/gettext/>
+
+		The runtime is bundled: 1.0 for MinGW x64, with the previous runtime
+		retained for other configurations. See intl/modern/README.dcpp.
 
 		Make sure that the gettext tools are in your PATH environment variable.
 
@@ -110,24 +113,17 @@
 
 	b. OpenSSL
 
-		Download OpenSSL from www.openssl.org, copy the 'openssl-*.tar.gz' archive to the openssl/build folder.
-		
+		The current dependency baseline is OpenSSL 3.5.8 LTS.
+		See openssl/readme.txt for platform configuration and archive locations.
+
 		Compiling with MinGW
 
-			Use the build_mingw.bat script provided in the openssl/build folder. It will copy the compiled libraries to openssl/lib.
-			The build process needs Cygwin installed. Above the basic (default) packages the following additional packages needs
-			to be installed under Cygwin:
-
-			* perl (native Perl builds for Windows are not suitable for this process)
-			* make
-
-			<https://bennierobinson.com/programming/2016/01/24/perl-windows-2016.html> explains how to set up these
-			packages in great detail.
-
-			You'll also need a GNU Patch executable for the operation in your PATH. It can be either the GNU Win32 binary
-			or a package installed under Cygwin or even any patch executable that may come with your versioning system.
-
-			Make sure that Cygwin's 'bin' folder is in your PATH environment variable.
+			In a MinGW/MSYS2 shell with the matching GCC, Perl, make, curl,
+			tar and sha256sum on PATH, run:
+				sh scripts/build-openssl.sh x64
+			Use x86 with a matching 32-bit compiler to build the 32-bit archives.
+			The script verifies the source checksum and installs matching headers
+			and static libraries. The static archives are ignored build artifacts.
 
 		Compiling with MSVC
 

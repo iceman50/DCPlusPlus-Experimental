@@ -45,7 +45,7 @@ TEST(testzutils, test_compression)
 	// Test a compression using dcpp::ZFilter.
 
 	{
-		File f_in("test/gtest.h", File::READ, File::OPEN);
+		File f_in("test/data/gtest_h_original.txt", File::READ, File::OPEN);
 		File f_out("test/data/out/gtest_h_compressed", File::WRITE, File::CREATE | File::TRUNCATE);
 		FilteredInputStream<ZFilter, false> stream_in(&f_in);
 
@@ -67,7 +67,7 @@ TEST(testzutils, test_decompression)
 		runTransfer(f_in, stream_out);
 	}
 
-	ASSERT_EQ(tiger("test/gtest.h"), tiger("test/data/out/gtest_h_decompressed"));
+	ASSERT_EQ(tiger("test/data/gtest_h_original.txt"), tiger("test/data/out/gtest_h_decompressed"));
 }
 
 TEST(testzutils, test_compression_dynamically_disabled)

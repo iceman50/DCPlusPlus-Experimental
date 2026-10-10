@@ -1,0 +1,39 @@
+Copyright (C) 2026 iceman50
+
+GNU gettext runtime 1.0 (2026-01-29)
+https://ftp.gnu.org/gnu/gettext/gettext-1.0.tar.xz
+
+This directory contains gettext-runtime/intl sources and its gnulib-lib support
+from the release archive. COPYING.LIB and individual source notices apply.
+SConscript, sources.txt and dcpp-compat.c are DC++ integration files. The latter
+preserves the private locale helper used by the existing application.
+
+Configuration is for MinGW-w64 GCC 13.2.0, x86_64, MSVCRT. The parent SConscript
+and public libintl.h select this copy only for MinGW x64. Other platforms retain
+the previous runtime. Do not select this config.h for a different ABI or CRT.
+
+To regenerate the platform headers, extract the pinned release and configure
+gettext-runtime/intl in a MinGW/MSYS shell with the matching compiler:
+
+  am_cv_func_iconv=no ./configure --host=x86_64-w64-mingw32 --build=x86_64-pc-msys \
+    CC=gcc AR=ar RANLIB=ranlib --disable-shared --enable-static \
+    --disable-dependency-tracking --without-libiconv-prefix \
+    --without-libintl-prefix
+
+Generate libgnuintl.h and the gnulib-lib wrapper headers with the upstream
+Makefiles. Copy config.h, libgnuintl.h (as both libgnuintl.h and libintl.h), the
+intl .c/.h files, and gnulib-lib .c/.h files preserving relative directories.
+Keep the local integration files. sources.txt enumerates LIBINTLSOURCES (using
+the shipped plural.c instead of regenerating it from plural.y), the configured
+gnulib object sources, and dcpp-compat.c. Regenerate that selection if configure
+chooses different portability replacements. SCons performs the actual build;
+generated Makefiles/libtool scripts and object files are not vendored.
+
+The gnulib wrappers are private to this library, not application include paths.
+HAVE_ICONV is disabled, as in the previous runtime: DC++ ships UTF-8 catalogs
+and does not require an additional libiconv library from the compiler package.
+__USE_MINGW_ANSI_STDIO=0 uses the CRT entry points expected by gnulib's configured
+printf replacements. The library is static and adds no external gettext DLL.
+
+After changes run the main test target, including
+DependencyRuntime.gettext_loads_utf8_catalogs_and_plural_forms.

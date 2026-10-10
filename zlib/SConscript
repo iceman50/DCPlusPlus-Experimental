@@ -4,6 +4,9 @@ env, target, sources = dev.prepare_build(
     source_path, "zlib", source_glob="*.c", in_bin=False
 )
 
+# Retain the previous MiniZip behavior: encrypted archives are unsupported.
+env.Append(CPPDEFINES=["NOUNCRYPT"])
+
 if not dev.is_win32():
     sources = [source for source in sources if "iowin32" not in source]
 

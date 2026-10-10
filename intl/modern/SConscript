@@ -1,0 +1,17 @@
+# Copyright (C) 2026 iceman50
+Import("dev source_path")
+from pathlib import Path
+import os
+
+env, target, _ = dev.prepare_build(source_path, "aintl", "*.c", in_bin=False)
+sources = []
+for name in Path(Dir(".").abspath, "sources.txt").read_text().splitlines():
+    if name and not name.startswith("#"):
+        sources.append(os.path.normpath(dev.get_build_path(source_path) + name))
+env.Prepend(CPPPATH=["#/intl/modern", "#/intl/modern/gnulib-lib"])
+env.Append(CPPDEFINES=["HAVE_CONFIG_H", "BUILDING_LIBINTL", "BUILDING_LIBRARY",
+    "__USE_MINGW_ANSI_STDIO=0", 'LOCALEDIR=\\"\\"', 'LIBDIR=\\"\\"'])
+env.Append(CCFLAGS=["-Wno-sign-compare", "-Wno-unused-function"])
+dev.env.Append(LIBS=["aintl"], LIBPATH=[os.path.dirname(target)])
+ret = dev.build_lib(env, target, sources, dev.c_lib)
+Return("ret")

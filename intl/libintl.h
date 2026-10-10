@@ -1,3 +1,6 @@
+#if defined(__MINGW32__) && defined(_WIN64)
+#include "modern/libintl.h"
+#else
 /* Message catalogs for internationalization.
    Copyright (C) 1995-1997, 2000-2007 Free Software Foundation, Inc.
 
@@ -420,3 +423,5 @@ extern void
 #endif
 
 #endif /* libintl.h */
+
+#endif
