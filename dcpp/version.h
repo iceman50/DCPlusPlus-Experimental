@@ -26,5 +26,6 @@
 #define VERSIONFLOAT 0.8842
 
 namespace dcpp {
+extern const std::string buildLabel;
 extern const std::string fullVersionString;
 }

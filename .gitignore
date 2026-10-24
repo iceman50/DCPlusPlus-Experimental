@@ -106,6 +106,9 @@ Desktop.ini
 **/.hgtags
 
 # Project / dev specific
+/.build-number
+/.build-number.lock
+/.build-number.tmp
 dcpp/version-rev-id.inc
 gdb-hang-snapshot.txt
 TODO.md

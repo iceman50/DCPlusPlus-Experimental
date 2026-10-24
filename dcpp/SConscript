@@ -18,6 +18,29 @@ env.Append(CPPDEFINES=["BUILDING_DCPP=1"])
 headers = dev.get_sources(source_path, "*.h")
 dev.i18n(source_path, env, [sources, headers], "libdcpp")
 
+if not env["msvcproj"]:
+    from gen_build_number import gen_build_number
+
+    build_number = env.Command(
+        dev.get_build_path("dcpp/version-build.inc"),
+        [],
+        Action(gen_build_number, "Generating local build number: $TARGET"),
+    )
+    # Test-only invocations reuse the current version metadata instead of
+    # numbering an application build and relinking every core-dependent test.
+    if not dev.tests_only:
+        env.AlwaysBuild(build_number)
+    env.NoCache(build_number)
+
+    # Only this object includes the generated number. Keep its include path
+    # separate so numbering a build does not recompile the rest of the client.
+    version_env = env.Clone()
+    version_env.Append(CPPPATH=[env.Dir(dev.get_build_path("dcpp/"))])
+    version_source = dev.get_build_path("dcpp/version.cpp")
+    version_object = version_env.Object(version_source)
+    env.Depends(version_object, build_number)
+    sources = [s for s in sources if env.File(s) != env.File(version_source)] + version_object
+
 ret = dev.build_lib(env, target, sources, dev.cpp_lib)
 
 if ret:

@@ -19,10 +19,12 @@
 #include "version.h"
 
 #include "version-rev-id.inc" // should #define DCPP_REVISION
+#include "version-build.inc" // generated local build counter
 
 #define xstrver(s) strver(s)
 #define strver(s) #s
 
 namespace dcpp {
+const std::string buildLabel("[Build: " xstrver(DCPP_BUILD_NUMBER) "]");
 const std::string fullVersionString(APPNAME " v" VERSIONSTRING " (" xstrver(DCPP_REVISION) ")");
 }

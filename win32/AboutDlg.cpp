@@ -263,7 +263,7 @@ string getAboutInfo() {
 	info += "Application\r\n";
 	addInfoLine(info, "Full name", FULL_APPNAME);
 	addInfoLine(info, "Core identity", APPNAME);
-	addInfoLine(info, "Version", VERSIONSTRING);
+	addInfoLine(info, "Version", string(VERSIONSTRING) + " " + buildLabel);
 	addInfoLine(info, "Build type",
 #ifdef _DEBUG
 		"Debug"
@@ -356,7 +356,7 @@ bool AboutDlg::handleInitDialog() {
 
 		cur->addChild(Label::Seed(WinUtil::createIcon(IDI_DCPP, 48)));
 
-		ls.caption = _T(FULL_APPNAME) _T(" v") _T(VERSIONSTRING) _T("\n(c) Copyright 2026 iceman50\n");
+		ls.caption = _T(FULL_APPNAME) _T(" v") _T(VERSIONSTRING) _T(" ") + Text::toT(buildLabel) + _T("\n(c) Copyright 2026 iceman50\n");
 		ls.caption += T_("Based on DC++");
 		cur->addChild(ls);
 
