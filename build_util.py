@@ -54,6 +54,7 @@ class Dev:
                 "RANLIB": "ranlib",
                 "RC": "windres",
                 "strip": "strip",
+                "OBJCOPY": "objcopy",
             }
             for tool_ref, tool_bin in BUILD_TOOLS.items():
                 self.env[tool_ref] = prefix + tool_bin
@@ -315,6 +316,26 @@ class Dev:
                 self.md4c,
                 self.dwt,
                 self.intl,
+            ],
+        )
+
+    def split_debug_info(self, env, target, program):
+        from SCons.Action import Action
+
+        # Both files belong to one action group. An EXE-only request must also
+        # build its companion, and deleting either output must regenerate both.
+        # Keep the linked input intact so recovery never extracts symbols from
+        # an already stripped executable.
+        return env.Command(
+            [target + env["PROGSUFFIX"], target + ".pdb"],
+            program,
+            [
+                Action('$OBJCOPY --only-keep-debug "$SOURCE" "${TARGETS[1]}"',
+                       "Extracting debugging symbols to ${TARGETS[1]}"),
+                Action('$OBJCOPY --strip-all "$SOURCE" "${TARGETS[0]}"',
+                       "Stripping ${TARGETS[0]}"),
+                Action('$OBJCOPY --add-gnu-debuglink="${TARGETS[1]}" "${TARGETS[0]}"',
+                       "Linking ${TARGETS[0]} to its debug companion"),
             ],
         )
 

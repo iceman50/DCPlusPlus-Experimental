@@ -237,7 +237,7 @@ function Invoke-DistBuild {
 		[string]$SCons
 	)
 
-	$target = "build/$Mode-mingw-x64/bin/DCPlusPlus-stripped.exe"
+	$target = "build/$Mode-mingw-x64/bin/DCPlusPlus.exe"
 	$sconsArgs = @(
 		"tools=mingw",
 		"arch=x64",
@@ -273,7 +273,7 @@ function New-DistPackage {
 
 	$buildName = "$Mode-mingw-x64"
 	$binDir = Join-Path $RepoRoot "build\$buildName\bin"
-	$exePath = Join-Path $binDir "DCPlusPlus-stripped.exe"
+	$exePath = Join-Path $binDir "DCPlusPlus.exe"
 	$pdbPath = Join-Path $binDir "DCPlusPlus.pdb"
 	$changelogPath = Join-Path $RepoRoot "changelog-bfe.txt"
 	$themesPath = Join-Path $RepoRoot "Themes"

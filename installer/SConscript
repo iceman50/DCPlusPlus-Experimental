@@ -91,8 +91,6 @@ for line in f:
     match = reg.search(line)
     if match:
         match = match.group(1)
-        if match[:14] == "DCPlusPlus.exe":
-            match = "DCPlusPlus-stripped.exe" + match[14:]
         if env.FindFile(match, "#"):
             # copy from the root dir
             match = "#/" + match
@@ -200,9 +198,6 @@ def gen_installer(target, source, env):
             suffix = ""
             if node.abspath in x64_rename:
                 suffix = "-x64"
-
-            if name == "DCPlusPlus-stripped.exe":
-                name = "DCPlusPlus.exe"
 
             env.Execute(Copy(build_path + name + suffix, node))
 

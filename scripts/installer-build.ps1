@@ -5,7 +5,7 @@ Build the x64 MinGW release NSIS installer.
 .DESCRIPTION
 Stages the distributable payload, generates the English NSIS string catalog,
 and compiles installer/DCPlusPlus.nsi. The installed DCPlusPlus.exe is copied
-from DCPlusPlus-stripped.exe and is accompanied by its matching PDB, the BFE
+from the stripped DCPlusPlus.exe and is accompanied by its matching PDB, the BFE
 changelog, legal notices, flat Themes, flat Emoticons, and bundled icon packs.
 
 .EXAMPLE
@@ -119,7 +119,7 @@ $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 
 $makensis = Resolve-Makensis -RequestedPath $MakensisPath
 $stageDirectory = Join-Path $repoRoot "build\installer-release"
-$strippedExecutable = Join-Path $ReleaseDirectory "DCPlusPlus-stripped.exe"
+$strippedExecutable = Join-Path $ReleaseDirectory "DCPlusPlus.exe"
 $debugSymbols = Join-Path $ReleaseDirectory "DCPlusPlus.pdb"
 $themesDirectory = Join-Path $repoRoot "Themes"
 $emoticonsDirectory = Join-Path $repoRoot "Emoticons"
