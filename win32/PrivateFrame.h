@@ -74,6 +74,7 @@ public:
 		const string& logPath = Util::emptyString, bool activate = true);
 	static void activateWindow(const UserPtr& u);
 	static bool isOpen(const UserPtr& u);
+	static bool privateSendNotice(TabViewPtr parent, const HintedUser& peer, const tstring& text);
 	static void handlePMConnection(const HintedUser& user, const string& connectionToken);
 	static void handlePMMessage(const HintedUser& user, const string& connectionToken,
 		const ChatMessage& message);

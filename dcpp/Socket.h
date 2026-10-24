@@ -201,6 +201,9 @@ public:
 	void setSocketOpt(int option, int value);
 
 	virtual bool isSecure() const noexcept { return false; }
+
+	/** Full TLS 1.2+ handshake with AEAD and forward secrecy; private offers also require an exact approved peer pin. */
+	virtual bool isPrivateTransferSecure() const noexcept { return false; }
 	virtual bool isTrusted() const noexcept { return false; }
 	virtual string getCipherName() const noexcept { return Util::emptyString; }
 	virtual ByteVector getKeyprint() const noexcept { return ByteVector(); }

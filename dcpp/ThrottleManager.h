@@ -37,13 +37,13 @@ namespace dcpp
 		/*
 		 * Throttles traffic and reads a packet from the network
 		 */
-		int read(Socket* sock, void* buffer, size_t len);
+		int read(Socket* sock, void* buffer, size_t len, bool privateTransfer = false);
 
 		/*
 		 * Throttles traffic and writes a packet to the network
 		 * Handle this a little bit differently than downloads due to OpenSSL stupidity 
 		 */
-		int write(Socket* sock, void* buffer, size_t& len);
+		int write(Socket* sock, void* buffer, size_t& len, bool privateTransfer = false);
 
 		void shutdown();
 

@@ -35,6 +35,7 @@
 #include <dcpp/TimerManager.h>
 #include <dcpp/UploadManager.h>
 #include <dcpp/Util.h>
+#include <dcpp/PrivateTransferStorage.h>
 
 using namespace dcpp;
 
@@ -993,3 +994,34 @@ TEST_F(ShareCacheTest, streamed_xml_respects_an_explicit_empty_hub_profile) {
 	EXPECT_EQ(string::npos, xml.find("Virtual"));
 	EXPECT_NE(string::npos, xml.find("</FileListing>"));
 }
+
+#ifdef _WIN32
+TEST_F(ShareCacheTest, private_storage_cannot_be_added_as_public_or_temporary_share) {
+	auto sm = ShareManager::getInstance();
+	const auto root = pft::storageRoot();
+	std::filesystem::create_directories(root);
+	const auto file = cacheFile(root + "private.txt", "private");
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_RTF_TEMP_SHARES, true);
+	EXPECT_THROW(sm->addDirectory(root, "Private"), ShareException);
+	EXPECT_FALSE(sm->checkInvalidPaths(root));
+	EXPECT_FALSE(sm->addValidatedTempShare(file.path, file.size, file.timestamp, file.tth, "adcs://test.invalid", false));
+	EXPECT_FALSE(sm->addValidatedTempShare(file.path, file.size, file.timestamp, file.tth, "adcs://test.invalid", true));
+	EXPECT_TRUE(sm->getTempShares().empty());
+}
+
+TEST_F(ShareCacheTest, private_markers_block_stale_resolution_refresh_and_cache_restoration) {
+	populateShare();
+	auto sm = ShareManager::getInstance();
+	const auto path = sharePath + "Child" PATH_SEPARATOR_STR "file.bin";
+	File(path + ":DCPlusPlus.PrivateSend", File::WRITE, File::CREATE | File::TRUNCATE).write("PFT1");
+	EXPECT_THROW(sm->toRealWithSize("TTH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), ShareException);
+	EXPECT_THROW(sm->resolveFile("TTH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "adcs://test.invalid"), ShareException);
+	const auto refreshed = sm->buildTree(sharePath);
+	ASSERT_EQ(1u, refreshed->directories.size());
+	EXPECT_TRUE(refreshed->directories.begin()->second->files.empty());
+	sm->saveShareCache();
+	clearLoadedShare();
+	ASSERT_TRUE(sm->loadShareCache());
+	EXPECT_TRUE(sm->tthIndex.empty());
+}
+#endif

@@ -19,6 +19,7 @@
 #define DCPLUSPLUS_WIN32_MAIN_WINDOW_H
 
 #include "GeoIPUpdate.h"
+#include "PrivateSendNotifications.h"
 #include <atomic>
 
 #include <dcpp/forward.h>
@@ -50,6 +51,7 @@ public:
 	enum Status {
 		STATUS_STATUS,
 		STATUS_AWAY,
+		STATUS_PRIVATE_SEND,
 		STATUS_COUNTS,
 		STATUS_SLOTS,
 		STATUS_SHARE_SIZE,
@@ -82,6 +84,7 @@ public:
 	void notify(const tstring& title, const tstring& message, function<void ()> callback = nullptr, const dwt::IconPtr& balloonIcon = nullptr);
 	void setStaticWindowState(const string& id, bool open);
 	void TrayPM();
+	void openPrivateSend(const HintedUser& peer, const string& transfer = Util::emptyString);
 
 	bool closing() const { return stopperThread != 0; }
 
@@ -152,6 +155,9 @@ private:
 	bool away;
 	bool awayIdle;
 	bool fullSlots;
+	bool privateSendBlink;
+	bool privateSendOpen;
+	PrivateSendNotifications privateSendNotifications;
 
 	dwt::Application::FilterIter filterIter;
 	dwt::NotificationPtr notifier;
@@ -212,6 +218,8 @@ private:
 	void openWindow(const string& id, const WindowParams& params);
 	void layout();
 	void updateStatus();
+	void updatePrivateSend();
+	void handlePrivateSend();
 	void updateAwayStatus();
 	void addPluginCommands(Menu* menu);
 	void showPortsError(const string& port);

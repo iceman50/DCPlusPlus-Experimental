@@ -90,6 +90,10 @@ public:
 	const string& getIp() const { return sock->getIp(); }
 
 	bool isSecure() const { return sock->isSecure(); }
+
+	bool isPrivateTransferSecure() const { return sock && sock->isPrivateTransferSecure(); }
+
+	void setPrivateTransfer() noexcept { privateTransfer.store(true); }
 	bool isTrusted() const { return sock->isTrusted(); }
 	string getCipherName() const { return sock->getCipherName(); }
 	ByteVector getKeyprint() const { return sock->getKeyprint(); }
@@ -155,6 +159,7 @@ private:
 	virtual ~BufferedSocket();
 
 	CriticalSection cs;
+	std::atomic<bool> privateTransfer { false };
 
 	Semaphore taskSem;
 	SocketWakeup taskWakeup;

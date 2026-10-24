@@ -27,6 +27,24 @@
 
 namespace dcpp {
 
+bool SSLSocket::isPrivateTransferSecure() const noexcept {
+	if(!ssl || !SSL_is_init_finished(ssl) || SSL_version(ssl) < TLS1_2_VERSION || SSL_session_reused(ssl) ||
+		SSL_get_early_data_status(ssl) == SSL_EARLY_DATA_ACCEPTED)
+		return false;
+
+	// TLS 1.2 testing compatibility keeps forward secrecy and authenticated
+	// encryption. Shared contexts also allow CBC for ordinary connections.
+	const auto cipher = SSL_get_current_cipher(ssl);
+	if(!cipher || !SSL_CIPHER_is_aead(cipher) ||
+		(SSL_version(ssl) == TLS1_2_VERSION && SSL_CIPHER_get_kx_nid(cipher) != NID_kx_ecdhe))
+		return false;
+
+	auto certificate = SSL_get1_peer_certificate(ssl);
+	const bool present = certificate != nullptr;
+	X509_free(certificate);
+	return present;
+}
+
 SSLSocket::SSLSocket(CryptoManager::SSLContext context, bool allowUntrusted, const string& expKP, const string& hostName_) : SSLSocket(context, hostName_) {
 	verifyData.reset(new CryptoManager::SSLVerifyData(allowUntrusted, expKP));
 }
@@ -221,7 +239,8 @@ int SSLSocket::checkSSL(int ret) {
 				}
 			}
 
-			dcdebug("TLS error: call ret = %d, SSL_get_error = %d, ERR_get_error = %lu, error string: %s\n", ret, err, sys_err, errorMsg);
+			dcdebug("TLS error: call ret = %d, SSL_get_error = %d, ERR_get_error = %lu, error string: %s\n", ret, err, sys_err,
+				errorMsg.c_str());
 			throw SSLSocketException(str(F_("TLS error : %1%") % errorMsg));
 		}
 	}

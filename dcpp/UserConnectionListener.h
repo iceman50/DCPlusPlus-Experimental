@@ -48,6 +48,8 @@ public:
 	typedef X<18> Supports;
 	typedef X<19> ProtocolError;
 	typedef X<20> FileNotAvailable;
+	/** Typed private protocol path: never sent to chat/network plugin hooks. */
+	typedef X<21> PrivateTransfer;
 
 	virtual void on(BytesSent, UserConnection*, size_t, size_t) noexcept { }
 	virtual void on(Connected, UserConnection*) noexcept { }
@@ -68,6 +70,7 @@ public:
 	virtual void on(TransmitDone, UserConnection*) noexcept { }
 	virtual void on(Supports, UserConnection*, const StringList&) noexcept { }
 	virtual void on(FileNotAvailable, UserConnection*) noexcept { }
+	virtual void on(PrivateTransfer, UserConnection*, const string&) noexcept { }
 
 	virtual void on(AdcCommand::SUP, UserConnection*, const AdcCommand&) noexcept { }
 	virtual void on(AdcCommand::INF, UserConnection*, const AdcCommand&) noexcept { }

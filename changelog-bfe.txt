@@ -1,4 +1,6 @@
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
+* Add Private Send (experimental PFT1, disabled by default): recipient-bound TLS 1.2+ file offers, explicit consent, configurable expiration, pause/resume, integrity checks and protected Windows saving outside public shares; manual contact verification is optional and off by default for testing, and advanced-configuration changes immediately reapply transfer permissions (iceman50)
+* Add a private-transfer queue, progress and contact controls, deferred private-chat notices and a status-bar indicator for incoming offers; cover protocol parsing, authorization, storage, TLS transfers and notification behavior with automated tests (iceman50)
 * Replace legacy GeoIP with libmaxminddb 1.14.1 and GeoLite2 Country IPv4/IPv6 lookups; add bounded HTTPS database updates, transfer-view progress/cancellation, a protected MaxMind testing override and country flags with icon-pack overrides (iceman50)
 * Support per-column country-flag callbacks in DWT tables and expandable rows; keep private-chat transfer icons confined to the File column (iceman50)
 * Deliver dropped chat attachments as preparation completes, report failures and cancellation, ignore stale completion callbacks and route text dropped on chat history into the message draft; reject unterminated OLE text without reading beyond its allocation (iceman50)

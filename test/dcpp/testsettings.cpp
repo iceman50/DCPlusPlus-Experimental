@@ -14,6 +14,7 @@
 #include <dcpp/HubEntry.h>
 #include <dcpp/LogManager.h>
 #include <dcpp/SettingsManager.h>
+#include <dcpp/PrivateTransferProtocol.h>
 #include <dcpp/Util.h>
 
 using namespace dcpp;
@@ -224,5 +225,31 @@ TEST_F(SettingsMigrationTest, persists_multithreaded_hashing_limit)
 	settings->load(path);
 
 	EXPECT_EQ(6, settings->get(SettingsManager::HASHING_THREADS));
+	File::deleteFile(path);
+}
+
+TEST_F(SettingsMigrationTest, persists_private_send_opt_in_expiry_and_approved_contacts) {
+	const auto path = Util::getTempPath() + "dcpp-private-settings-" + pft::randomHex(16) + ".xml";
+	auto settings = SettingsManager::getInstance();
+	EXPECT_FALSE(settings->get(SettingsManager::ENABLE_PRIVATE_SEND));
+	EXPECT_FALSE(settings->get(SettingsManager::PFT_REQUIRE_VERIFICATION));
+	EXPECT_EQ(15, settings->get(SettingsManager::PFT_OFFER_MINUTES));
+	EXPECT_EQ(1440, settings->get(SettingsManager::PFT_TRANSFER_MINUTES));
+	const auto pins = std::string(39, 'A') + " " + std::string(64, '1') + "\n";
+	settings->set(SettingsManager::ENABLE_PRIVATE_SEND, true);
+	settings->set(SettingsManager::PFT_REQUIRE_VERIFICATION, true);
+	settings->set(SettingsManager::PFT_OFFER_MINUTES, 7);
+	settings->set(SettingsManager::PFT_TRANSFER_MINUTES, 23);
+	settings->set(SettingsManager::PFT_CONTACT_PINS, pins);
+	settings->save(path);
+	SettingsManager::deleteInstance();
+	SettingsManager::newInstance();
+	settings = SettingsManager::getInstance();
+	settings->load(path);
+	EXPECT_TRUE(settings->get(SettingsManager::ENABLE_PRIVATE_SEND));
+	EXPECT_TRUE(settings->get(SettingsManager::PFT_REQUIRE_VERIFICATION));
+	EXPECT_EQ(7, settings->get(SettingsManager::PFT_OFFER_MINUTES));
+	EXPECT_EQ(23, settings->get(SettingsManager::PFT_TRANSFER_MINUTES));
+	EXPECT_EQ(pins, settings->get(SettingsManager::PFT_CONTACT_PINS));
 	File::deleteFile(path);
 }

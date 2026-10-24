@@ -20,6 +20,7 @@
 
 #include <dcpp/forward.h>
 #include <dcpp/SettingsManager.h>
+#include <dcpp/DirectTransferManager.h>
 
 #include "ListFilter.h"
 #include "StaticFrame.h"
@@ -104,6 +105,8 @@ private:
 				dcassert(0);
 			}
 
+			if(DirectTransferManager::available())
+				DirectTransferManager::getInstance()->configure();
 			read();
 		}
 

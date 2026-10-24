@@ -17,6 +17,7 @@
 
 #include "stdafx.h"
 #include "PrivateFrame.h"
+#include "PrivateSendDlg.h"
 
 #include "HoldRedraw.h"
 #include "MainWindow.h"
@@ -110,6 +111,30 @@ void PrivateFrame::openWindow(TabViewPtr parent, const HintedUser& replyTo_, con
 		frame->activate();
 	if(!msg.empty())
 		frame->sendMessage(msg);
+}
+
+bool PrivateFrame::privateSendNotice(TabViewPtr parent, const HintedUser& peer, const tstring& text) {
+	PrivateFrame* frame = nullptr;
+	size_t count;
+	{
+		Lock l(framesMutex);
+		auto i = frames.find(peer.user);
+		if(i != frames.end())
+			frame = i->second;
+		count = frames.size();
+	}
+
+	if(!frame) {
+		if(static_cast<int>(count) >= SETTING(MAX_PM_WINDOWS))
+			return false;
+		frame = new PrivateFrame(parent, peer);
+	}
+
+	// File names are plain local status text, never commands, links or outgoing PMs.
+	// Keep private file metadata out of the normal chat log and plugin hooks.
+	frame->addChatPlain(Text::toT("[" + Util::getShortTimeString() + "] ") + text);
+	frame->setDirty(SettingsManager::BOLD_PM);
+	return true;
 }
 
 bool PrivateFrame::gotMessage(TabViewPtr parent, const ChatMessage& message, const string& hubHint, bool fromBot) {
@@ -1115,7 +1140,11 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 	WinUtil::getChatSelText(chat, searchText, pt);
 
 	auto menu = chat->getMenu(searchText);
-	
+	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
+		menu->appendItem(T_("Private Send..."), [this] { WinUtil::mainWindow->openPrivateSend(replyTo.getUser()); });
+		menu->appendSeparator();
+	}
+
 	WinUtil::addSearchMenu(menu.get(), searchText);
 
 	menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
@@ -1128,6 +1157,10 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 
 void PrivateFrame::handleChannelMenu() {
 	auto menu = addChild(WinUtil::Seeds::menu);
+	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
+		menu->appendItem(T_("Private Send..."), [this] { WinUtil::mainWindow->openPrivateSend(replyTo.getUser()); });
+		menu->appendSeparator();
+	}
 
 	menu->setTitle(T_("Communication channel"));
 

@@ -36,6 +36,7 @@ protected:
 TEST_F(DownloadAllocationTest, allocationErrorIdentifiesUnfinishedFileAndPreservesData) {
 	File(path, File::WRITE, File::CREATE | File::TRUNCATE).write("keep this data");
 	UserConnection connection(false);
+	connection.setFlag(UserConnection::FLAG_DOWNLOAD);
 	// Unknown size bypasses tree lookup; inject an invalid allocation size to
 	// exercise the real failure path without filling the test machine's disk.
 	QueueItem item(path + ".finished", -1, QueueItem::NORMAL, 0, 0, TTHValue());

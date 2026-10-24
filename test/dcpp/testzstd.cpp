@@ -84,6 +84,7 @@ TEST(ZstdStreams, rejects_skippable_frames_and_oversized_windows) {
 
 TEST_F(ZstdNegotiationTest, preserves_legacy_defaults_and_selects_only_supported_compression) {
 	UserConnection connection(false);
+	connection.setFlag(UserConnection::FLAG_DOWNLOAD);
 	QueueItem item("test-list", -1, QueueItem::NORMAL, QueueItem::FLAG_USER_LIST, 0, TTHValue());
 	Download download(connection, item);
 	download.setFlag(Download::FLAG_XML_BZ_LIST);
@@ -107,6 +108,7 @@ TEST_F(ZstdNegotiationTest, preserves_legacy_defaults_and_selects_only_supported
 
 TEST_F(ZstdNegotiationTest, partial_lists_fall_back_to_zlib) {
 	UserConnection connection(false);
+	connection.setFlag(UserConnection::FLAG_DOWNLOAD);
 	QueueItem item("test-list", -1, QueueItem::NORMAL, QueueItem::FLAG_USER_LIST | QueueItem::FLAG_PARTIAL_LIST, 0, TTHValue());
 	item.setTempTarget("Share\\");
 	Download download(connection, item);
@@ -120,6 +122,7 @@ TEST_F(ZstdNegotiationTest, partial_lists_fall_back_to_zlib) {
 
 TEST_F(ZstdNegotiationTest, full_list_retains_frame_and_counts_decoded_bytes) {
 	UserConnection connection(false);
+	connection.setFlag(UserConnection::FLAG_DOWNLOAD);
 	const auto path = (std::filesystem::temp_directory_path() / ("dcpp-zstd-" + CID::generate().toBase32())).string();
 	QueueItem item(path, -1, QueueItem::NORMAL, QueueItem::FLAG_USER_LIST, 0, TTHValue());
 	Download download(connection, item);

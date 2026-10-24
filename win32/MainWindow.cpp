@@ -72,6 +72,7 @@
 #include "PluginApiWin.h"
 #include "PluginInfoDlg.h"
 #include "PrivateFrame.h"
+#include "PrivateSendDlg.h"
 #include "PublicHubsFrame.h"
 #include "QueueFrame.h"
 #include "resource.h"
@@ -115,7 +116,9 @@ lastTick(GET_TICK()),
 lastGetShare(0),
 away(false),
 awayIdle(false),
-fullSlots(false)
+fullSlots(false),
+privateSendBlink(false),
+privateSendOpen(false)
 {
 	// Project-owned links are intentionally not overridden by the upstream version.xml.
 	links.homepage = _T("https://github.com/iceman50/DCPlusPlus-No-MDI");
@@ -160,6 +163,7 @@ fullSlots(false)
 		[this]() -> bool {
 			if(closing())
 				return false;
+			updatePrivateSend();
 			updateStatus();
 			if(geoUpdater.poll())
 				refreshGeo();
@@ -550,6 +554,9 @@ void MainWindow::initStatusBar() {
 
 	/// @todo set to resizedrag width really
 	status->setSize(STATUS_DUMMY, 32);
+	status->setIcon(STATUS_PRIVATE_SEND, WinUtil::statusIcon(IDI_FILE));
+	status->setToolTip(STATUS_PRIVATE_SEND, T_("No pending private files"));
+	status->onClicked(STATUS_PRIVATE_SEND, [this] { handlePrivateSend(); });
 
 	status->setIcon(STATUS_COUNTS, WinUtil::statusIcon(IDI_HUB));
 	status->setIcon(STATUS_SLOTS, WinUtil::statusIcon(IDI_SLOTS));
@@ -1150,6 +1157,66 @@ void MainWindow::layout() {
 
 LRESULT MainWindow::handleWhereAreYou() {
 	return SingleInstance::WMU_WHERE_ARE_YOU;
+}
+
+void MainWindow::updatePrivateSend() {
+	if(closing() || !DirectTransferManager::available())
+		return;
+
+	privateSendNotifications.update(DirectTransferManager::getInstance()->snapshot());
+	if(SETTING(ENABLE_PRIVATE_SEND)) {
+		for(const auto& row : privateSendNotifications.notices()) {
+			const auto text = str(TF_("*** Private Send: %1% file \"%2%\" (%3%) - %4%. Open Private Send from the chat menu to view it.") %
+				(row.incoming ? T_("Incoming") : T_("Outgoing")) % Text::toT(row.name) %
+				Text::toT(Util::formatBytes(row.size)) % Text::toT(row.status));
+			if(PrivateFrame::privateSendNotice(tabs, row.contact, text))
+				privateSendNotifications.delivered(row.id);
+		}
+	}
+
+	if(!status)
+		return;
+
+	const auto pending = privateSendNotifications.pending();
+	privateSendBlink = !privateSendBlink;
+	const auto visible = pending.empty() || !privateSendNotifications.needsAttention() || privateSendBlink;
+	status->setIcon(STATUS_PRIVATE_SEND, visible ? WinUtil::statusIcon(IDI_FILE) : nullptr);
+	status->setText(STATUS_PRIVATE_SEND, pending.empty() ? Util::emptyStringT : Text::toT(std::to_string(pending.size())));
+	status->setToolTip(STATUS_PRIVATE_SEND, pending.empty() ? T_("No pending private files") :
+		str(TF_("%1% private file offer(s) - click to review") % pending.size()));
+}
+
+void MainWindow::handlePrivateSend() {
+	if(closing() || privateSendOpen)
+		return;
+
+	updatePrivateSend();
+	const auto pending = privateSendNotifications.pending();
+	if(pending.size() == 1) {
+		openPrivateSend(pending.front().contact, pending.front().id);
+	} else if(!pending.empty()) {
+		auto menu = addChild(WinUtil::Seeds::menu);
+		for(const auto& row : pending) {
+			const auto peer = row.contact;
+			const auto transfer = row.id;
+			menu->appendItem(escapeMenu(WinUtil::getNicks(peer.user->getCID()) + _T(": ") + Text::toT(row.name)),
+				[this, peer, transfer] { openPrivateSend(peer, transfer); });
+		}
+		menu->open();
+	}
+}
+
+void MainWindow::openPrivateSend(const HintedUser& peer, const string& transfer) {
+	if(closing() || privateSendOpen || !DirectTransferManager::available())
+		return;
+
+	privateSendOpen = true;
+	ScopedFunctor([this] { privateSendOpen = false; });
+	privateSendNotifications.update(DirectTransferManager::getInstance()->snapshot());
+	privateSendNotifications.acknowledge(peer);
+	updatePrivateSend();
+	PrivateSendDlg(this, peer, transfer).run();
+	updatePrivateSend();
 }
 
 void MainWindow::updateStatus() {

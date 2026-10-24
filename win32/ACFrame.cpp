@@ -323,6 +323,8 @@ void ACFrame::setDefaultValue() {
 
 	auto setting = settings->getSelectedData();
 	SettingsManager::getInstance()->unset(setting->index);
+	if(DirectTransferManager::available())
+		DirectTransferManager::getInstance()->configure();
 	setting->read();
 	settings->update(setting);
 	settings->setFocus();

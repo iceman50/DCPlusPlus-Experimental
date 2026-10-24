@@ -36,6 +36,7 @@
 #include "UploadManager.h"
 #include "PluginManager.h"
 #include "RichText.h"
+#include "PrivateTransferProtocol.h"
 #include "UserCommand.h"
 #include "Util.h"
 #include "version.h"
@@ -1435,6 +1436,8 @@ void AdcHub::infoImpl() {
 		su += "," + ADCS_FEATURE;
 		if(SETTING(ENABLE_CCPM)) {
 			su += "," + CCPM_FEATURE;
+			if(SETTING(ENABLE_PRIVATE_SEND) && isSecure())
+				su += string(",") + pft::FEATURE;
 		}
 		auto &kp = CryptoManager::getInstance()->getKeyprint();
 		addParam(lastInfoMap, c, "KP", CryptoManager::getInstance()->keyprintToString(kp));

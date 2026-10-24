@@ -63,6 +63,8 @@ public:
 	virtual void close() noexcept;
 
 	virtual bool isSecure() const noexcept { return true; }
+
+	bool isPrivateTransferSecure() const noexcept override;
 	virtual bool isTrusted() const noexcept;
 	virtual string getCipherName() const noexcept;
 	virtual ByteVector getKeyprint() const noexcept;

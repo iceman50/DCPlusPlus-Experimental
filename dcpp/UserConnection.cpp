@@ -23,6 +23,7 @@
 #include "ClientManager.h"
 #include "format.h"
 #include "PluginManager.h"
+#include "PrivateTransferProtocol.h"
 #include "RichText.h"
 #include "SettingsManager.h"
 #include "StringTokenizer.h"
@@ -44,6 +45,7 @@ const string UserConnection::FEATURE_ADC_TIGR = "TIGR";
 const string UserConnection::FEATURE_ADC_CPMI = "CPMI";
 const string UserConnection::FEATURE_ADC_MCN1 = "MCN1";
 const string UserConnection::FEATURE_ADC_RTF0 = "RTF0";
+const string UserConnection::FEATURE_ADC_PFT1 = pft::FEATURE;
 
 const string UserConnection::FILE_NOT_AVAILABLE = "File Not Available";
 
@@ -51,6 +53,25 @@ const string UserConnection::UPLOAD = "Upload";
 const string UserConnection::DOWNLOAD = "Download";
 
 void UserConnection::on(BufferedSocketListener::Line, const string& aLine) noexcept {
+	// Dispatch before *any* plugin/debug hook. A typed control record cannot be
+	// smuggled into an ordinary chat message, nor can a private GET reach the
+	// public share resolver. During the handshake normal SUP/INF still apply.
+	const bool privateLine = aLine.compare(0, 4, "CPFT") == 0;
+	const bool privateData =
+		isSet(FLAG_PRIVATE_TRANSFER) && getState() != STATE_CONNECT && getState() != STATE_SUPNICK && getState() != STATE_INF;
+	if(privateLine || privateData) {
+		if(aLine.size() > pft::MAX_LINE || !isPrivateTransferSecure() || !isSet(FLAG_SUPPORTS_PFT1) ||
+			(!isSet(FLAG_PM) && !isSet(FLAG_PRIVATE_TRANSFER))) {
+			disconnect(true);
+			return;
+		}
+		fire(UserConnectionListener::PrivateTransfer(), this, aLine);
+		return;
+	}
+	if(isSet(FLAG_PM) && (aLine.compare(0, 4, "CGET") == 0 || aLine.compare(0, 4, "CSND") == 0 || aLine.compare(0, 4, "CGFI") == 0)) {
+		disconnect(true);
+		return;
+	}
 
 	if(aLine.length() < 2) {
 		fire(UserConnectionListener::ProtocolError(), this, _("Invalid data"));
@@ -183,6 +204,8 @@ void UserConnection::inf(bool withToken, int mcnSlots) {
 	if(isSet(FLAG_PM)) {
 		c.addParam("PM", "1");
 	}
+	if(isSet(FLAG_PRIVATE_TRANSFER))
+		c.addParam("PF", pft::DRAFT);
 	send(c);
 }
 
@@ -306,6 +329,17 @@ void UserConnection::send(const AdcCommand& command) {
 	}
 	const auto line = command.toString(0, isSet(FLAG_NMDC));
 	send(line);
+}
+
+void UserConnection::sendPrivate(const string& line) {
+	if(!socket || !isPrivateTransferSecure() || !isSet(FLAG_SUPPORTS_PFT1) || line.empty() || line.size() > pft::MAX_LINE + 1 ||
+		line.back() != '\n' || line.find('\n') != line.size() - 1 || line.find('\r') != string::npos || line.find('\0') != string::npos ||
+		(!isSet(FLAG_PM) && !isSet(FLAG_PRIVATE_TRANSFER)))
+		throw pft::ProtocolException("Private Send requires an authenticated private channel");
+	if(line.compare(0, 5, "CPFT ") != 0 &&
+		(!isSet(FLAG_PRIVATE_TRANSFER) || (line.compare(0, 5, "CGET ") != 0 && line.compare(0, 5, "CSND ") != 0)))
+		throw pft::ProtocolException("Invalid private transfer command");
+	socket->write(line.data(), line.size());
 }
 
 void UserConnection::sendRaw(const string& raw) {
@@ -467,6 +501,9 @@ ConnectionData* UserConnection::getPluginObject() noexcept {
 }
 
 void UserConnection::send(const string& aString) {
+	// Capability-bearing records have a single path which bypasses raw hooks.
+	if(aString.compare(0, 4, "CPFT") == 0)
+		return;
 	if(PluginManager::getInstance()->runHook(HOOK_NETWORK_CONN_OUT, this, aString))
 		return;
 

@@ -1144,6 +1144,8 @@ bool TransferView::needsResort(uint32_t updateMask) const {
 }
 
 void TransferView::on(ConnectionManagerListener::Added, ConnectionQueueItem* aCqi) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return; // Private Send owns its separate, non-public queue view.
 	auto ui = new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken());
 	ui->setStatus(STATUS_WAITING);
 	ui->setStatusString(aCqi->getType() == CONNECTION_TYPE_PM ? T_("Direct encrypted private message channel") :
@@ -1153,10 +1155,14 @@ void TransferView::on(ConnectionManagerListener::Added, ConnectionQueueItem* aCq
 }
 
 void TransferView::on(ConnectionManagerListener::Removed, ConnectionQueueItem* aCqi) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return;
 	removedConn(new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken()));
 }
 
 void TransferView::on(ConnectionManagerListener::Failed, ConnectionQueueItem* aCqi, const string& aReason) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return;
 	auto ui = new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken());
 	ui->setStatus(STATUS_WAITING);
 	ui->setStatusString(aCqi->getUser().user->isSet(User::OLD_CLIENT) ?
@@ -1167,6 +1173,8 @@ void TransferView::on(ConnectionManagerListener::Failed, ConnectionQueueItem* aC
 }
 
 void TransferView::on(ConnectionManagerListener::StatusChanged, ConnectionQueueItem* aCqi) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return;
 	auto ui = new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken());
 	const bool connecting = aCqi->getState() == ConnectionQueueItem::CONNECTING;
 	if(aCqi->getType() == CONNECTION_TYPE_DOWNLOAD &&

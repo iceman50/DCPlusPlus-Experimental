@@ -18,6 +18,7 @@
 
 #include "stdinc.h"
 #include "ShareManager.h"
+#include "PrivateTransferStorage.h"
 
 #include "AdcHub.h"
 #include "BZUtils.h"
@@ -309,12 +310,17 @@ pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile) {
 	if(virtualFile.compare(0, 4, "TTH/") == 0) {
 		const TTHValue tth(virtualFile.substr(4));
 		auto i = tthIndex.find(tth);
-		if(i != tthIndex.end()) return make_pair(i->second->getRealPath(), i->second->getSize());
-		if(const auto temp = findTempShare(tth)) return make_pair(temp->realPath, temp->size);
+		if(i != tthIndex.end() && !pft::isPrivatePath(i->second->getRealPath()))
+			return make_pair(i->second->getRealPath(), i->second->getSize());
+		if(const auto temp = findTempShare(tth))
+			if(!pft::isPrivatePath(temp->realPath))
+				return make_pair(temp->realPath, temp->size);
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	}
 
 	auto& f = findFile(virtualFile);
+	if(pft::isPrivatePath(f.getRealPath()))
+		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	return make_pair(f.getRealPath(), f.getSize());
 }
 
@@ -334,17 +340,20 @@ ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFi
 	if(virtualFile.compare(0, 4, "TTH/") == 0) {
 		const TTHValue tth(virtualFile.substr(4));
 		auto i = tthIndex.find(tth);
-		if(i != tthIndex.end() && isFileAllowed(*i->second, access)) {
+		if(i != tthIndex.end() && isFileAllowed(*i->second, access) && !pft::isPrivatePath(i->second->getRealPath())) {
 			return { i->second->getRealPath(), i->second->getSize(), tth, false, 0, false };
 		}
 		if(const auto temp = findTempShare(tth, &hubUrl)) {
+			if(pft::isPrivatePath(temp->realPath))
+				throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 			return { temp->realPath, temp->size, temp->tth, true, temp->timestamp, temp->exactOnly };
 		}
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	}
 
 	auto& f = findFile(virtualFile);
-	if(!isFileAllowed(f, access)) throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
+	if(!isFileAllowed(f, access) || pft::isPrivatePath(f.getRealPath()))
+		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	return { f.getRealPath(), f.getSize(), f.tth, false, 0, false };
 }
 
@@ -392,7 +401,7 @@ StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl)
 	// tree and keep hub-specific share rules intact before UploadManager retries.
 	function<void (const Directory&)> collect = [&](const Directory& dir) {
 		for(const auto& file: dir.files) {
-			if(file.tth && *file.tth == tth && isFileAllowed(file, access)) {
+			if(file.tth && *file.tth == tth && isFileAllowed(file, access) && !pft::isPrivatePath(file.getRealPath())) {
 				ret.push_back(file.getRealPath());
 			}
 		}
@@ -407,6 +416,8 @@ StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl)
 	}
 	for(const auto& temp: tempShares) {
 		if(tempShareExpired(temp, GET_TICK()))
+			continue;
+		if(pft::isPrivatePath(temp.realPath))
 			continue;
 		if(temp.tth == tth && Util::stricmp(temp.hubUrl, hubUrl) == 0 &&
 			std::none_of(ret.begin(), ret.end(), [&temp](const string& path) {
@@ -470,6 +481,12 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 	const TTHValue& tth, const string& hubUrl, bool exactOnly) noexcept
 {
 	if((!exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES)) || realPath.empty() || hubUrl.empty() || size < 0) return false;
+	try {
+		if(pft::isPrivatePath(realPath))
+			return false;
+	} catch(...) {
+		return false;
+	}
 	Lock l(cs);
 	auto existing = std::find_if(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
 		return item.tth == tth && item.exactOnly == exactOnly && Util::stricmp(item.hubUrl, hubUrl) == 0;
@@ -1156,6 +1173,8 @@ void ShareManager::save(SimpleXML& aXml) {
 }
 
 void ShareManager::addDirectory(const string& realPath, const string& virtualName) {
+	if(pft::isPrivatePath(realPath))
+		throw ShareException("Private Send storage cannot be shared");
 	if(realPath.empty() || virtualName.empty()) {
 		throw ShareException(_("No directory specified"));
 	}
@@ -1453,7 +1472,9 @@ ShareManager::Directory::Ptr ShareManager::buildTree(const string& realPath, opt
 
 			auto size = i->getSize();
 			auto fileName = realPath + name;
-			
+			if(pft::isPrivatePath(fileName))
+				continue;
+
 			if(!checkInvalidFileName(name))
 				continue;
 
@@ -1509,6 +1530,8 @@ bool ShareManager::checkInvalidFileName(const string& name) const
 
 bool ShareManager::checkInvalidPaths(const string& name) const
 {
+	if(pft::isPrivatePath(name))
+		return false;
 	for(auto& f: cachedFilterSkiplistPaths)
 	{
 		if(checkRegEx(f, name))
@@ -1862,6 +1885,8 @@ bool ShareManager::loadShareCache() noexcept {
 				throw ShareException(_("Missing real file path in share cache"));
 			}
 			auto realPath = files.columnText(4);
+			if(pft::isPrivatePath(realPath))
+				continue;
 			{
 				Lock l(cs);
 				if(!isValidCachedPath(realPath) || !isUnderSharedRoot(realPath, shares)) {
@@ -3024,6 +3049,12 @@ optional<std::reference_wrapper<const ShareManager::Directory::File>> ShareManag
 }
 
 void ShareManager::on(QueueManagerListener::FileMoved, const string& realPath) noexcept {
+	try {
+		if(pft::isPrivatePath(realPath))
+			return;
+	} catch(...) {
+		return;
+	}
 	if(SETTING(ADD_FINISHED_INSTANTLY)) {
 		int64_t size = -1;
 		time_t lastWrite = 0;
@@ -3058,6 +3089,12 @@ void ShareManager::on(QueueManagerListener::FileMoved, const string& realPath) n
 void ShareManager::on(HashManagerListener::TTHDone, const string& realPath, const TTHValue& root,
 	int64_t size, uint32_t timestamp, uint64_t hashJobId) noexcept
 {
+	try {
+		if(pft::isPrivatePath(realPath))
+			return;
+	} catch(...) {
+		return;
+	}
 	try {
 		// A hash completion belongs to one exact filesystem snapshot. Keep a
 		// non-writable handle while updating the share node so an older completion

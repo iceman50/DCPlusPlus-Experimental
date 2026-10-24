@@ -115,6 +115,26 @@ restarting DC++.</p>
   <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES">Maximum uncompressed XML size generated in response to a partial file-list request, in KiB. Minimum: 1 KiB. Default: 65536 KiB.</dd>
 </dl>
 
+<h2>Private Send (experimental PFT1)</h2>
+<p>Disabled by default. Private Send offers a selected file directly from private chat without a search result,
+file list, or public magnet. Both clients must support the same experimental draft, use an ADCS hub and a fresh
+TLS 1.2+ direct chat (TLS 1.2 requires ECDHE and authenticated encryption). Manual contact verification is temporarily off by default for testing. After enabling,
+reconnect an existing direct chat to negotiate support. Open <b>Private Send...</b> from the chat menu.</p>
+<dl style="margin-left: 40px;">
+  <dt>Require manual contact verification (off for testing)</dt>
+  <dd>Default: off. Leave unchecked on both clients to test without exchanging CIDs and fingerprints. Connections remain encrypted, but contact identity is not independently verified. Turning this on requires both contacts to use Verify contact and cancels transfers without an approved matching fingerprint. Testing does not save contacts as verified.</dd>
+  <dt>Offer expires after</dt>
+  <dd>Lifetime of a new outgoing offer before acceptance. Default: 15 minutes. Range: 1–1440 minutes.</dd>
+  <dt>Accepted transfer expires after</dt>
+  <dd>Maximum lifetime after acceptance. Default: 1440 minutes. Range: 1–10080 minutes. The earlier peer deadline wins. Existing deadlines are never extended by settings changes.</dd>
+</dl>
+<p>Recipients explicitly accept each file. Received files undergo full hash verification and Windows attachment
+policy before being saved below <b>PrivateSend\Received</b> in the profile's local data directory. They are never
+opened or shared automatically. Pause permits recipient-initiated resume for up to 30 minutes within the hard
+deadline, with at most three attempts. Disabling the feature or forgetting a verified contact revokes transfers.</p>
+<p>Expiry removes access and incomplete received files; it never deletes the sender's original or a completed
+received file. Sessions do not survive restart. PFT1 is a proposed identifier, and stable interoperability and
+independent security review remain release gates.</p>
 <h2>Direct private-message channels (CCPM)</h2>
 <p>These controls govern automatic recovery of an encrypted direct private-message channel. Each failed attempt uses
 an exponentially longer delay, with random jitter to keep two identical clients from retrying in lockstep.</p>

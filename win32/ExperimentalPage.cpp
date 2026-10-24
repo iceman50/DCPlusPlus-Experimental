@@ -8,6 +8,7 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/DirectTransferManager.h>
 #include "ExperimentalPage.h"
 #include "GeoIPUpdate.h"
 
@@ -234,6 +235,23 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 	auto transferGrid = tabs->addPage(T_("Transfers and hashing"), 3)->content();
 
 	{
+		auto page = tabs->addPage(T_("Private Send"), 1)->content();
+		auto group = page->addChild(GroupBox::Seed(T_("Private Send (experimental PFT1)")));
+		auto cur = group->addChild(Grid::Seed(6, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		auto enabled = cur->addChild(CheckBox::Seed(T_("Enable Private Send (requires TLS 1.2+)")));
+		items.emplace_back(enabled, SettingsManager::ENABLE_PRIVATE_SEND, PropPage::T_BOOL);
+		auto verification = cur->addChild(CheckBox::Seed(T_("Require manual contact verification (off for testing)")));
+		items.emplace_back(verification, SettingsManager::PFT_REQUIRE_VERIFICATION, PropPage::T_BOOL);
+		addIntItem(cur, T_("Offer expires after"), SettingsManager::PFT_OFFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"), 1, 1440);
+		addIntItem(cur, T_("Accepted transfer expires after"), SettingsManager::PFT_TRANSFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"),
+			1, 10080);
+		cur->addChild(Label::Seed(T_("Use Private Send in a private chat's menu. Testing mode skips contact verification on this client.")));
+		cur->addChild(Label::Seed(
+			T_("Disabling revokes transfers. Received files stay in a protected, unshared folder; files never open automatically.")));
+	}
+
+	{
 		auto group = transferGrid->addChild(GroupBox::Seed(T_("Compression and large file lists")));
 		auto cur = group->addChild(Grid::Seed(2, 1));
 		cur->column(0).mode = GridInfo::FILL;
@@ -426,6 +444,10 @@ void ExperimentalPage::write() {
 	clamp(SettingsManager::HASH_DB_WRITE_BATCH_SIZE, 1);
 	clamp(SettingsManager::RTF_TEMP_SHARE_LIMIT, 1);
 	clamp(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 0);
+	clampRange(SettingsManager::PFT_OFFER_MINUTES, 1, 1440);
+	clampRange(SettingsManager::PFT_TRANSFER_MINUTES, 1, 10080);
+	if(DirectTransferManager::available())
+		DirectTransferManager::getInstance()->configure();
 	clampRange(SettingsManager::CCPM_RECONNECT_BASE_DELAY,
 		SettingsManager::CCPM_RECONNECT_DELAY_MIN, SettingsManager::CCPM_RECONNECT_DELAY_MAX);
 	clampRange(SettingsManager::CCPM_RECONNECT_MAX_DELAY,

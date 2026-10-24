@@ -58,6 +58,7 @@ public:
 	static const string FEATURE_ADC_CPMI;
 	static const string FEATURE_ADC_MCN1;
 	static const string FEATURE_ADC_RTF0;
+	static const string FEATURE_ADC_PFT1;
 
 	static const string FILE_NOT_AVAILABLE;
 
@@ -98,7 +99,9 @@ public:
 		// not be changed during the lifetime of the connection.
 		FLAG_MCN_SMALL = FLAG_SUPPORTS_RTF0 << 1,
 		FLAG_MCN_NORMAL = FLAG_MCN_SMALL << 1,
-		FLAG_SUPPORTS_ZSTD_GET = FLAG_MCN_NORMAL << 1
+		FLAG_SUPPORTS_ZSTD_GET = FLAG_MCN_NORMAL << 1,
+		FLAG_SUPPORTS_PFT1 = FLAG_SUPPORTS_ZSTD_GET << 1,
+		FLAG_PRIVATE_TRANSFER = FLAG_SUPPORTS_PFT1 << 1
 	};
 
 	enum States {
@@ -167,6 +170,8 @@ public:
 	bool pm(const string& message, bool thirdPerson = false, bool explicitRichText = false);
 	void pmi(const char* name, const string& value);
 	void send(const AdcCommand& c);
+	/** Dedicated bounded wire path; bypasses generic chat/debug/plugin logging. */
+	void sendPrivate(const string& line);
 
 	void setDataMode(int64_t aBytes = -1) { dcassert(socket); socket->setDataMode(aBytes); }
 	void setLineMode(size_t rollback) { dcassert(socket); socket->setLineMode(rollback); }
@@ -192,9 +197,16 @@ public:
 	HintedUser getHintedUser() const { return HintedUser(user, hubUrl); }
 
 	bool isSecure() const { return socket && socket->isSecure(); }
+
+	bool isPrivateTransferSecure() const { return socket && socket->isPrivateTransferSecure(); }
 	bool isTrusted() const { return socket && socket->isTrusted(); }
 	string getCipherName() const { return socket ? socket->getCipherName() : Util::emptyString; }
 	ByteVector getKeyprint() const { return socket ? socket->getKeyprint() : ByteVector(); }
+
+	void configurePrivateTransferSocket() {
+		if(socket)
+			socket->setPrivateTransfer();
+	}
 	bool verifyKeyprint(const string& expKeyp, bool allowUntrusted) noexcept { return socket ? socket->verifyKeyprint(expKeyp, allowUntrusted) : true; }
 
 	string getRemoteIp() const { return socket->getIp(); }

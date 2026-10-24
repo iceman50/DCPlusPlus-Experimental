@@ -25,6 +25,7 @@
 #include "ConnectivityManager.h"
 #include "CryptoManager.h"
 #include "DownloadManager.h"
+#include "DirectTransferManager.h"
 #include "FavoriteManager.h"
 #include "FinishedManager.h"
 #include "GeoManager.h"
@@ -79,6 +80,7 @@ void startup() {
 	ThrottleManager::newInstance();
 	QueueManager::newInstance();
 	ShareManager::newInstance();
+	DirectTransferManager::newInstance();
 	BBSManager::newInstance();
 	HttpManager::newInstance();
 	FavoriteManager::newInstance();
@@ -95,6 +97,10 @@ void startup() {
 
 void load(function<void (const string&)> stepF, function<void (float)> progressF) {
 	SettingsManager::getInstance()->load();
+	DirectTransferManager::getInstance()->configure();
+	if(!pft::purgeUnfinished())
+		LogManager::getInstance()->message(
+			"Some expired Private Send partial files could not be removed", LogMessage::SEV_WARNING, "Private Send");
 
 #ifdef _WIN32
 	if(!SETTING(LANGUAGE).empty()) {
@@ -137,6 +143,7 @@ void load(function<void (const string&)> stepF, function<void (float)> progressF
 }
 
 void shutdown() {
+	DirectTransferManager::getInstance()->shutdown();
 	PluginManager::getInstance()->unloadPlugins();
 	TimerManager::getInstance()->shutdown();
 	HashManager::getInstance()->shutdown();
@@ -150,6 +157,7 @@ void shutdown() {
 	// their self-owned BufferedSocket workers, otherwise shutdown can wait forever.
 	ClientManager::getInstance()->shutdown();
 	BufferedSocket::waitShutdown();
+	DirectTransferManager::deleteInstance();
 	FavoriteManager::getInstance()->shutdown();
 
 	WindowManager::getInstance()->prepareSave();

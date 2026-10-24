@@ -66,7 +66,7 @@ const string SettingsManager::settingTags[] =
 	"CID", "LogFileMainChat", "LogFilePrivateChat",
 	"LogFileStatus", "LogFileUpload", "LogFileDownload", "LogFileFinishedDownload", "LogFileSystem",
 	"LogFormatSystem", "LogFormatStatus",
-	"TLSPrivateKeyFile", "TLSCertificateFile", "TLSTrustedCertificatesPath",
+	"TLSPrivateKeyFile", "TLSCertificateFile", "TLSTrustedCertificatesPath", "PrivateSendContactPins",
 	"Language", "Toolbar", "LastSearchType", "Mapper", "Mapper6", "EmoticonPack", "IconPack",
 	"SoundMainChat", "SoundPM", "SoundPMWindow", "SoundFinishedDL", "SoundFinishedFL", "LastSharedFolder",
 	"SharingSkiplistExtensions", "SharingSkiplistRegEx", "SharingSkiplistPaths", "WhitelistOpenURIs",
@@ -108,6 +108,7 @@ const string SettingsManager::settingTags[] =
 	"GlobalWindow", "GlobalLimit", "PeerLimit", "PeerWindow", "MaxTrackedPeers",
 	"MaxSUDPPacket", "MaxSUDPKeys", "MaxPartialListBytes", "HashDbWriteBatchSize",
 	"ChatLinkMaxLength", "RichTextMaxSize", "RTFTempShareLimit", "RTFTempShareExpiration", "MaxSystemLogItems",
+	"PrivateSendOfferMinutes", "PrivateSendTransferMinutes",
 	"CCPMReconnectBaseDelay", "CCPMReconnectMaxDelay", "CCPMStableConnectionTime",
 	"CCPMMaxAutomaticAttempts",
 	"ThemeMode", "ThemeBackgroundColor", "ThemeSurfaceColor", "ThemeTextColor",
@@ -124,7 +125,7 @@ const string SettingsManager::settingTags[] =
 	"ClickableChatLinks", "EnableRichText", "EnableEmoticons",
 	"CompressTransfers", "ConfirmADLSRemoval", "ConfirmExit", "ConfirmHubClosing",
 	"ConfirmHubRemoval", "ConfirmItemRemoval", "ConfirmUserRemoval", "DcextRegister",
-	"DontDlAlreadyQueued", "DontDLAlreadyShared", "EnableCCPM", "FavShowJoins",
+	"DontDlAlreadyQueued", "DontDLAlreadyShared", "EnableCCPM", "EnablePrivateSend", "FavShowJoins",
 	"FilterMessages",
 	"FinishedDLOnlyFull", "FollowLinks", "GeoCity", "GeoRegion", "GetUserCountry", "GetUserInfo",
 	"HubUserCommands", "IgnoreBotPms", "IgnoreHubPms", "OpenNewWindow", "KeepFinishedFiles",
@@ -142,7 +143,7 @@ const string SettingsManager::settingTags[] =
 	"RegisterSystemStartup", "DontLogCCPMChat", "AboutCfgDisclaimer", "EnableTaskbarPreview",
 	"EnableSUDP", "BroadDetection", "BroadDetection6", "HashDbVerifyStartup", "HashDbCompactOnRebuild",
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
-	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind",
+	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind", "PFTRequireVerification",
 	"SENTRY",
 	// Int64
 	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize", "GeoIPLastSuccess", "GeoIPLastAttempt",
@@ -254,7 +255,11 @@ SettingsManager::SettingsManager() {
 	setDefault(RICH_TEXT_MAX_SIZE, 64 * 1024);
 	setDefault(RTF_TEMP_SHARE_LIMIT, 256);
 	setDefault(RTF_TEMP_SHARE_EXPIRATION, 0);
-	setDefault(false);
+	setDefault(PFT_OFFER_MINUTES, 15);
+	setDefault(PFT_TRANSFER_MINUTES, 1440);
+	setDefault(ENABLE_PRIVATE_SEND, false);
+	// Temporary testing default while the contact-verification workflow is revised.
+	setDefault(PFT_REQUIRE_VERIFICATION, false);
 	setDefault(MAX_SYSTEM_LOG_ITEMS, 100);
 	setDefault(CCPM_RECONNECT_BASE_DELAY, 5);
 	setDefault(CCPM_RECONNECT_MAX_DELAY, 60);

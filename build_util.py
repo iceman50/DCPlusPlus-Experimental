@@ -361,7 +361,7 @@ class Dev:
         env.Append(CPPPATH=["#/maxminddb", "#/sqlite", "#/zlib", "#/zstd/lib"])
 
         if self.is_win32():
-            env.Append(LIBS=["gdi32", "iphlpapi", "ole32", "ws2_32"])
+            env.Append(LIBS=["gdi32", "iphlpapi", "normaliz", "ole32", "ws2_32"])
         else:
             env.Append(LIBS=["bz2", "c", "iconv"])
 

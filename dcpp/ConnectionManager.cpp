@@ -780,6 +780,8 @@ void ConnectionManager::adcConnect(const OnlineUser& aUser, const string& aPort,
 			if(t->second.type == CONNECTION_TYPE_PM) {
 				uc->setFlag(UserConnection::FLAG_PM);
 			}
+			if(t->second.type == CONNECTION_TYPE_PRIVATE)
+				uc->setFlag(UserConnection::FLAG_PRIVATE_TRANSFER);
 			tokens.erase(t);
 		}
 	}
@@ -830,6 +832,8 @@ void ConnectionManager::on(AdcCommand::SUP, UserConnection* aSource, const AdcCo
 				aSource->setFlag(UserConnection::FLAG_SUPPORTS_MCN1);
 			} else if(feat == UserConnection::FEATURE_ADC_RTF0) {
 				aSource->setFlag(UserConnection::FLAG_SUPPORTS_RTF0);
+			} else if(feat == UserConnection::FEATURE_ADC_PFT1) {
+				aSource->setFlag(UserConnection::FLAG_SUPPORTS_PFT1);
 			}
 		}
 	}
@@ -842,6 +846,8 @@ void ConnectionManager::on(AdcCommand::SUP, UserConnection* aSource, const AdcCo
 
 	if(aSource->isSet(UserConnection::FLAG_INCOMING)) {
 		StringList defFeatures = adcFeatures;
+		if(SETTING(ENABLE_PRIVATE_SEND) && aSource->isPrivateTransferSecure())
+			defFeatures.push_back("AD" + UserConnection::FEATURE_ADC_PFT1);
 		if(SETTING(COMPRESS_TRANSFERS)) {
 			defFeatures.push_back("AD" + UserConnection::FEATURE_ZLIB_GET);
 			defFeatures.push_back("AD" + UserConnection::FEATURE_ZSTD_GET);
@@ -868,6 +874,8 @@ void ConnectionManager::on(UserConnectionListener::Connected, UserConnection* aS
 		aSource->lock(CryptoManager::getInstance()->getLock(), CryptoManager::getInstance()->getPk() + "Ref=" + aSource->getHubUrl());
 	} else {
 		StringList defFeatures = adcFeatures;
+		if(SETTING(ENABLE_PRIVATE_SEND) && aSource->isPrivateTransferSecure())
+			defFeatures.push_back("AD" + UserConnection::FEATURE_ADC_PFT1);
 		if(SETTING(COMPRESS_TRANSFERS)) {
 			defFeatures.push_back("AD" + UserConnection::FEATURE_ZLIB_GET);
 			defFeatures.push_back("AD" + UserConnection::FEATURE_ZSTD_GET);
@@ -1070,9 +1078,10 @@ void ConnectionManager::addNewConnection(UserConnection* uc, ConnectionType type
 			return cqi.getUser() == uc->getUser();
 		}) : 0;
 		if(i == container.end() && (!multiple || userConnections < std::max(1, SETTING(MAX_MCN_UPLOADS)) + 1)) {
-			const bool syncQueueToken = type == CONNECTION_TYPE_UPLOAD || type == CONNECTION_TYPE_PM;
-			const auto queueToken = type == CONNECTION_TYPE_PM ? "CCPM-" + std::to_string(++nextPMConnectionId) :
-				Util::emptyString;
+			const bool syncQueueToken = type == CONNECTION_TYPE_UPLOAD || type == CONNECTION_TYPE_PM || type == CONNECTION_TYPE_PRIVATE;
+			const auto queueToken = (type == CONNECTION_TYPE_PM || type == CONNECTION_TYPE_PRIVATE)
+				? "CCPM-" + std::to_string(++nextPMConnectionId)
+				: Util::emptyString;
 			auto& cqi = getCQI(uc->getHintedUser(), type,
 				queueToken);
 			cqi.setProtocolToken(uc->getToken());
@@ -1087,7 +1096,7 @@ void ConnectionManager::addNewConnection(UserConnection* uc, ConnectionType type
 			cqi.setState(ConnectionQueueItem::ACTIVE);
 			uc->setFlag(UserConnection::FLAG_ASSOCIATED);
 
-			if(type == CONNECTION_TYPE_PM) {
+			if(type == CONNECTION_TYPE_PM || type == CONNECTION_TYPE_PRIVATE) {
 				uc->setState(UserConnection::STATE_CMD);
 			}
 
@@ -1193,14 +1202,32 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 		type = tokCheck.second;
 	}
 
-	// without a valid KeyPrint this degrades into normal trust check
+	const bool pmRequested = type == CONNECTION_TYPE_PM || aSource->isSet(UserConnection::FLAG_PM) || cmd.hasFlag("PM", 0);
+	string privateRole;
+	const bool hasPrivateRole = cmd.getParam("PF", 0, privateRole);
+	const bool privateRequested =
+		type == CONNECTION_TYPE_PRIVATE || aSource->isSet(UserConnection::FLAG_PRIVATE_TRANSFER) || hasPrivateRole;
+	if(privateRequested) {
+		const auto roleCount = std::count_if(
+			cmd.getParameters().begin(), cmd.getParameters().end(), [](const string& p) { return p.compare(0, 2, "PF") == 0; });
+		if(pmRequested || (hasPrivateRole && (privateRole != "1" || roleCount != 1)) || cid != aSource->getUser()->getCID().toBase32() ||
+			!SETTING(ENABLE_PRIVATE_SEND) || !aSource->isPrivateTransferSecure() || !aSource->isSet(UserConnection::FLAG_SUPPORTS_PFT1)) {
+			putConnection(aSource);
+			return;
+		}
+		aSource->setFlag(UserConnection::FLAG_PRIVATE_TRANSFER);
+		if(aSource->isSet(UserConnection::FLAG_INCOMING))
+			aSource->inf(false);
+		addNewConnection(aSource, CONNECTION_TYPE_PRIVATE);
+		return;
+	}
+	// Private Send checks its independently approved fingerprint in its own
+	// manager. A private failure must never remove ordinary download sources.
 	if(!checkKeyprint(aSource)) {
 		QueueManager::getInstance()->removeSource(aSource->getUser(), QueueItem::Source::FLAG_UNTRUSTED);
 		putConnection(aSource);
 		return;
 	}
-
-	const bool pmRequested = type == CONNECTION_TYPE_PM || aSource->isSet(UserConnection::FLAG_PM) || cmd.hasFlag("PM", 0);
 
 	if(pmRequested && !aSource->isSecure()) {
 		aSource->send(AdcCommand(AdcCommand::SEV_FATAL, AdcCommand::ERROR_GENERIC, "Unencrypted CCPM connections aren't allowed"));
@@ -1321,7 +1348,8 @@ void ConnectionManager::failed(UserConnection* aSource, const string& aError, bo
 					removeExtraMCN(cqi, removedEvent);
 				}
 			} else {
-				auto type = aSource->isSet(UserConnection::FLAG_UPLOAD) ? CONNECTION_TYPE_UPLOAD :
+				auto type = aSource->isSet(UserConnection::FLAG_PRIVATE_TRANSFER) ? CONNECTION_TYPE_PRIVATE :
+					aSource->isSet(UserConnection::FLAG_UPLOAD) ? CONNECTION_TYPE_UPLOAD :
 					aSource->isSet(UserConnection::FLAG_PM) ? CONNECTION_TYPE_PM : CONNECTION_TYPE_LAST;
 				if(type != CONNECTION_TYPE_LAST) {
 					auto& container = cqis[type];
@@ -1400,7 +1428,8 @@ void ConnectionManager::disconnect(const UserPtr& user, ConnectionType type) {
 	Lock l(cs);
 	for(auto uc: userConnections) {
 		if(uc->getUser() == user && uc->isSet(type == CONNECTION_TYPE_DOWNLOAD ? UserConnection::FLAG_DOWNLOAD :
-			type == CONNECTION_TYPE_UPLOAD ? UserConnection::FLAG_UPLOAD : UserConnection::FLAG_PM))
+			type == CONNECTION_TYPE_UPLOAD ? UserConnection::FLAG_UPLOAD :
+			type == CONNECTION_TYPE_PRIVATE ? UserConnection::FLAG_PRIVATE_TRANSFER : UserConnection::FLAG_PM))
 		{
 			uc->disconnect(true);
 		}

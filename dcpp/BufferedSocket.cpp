@@ -198,7 +198,9 @@ void BufferedSocket::threadRead() {
 	if(state != RUNNING)
 		return;
 
-	int left = (mode == MODE_DATA) ? ThrottleManager::getInstance()->read(sock.get(), &inbuf[0], (int)inbuf.size()) : sock->read(&inbuf[0], (int)inbuf.size());
+	int left = (mode == MODE_DATA) ?
+		ThrottleManager::getInstance()->read(sock.get(), &inbuf[0], (int)inbuf.size(), privateTransfer.load()) :
+		sock->read(&inbuf[0], (int)inbuf.size());
 	if(left == -1) {
 		// EWOULDBLOCK, no data received...
 		return;
@@ -301,7 +303,8 @@ void BufferedSocket::threadRead() {
 		}
 	}
 
-	if((mode == MODE_LINE || mode == MODE_ZPIPE) && line.size() > maxCommand) {
+	const auto lineLimit = (privateTransfer.load() || line.compare(0, 4, "CPFT") == 0) ? std::min<size_t>(4096, maxCommand) : maxCommand;
+	if((mode == MODE_LINE || mode == MODE_ZPIPE) && line.size() > lineLimit) {
 		throw SocketException(_("Maximum command length exceeded"));
 	}
 }
@@ -361,8 +364,8 @@ void BufferedSocket::threadSendFile(InputStream* file) {
 				// workaround for OpenSSL (crashes when previous write failed and now retrying with different writeSize)
 				written = sock->write(&writeBuf[writePos], writeSize);
 			} else {
-				writeSize = min(sockSize / 2, writeBuf.size() - writePos);	
-				written = ThrottleManager::getInstance()->write(sock.get(), &writeBuf[writePos], writeSize);
+				writeSize = min(sockSize / 2, writeBuf.size() - writePos);
+				written = ThrottleManager::getInstance()->write(sock.get(), &writeBuf[writePos], writeSize, privateTransfer.load());
 			}
 			
 			if(written > 0) {
