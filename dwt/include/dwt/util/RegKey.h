@@ -51,23 +51,13 @@ private:
 	DWORD m_dwDisposition;
 	REGSAM m_pAccess;
 
-	struct _REGKEYINFO {
-		TCHAR achClass[MAX_PATH];				// buffer for class name
-		DWORD cchClassName;						// size of class string
-		DWORD cSubKeys;							// number of subkeys
-		DWORD cbMaxSubKey;						// longest subkey size
-		DWORD cchMaxClass;						// longest class string
-		DWORD cValues;							// number of values for key
-		DWORD cchMaxValue;						// longest value name
-		DWORD cbMaxValueData;					// longest value data
-		DWORD cbSecurityDescriptor;				// size of security descriptor
-		FILETIME ftLastWriteTime;				// last write time
-	} REGKEYINFO;
 public:
 	/// Normal constructor
 	/** Constructs a new instanc of this class
 	  */
 	RegKey(void);
+	RegKey(const RegKey&) = delete;
+	RegKey& operator=(const RegKey&) = delete;
 
 	/// Constructor, with parameters to open/create a reg key
 	/** Constructor taking a hKey and tstring to specify the key to open. <br>

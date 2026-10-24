@@ -78,11 +78,15 @@ void Button::create(const Seed& cs) {
 }
 
 void Button::setImage(BitmapPtr bitmap) {
-	sendMessage(BM_SETIMAGE, IMAGE_BITMAP, reinterpret_cast<LPARAM>(bitmap->handle()));
+	sendMessage(BM_SETIMAGE, IMAGE_BITMAP, reinterpret_cast<LPARAM>(bitmap ? bitmap->handle() : nullptr));
+	this->bitmap = std::move(bitmap);
+	icon.reset();
 }
 
 void Button::setImage(IconPtr icon) {
-	sendMessage(BM_SETIMAGE, IMAGE_ICON, reinterpret_cast<LPARAM>(icon->handle()));
+	sendMessage(BM_SETIMAGE, IMAGE_ICON, reinterpret_cast<LPARAM>(icon ? icon->handle() : nullptr));
+	this->icon = std::move(icon);
+	bitmap.reset();
 }
 
 void Button::setNote(const tstring& note) {

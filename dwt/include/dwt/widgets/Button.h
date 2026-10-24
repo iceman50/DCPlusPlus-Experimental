@@ -123,6 +123,8 @@ protected:
 private:
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
+	BitmapPtr bitmap;
+	IconPtr icon;
 	ImageListPtr imageList;
 	UINT imageAlignment;
 	Rectangle imageMargin;

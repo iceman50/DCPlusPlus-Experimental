@@ -1792,12 +1792,12 @@ public:
 			return;
 		}
 		auto shared = new SharedAppearance(palette, preserveDialogClientPainting, ownerDraw);
+		// Keep the traversal's reference even if its first subclass attempt fails.
+		// NativeWindowData releases its own reference on that failure path.
+		shared->retain();
+		const auto release = [](SharedAppearance* value) { value->release(); };
+		std::unique_ptr<SharedAppearance, decltype(release)> owner(shared, release);
 		applyTree(window, shared);
-		/* applyWindow owns every successful reference. No supported native dialog
-		 * reaches here without a recognized root class. */
-		if(!shared->references) {
-			delete shared;
-		}
 	}
 
 	void consider(HWND window) const {

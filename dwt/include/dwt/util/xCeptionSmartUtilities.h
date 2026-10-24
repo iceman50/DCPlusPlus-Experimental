@@ -37,6 +37,7 @@
 #define DWT_xCeptionSmartUtilities_h
 
 #include <exception>
+#include <string>
 
 namespace dwt { namespace util {
 
@@ -47,7 +48,7 @@ class xCeptionSmartUtilities : public std::exception
 		/// Constructor taking a const char pointer
 		/** The char * will contain the description returned from the virtual member function called what()
 		  */
-		xCeptionSmartUtilities( const char * err ) throw()
+		xCeptionSmartUtilities( const char * err )
 			: std::exception(),
 			itsAsciiErrorMsg( err )
 		{}
@@ -55,7 +56,7 @@ class xCeptionSmartUtilities : public std::exception
 		/// Overloaded Constructor basically doing the same as the const TCHAR * version
 		/** See the const char * err overloaded version
 		  */
-		xCeptionSmartUtilities( const std::string & err ) throw()
+		xCeptionSmartUtilities( const std::string & err )
 			: std::exception(),
 			itsAsciiErrorMsg( err )
 		{}

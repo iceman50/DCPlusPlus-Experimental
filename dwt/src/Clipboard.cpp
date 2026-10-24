@@ -38,13 +38,17 @@ namespace dwt { namespace Clipboard {
 
 void setData(const tstring& str, Control* w) {
 	dwtassert(w, "Clipboard::setData: invalid widget");
+	if(!w) return;
 
 	if(!::OpenClipboard(w->handle())) {
 		dwtWin32DebugFail("Clipboard::setData: OpenClipboard failed");
 		return;
 	}
 
-	::EmptyClipboard();
+	if(!::EmptyClipboard()) {
+		::CloseClipboard();
+		return;
+	}
 
 	auto handle = ::GlobalAlloc(GMEM_MOVEABLE, (str.size() + 1) * sizeof(TCHAR));
 	if(!handle) {
@@ -53,14 +57,20 @@ void setData(const tstring& str, Control* w) {
 	}
 
 	auto buf = reinterpret_cast<TCHAR*>(::GlobalLock(handle));
+	if(!buf) {
+		::GlobalFree(handle);
+		::CloseClipboard();
+		return;
+	}
 	_tcscpy_s(buf, str.size() + 1, str.c_str());
 	::GlobalUnlock(handle);
 
 #ifdef _UNICODE
-	::SetClipboardData(CF_UNICODETEXT, handle);
+	const auto transferred = ::SetClipboardData(CF_UNICODETEXT, handle);
 #else
-	::SetClipboardData(CF_TEXT, handle);
+	const auto transferred = ::SetClipboardData(CF_TEXT, handle);
 #endif
+	if(!transferred) ::GlobalFree(handle);
 
 	::CloseClipboard();
 }

@@ -126,12 +126,14 @@ public:
 
 		// First we must check how big buffer we need
 		int size = ::WideCharToMultiByte( ( unsigned int ) codepage, 0, input, - 1, 0, 0, 0, 0 );
+		if(size <= 0) throw xCeptionSmartUtilities("Couldn't translate string into codepage");
 		std::unique_ptr<char[]> buffer(new char[size]);
 
 		// Then we can do the actual conversion
-		::WideCharToMultiByte( ( unsigned int ) codepage, 0, input, - 1, buffer.get(), size, 0, 0 );
+		const int converted = ::WideCharToMultiByte( ( unsigned int ) codepage, 0, input, - 1, buffer.get(), size, 0, 0 );
+		if(converted <= 0) throw xCeptionSmartUtilities("Couldn't translate string into codepage");
 
-		return buffer.get();
+		return std::string(buffer.get(), converted - 1);
 	}
 };
 
@@ -162,6 +164,7 @@ public:
 	  */
 	static bool canConvert( const char * input, ConversionCodepage::Codepage codepage )
 	{
+		if(!input) return true;
 		if ( codepage == ConversionCodepage::UTF8 )
 		{
 			unsigned int skipNext = 0;
@@ -250,8 +253,9 @@ public:
 
 		// Now doing the conversion
 		size = ::MultiByteToWideChar( ( unsigned int ) codepage, MB_ERR_INVALID_CHARS, input, - 1, buffer.get(), size );
+		if(size <= 0) throw xCeptionSmartUtilities("Couldn't translate string into codepage");
 
-		std::wstring retVal( buffer.get() );
+		std::wstring retVal( buffer.get(), size - 1 );
 		return retVal;
 	}
 };
