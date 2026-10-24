@@ -1,19 +1,27 @@
 <#
 .SYNOPSIS
-Build and package x64 MinGW DC++ debug/release artifacts.
+Interactively build and package x64 MinGW or MSVC DC++ artifacts.
 
 .DESCRIPTION
 Interactive helper for producing a distribution zip. The zip contains the
-stripped executable renamed to DCPlusPlus.exe, its GNU debug companion PDB,
+DCPlusPlus.exe, its matching GNU debug companion or native Microsoft PDB,
 changelog-bfe.txt, and the distributable theme, emoticon, and icon-pack collections.
 
 Package names use:
-DCPlusPlus-Experimental-VERSION-COMPILER-[Release|Debug]-MSVCRT-gitrev-yyyyMMdd-HHmmssZ.zip
+DCPlusPlus-Experimental-VERSION-COMPILER-CONFIGURATION-RUNTIME-BUILDSYSTEM-gitrev-yyyyMMdd-HHmmssZ.zip
 
-By default the script prompts for the build configuration and writes packages
+By default the script prompts for the compiler and build configuration and writes packages
 to the root-level dist directory. It can also be used non-interactively:
 
   powershell -ExecutionPolicy Bypass -File scripts\dist-build.ps1 -Configuration Both
+  powershell -ExecutionPolicy Bypass -File scripts\dist-build.ps1 -Compiler MSVC -Configuration Release
+  powershell -ExecutionPolicy Bypass -File scripts\dist-build.ps1 -Compiler MinGW -BuildSystem CMake -Configuration Debug
+
+MinGW supports SCons (the default) or CMake. MSVC uses the native CMake solution.
+Supplying Configuration without Compiler retains the existing MinGW/SCons behavior.
+Use -NoBuild to package existing outputs. MSVC Release packages require the Visual
+C++ runtime; MSVC Debug packages require the Visual Studio debug runtime. These
+runtimes are not bundled in the zip.
 
 .NOTES
 Copyright (C) 2026 iceman50
@@ -24,9 +32,20 @@ param(
 	[ValidateSet("Debug", "Release", "Both")]
 	[string]$Configuration,
 
+	[ValidateSet("MinGW", "MSVC")]
+	[string]$Compiler,
+
+	[ValidateSet("Auto", "SCons", "CMake")]
+	[string]$BuildSystem = "Auto",
+
 	[string]$OutputDirectory,
 
 	[string]$SConsCommand = "scons",
+
+	[string]$CMakeCommand = "cmake",
+
+	[ValidateRange(1, 256)]
+	[int]$Jobs = 8,
 
 	[string]$CompilerLabel,
 
@@ -44,7 +63,7 @@ function Get-RepositoryRoot {
 
 function Read-Configuration {
 	Write-Host ""
-	Write-Host "Select x64 MinGW build configuration:"
+	Write-Host "Select x64 build configuration:"
 	Write-Host "  1. Debug"
 	Write-Host "  2. Release"
 	Write-Host "  3. Both"
@@ -55,41 +74,66 @@ function Read-Configuration {
 			return "Both"
 		}
 
-		switch($choice.Trim()) {
+		switch($choice.Trim().ToLowerInvariant()) {
 			"1" { return "Debug" }
 			"2" { return "Release" }
 			"3" { return "Both" }
+			"debug" { return "Debug" }
+			"release" { return "Release" }
+			"both" { return "Both" }
 			default { Write-Host "Please enter 1, 2, or 3." }
 		}
 	}
 }
 
-function Read-YesNo {
-	param(
-		[string]$Prompt,
-		[bool]$DefaultYes
-	)
-
-	if($DefaultYes) {
-		$suffix = "[Y/n]"
-	} else {
-		$suffix = "[y/N]"
-	}
-
+function Read-Compiler {
+	Write-Host ""
+	Write-Host "Select x64 compiler:"
+	Write-Host "  1. MinGW-w64"
+	Write-Host "  2. MSVC (Visual Studio 2026)"
 	while($true) {
-		$answer = Read-Host "$Prompt $suffix"
-		if([string]::IsNullOrWhiteSpace($answer)) {
-			return $DefaultYes
-		}
-
-		switch($answer.Trim().ToLowerInvariant()) {
-			"y" { return $true }
-			"yes" { return $true }
-			"n" { return $false }
-			"no" { return $false }
-			default { Write-Host "Please answer yes or no." }
+		$choice = Read-Host "Compiler [1]"
+		if([string]::IsNullOrWhiteSpace($choice)) { return "MinGW" }
+		switch($choice.Trim().ToLowerInvariant()) {
+			"1" { return "MinGW" }
+			"mingw" { return "MinGW" }
+			"2" { return "MSVC" }
+			"msvc" { return "MSVC" }
+			default { Write-Host "Please enter 1 or 2." }
 		}
 	}
+}
+
+function Read-BuildSystem {
+	Write-Host ""
+	Write-Host "Select MinGW build system:"
+	Write-Host "  1. SCons"
+	Write-Host "  2. CMake (isolated build)"
+	while($true) {
+		$choice = Read-Host "Build system [1]"
+		if([string]::IsNullOrWhiteSpace($choice)) { return "SCons" }
+		switch($choice.Trim().ToLowerInvariant()) {
+			"1" { return "SCons" }
+			"scons" { return "SCons" }
+			"2" { return "CMake" }
+			"cmake" { return "CMake" }
+			default { Write-Host "Please enter 1 or 2." }
+		}
+	}
+}
+
+function Get-BuildDirectory {
+	param([string]$RepoRoot, [string]$Mode)
+	if($BuildSystem -eq "SCons") { return Join-Path $RepoRoot "build\$Mode-mingw-x64" }
+	if($Compiler -eq "MSVC") { return Join-Path $RepoRoot "build\cmake\msvc" }
+	return Join-Path $RepoRoot "build\cmake\mingw-$Mode"
+}
+
+function Get-BinaryDirectory {
+	param([string]$RepoRoot, [string]$Mode)
+	$buildDirectory = Get-BuildDirectory -RepoRoot $RepoRoot -Mode $Mode
+	if($BuildSystem -eq "SCons") { return Join-Path $buildDirectory "bin" }
+	return Join-Path $buildDirectory "bin\$(Get-PackageConfigurationName -Mode $Mode)"
 }
 
 function Get-ModeList {
@@ -198,6 +242,21 @@ function ConvertTo-PackageToken {
 }
 
 function Get-CompilerLabel {
+	param([string]$RepoRoot, [string]$Mode)
+	if($BuildSystem -eq "CMake") {
+		$directory = Get-BuildDirectory -RepoRoot $RepoRoot -Mode $Mode
+		$metadata = Get-ChildItem -LiteralPath (Join-Path $directory "CMakeFiles") -Filter CMakeCXXCompiler.cmake -Recurse -ErrorAction SilentlyContinue |
+			Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+		if($null -eq $metadata) { throw "CMake compiler metadata is missing in $directory. Build first or pass -CompilerLabel." }
+		$contents = Get-Content -LiteralPath $metadata.FullName -Raw
+		$versionMatch = [regex]::Match($contents, 'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"\)')
+		$expectedId = if($Compiler -eq "MSVC") { "MSVC" } else { "GNU" }
+		if(-not $versionMatch.Success -or $contents -notmatch ('set\(CMAKE_CXX_COMPILER_ID "' + $expectedId + '"\)')) {
+			throw "CMake compiler metadata does not match the selected $Compiler compiler: $($metadata.FullName)"
+		}
+		$label = if($Compiler -eq "MSVC") { "MSVC" } else { "MinGW-w64" }
+		return ConvertTo-PackageToken -Value "$label-$($versionMatch.Groups[1].Value)"
+	}
 	$compilerCandidates = @(
 		"x86_64-w64-mingw32-g++",
 		"g++"
@@ -233,26 +292,38 @@ function Get-PackageConfigurationName {
 function Invoke-DistBuild {
 	param(
 		[string]$RepoRoot,
-		[string]$Mode,
-		[string]$SCons
-	)
-
-	$target = "build/$Mode-mingw-x64/bin/DCPlusPlus.exe"
-	$sconsArgs = @(
-		"tools=mingw",
-		"arch=x64",
-		"mode=$Mode",
-		$target
+		[string]$Mode
 	)
 
 	Write-Host ""
-	Write-Host "Building $Mode x64 MinGW target..."
-	Write-Host "$SCons $($sconsArgs -join ' ')"
+	Write-Host "Building $Mode x64 $Compiler with $BuildSystem..."
 	Push-Location -LiteralPath $RepoRoot
 	try {
-		& $SCons @sconsArgs
-		if($LASTEXITCODE -ne 0) {
-			throw "SCons failed for $Mode with exit code $LASTEXITCODE."
+		if($BuildSystem -eq "SCons") {
+			$sconsArgs = @("tools=mingw", "arch=x64", "mode=$Mode", "-j$Jobs", "build/$Mode-mingw-x64/bin/DCPlusPlus.exe")
+			Write-Host "$SConsCommand $($sconsArgs -join ' ')"
+			& $SConsCommand @sconsArgs
+			if($LASTEXITCODE -ne 0) { throw "SCons failed for $Mode with exit code $LASTEXITCODE." }
+		} else {
+			$preset = if($Compiler -eq "MSVC") { "msvc" } else { "mingw-$Mode" }
+			$configureArgs = @("-S", (Join-Path $RepoRoot "cmake"), "--preset", $preset)
+			$buildDirectory = Get-BuildDirectory -RepoRoot $RepoRoot -Mode $Mode
+			if($Compiler -eq "MinGW" -and -not (Test-Path -LiteralPath (Join-Path $buildDirectory "CMakeCache.txt"))) {
+				$ninja = Get-Command ninja -ErrorAction SilentlyContinue
+				if($null -ne $ninja) {
+					$configureArgs += "-DCMAKE_MAKE_PROGRAM=$($ninja.Source)"
+				} elseif(${env:ProgramFiles(x86)}) {
+					$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+					if(Test-Path -LiteralPath $vswhere) {
+						$ninjaPath = & $vswhere -latest -products '*' -find 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe' | Select-Object -First 1
+						if($LASTEXITCODE -eq 0 -and $ninjaPath) { $configureArgs += "-DCMAKE_MAKE_PROGRAM=$ninjaPath" }
+					}
+				}
+			}
+			& $CMakeCommand @configureArgs
+			if($LASTEXITCODE -ne 0) { throw "CMake configuration failed for $preset with exit code $LASTEXITCODE." }
+			& $CMakeCommand --build $buildDirectory --config (Get-PackageConfigurationName -Mode $Mode) --target application --parallel $Jobs
+			if($LASTEXITCODE -ne 0) { throw "CMake build failed for $preset/$Mode with exit code $LASTEXITCODE." }
 		}
 	} finally {
 		Pop-Location
@@ -271,8 +342,8 @@ function New-DistPackage {
 		[bool]$OverwriteExisting
 	)
 
-	$buildName = "$Mode-mingw-x64"
-	$binDir = Join-Path $RepoRoot "build\$buildName\bin"
+	$buildName = "$Mode-$Compiler-$BuildSystem-x64"
+	$binDir = Get-BinaryDirectory -RepoRoot $RepoRoot -Mode $Mode
 	$exePath = Join-Path $binDir "DCPlusPlus.exe"
 	$pdbPath = Join-Path $binDir "DCPlusPlus.pdb"
 	$changelogPath = Join-Path $RepoRoot "changelog-bfe.txt"
@@ -280,7 +351,7 @@ function New-DistPackage {
 	$emoticonPath = Join-Path $RepoRoot "Emoticons"
 	$iconPacksPath = Join-Path $RepoRoot "IconPacks"
 
-	Assert-RequiredFile -Path $exePath -Description "Stripped executable"
+	Assert-RequiredFile -Path $exePath -Description "$Compiler executable"
 	Assert-RequiredFile -Path $pdbPath -Description "Debug companion PDB"
 	Assert-RequiredFile -Path $changelogPath -Description "BFE changelog"
 	if(-not (Test-Path -LiteralPath $themesPath -PathType Container)) {
@@ -299,16 +370,18 @@ function New-DistPackage {
 	}
 
 	$configurationName = Get-PackageConfigurationName -Mode $Mode
-	$zipName = "DCPlusPlus-Experimental-$VersionNumber-$CompilerName-$configurationName-MSVCRT-$GitRevision-$BuildTimestamp.zip"
+	$runtimeName = if($Compiler -eq "MinGW") { "MSVCRT" } elseif($Mode -eq "debug") { "DebugCRT" } else { "UCRT" }
+	$zipName = "DCPlusPlus-Experimental-$VersionNumber-$CompilerName-$configurationName-$runtimeName-$BuildSystem-$GitRevision-$BuildTimestamp.zip"
 	$zipPath = Join-Path $OutputRoot $zipName
-	$stageDir = Join-Path $OutputRoot ".stage-$buildName-$GitRevision-$BuildTimestamp"
+	$stageDir = Join-Path $OutputRoot ".stage-$buildName-$([Guid]::NewGuid().ToString('N'))"
+	$temporaryZip = "$stageDir.zip"
 
 	if((Test-Path -LiteralPath $zipPath) -and -not $OverwriteExisting) {
 		throw "Package already exists: $zipPath. Re-run with -Force to replace it."
 	}
 
 	New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
-	New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+	New-Item -ItemType Directory -Path $stageDir | Out-Null
 
 	try {
 		Copy-Item -LiteralPath $exePath -Destination (Join-Path $stageDir "DCPlusPlus.exe") -Force
@@ -318,14 +391,15 @@ function New-DistPackage {
 		Copy-Item -LiteralPath $emoticonPath -Destination (Join-Path $stageDir "Emoticons") -Recurse -Force
 		Copy-Item -LiteralPath $iconPacksPath -Destination (Join-Path $stageDir "IconPacks") -Recurse -Force
 
-		if(Test-Path -LiteralPath $zipPath) {
-			Remove-Item -LiteralPath $zipPath -Force
-		}
-
-		Get-ChildItem -LiteralPath $stageDir | Compress-Archive -DestinationPath $zipPath -CompressionLevel Optimal -Force
+		Get-ChildItem -LiteralPath $stageDir | Compress-Archive -DestinationPath $temporaryZip -CompressionLevel Optimal
+		Move-Item -LiteralPath $temporaryZip -Destination $zipPath -Force:$OverwriteExisting
 		Write-Host "Created $zipPath"
 		return $zipPath
 	} finally {
+		if(Test-Path -LiteralPath $temporaryZip) {
+			Assert-PathUnderRoot -Path $temporaryZip -Root $OutputRoot
+			Remove-Item -LiteralPath $temporaryZip -Force
+		}
 		if(Test-Path -LiteralPath $stageDir) {
 			Assert-PathUnderRoot -Path $stageDir -Root $OutputRoot
 			Remove-Item -LiteralPath $stageDir -Recurse -Force
@@ -334,10 +408,21 @@ function New-DistPackage {
 }
 
 $repoRoot = Get-RepositoryRoot
-$promptForBuild = -not $NoBuild -and -not $PSBoundParameters.ContainsKey("Configuration")
+$interactive = -not $PSBoundParameters.ContainsKey("Configuration")
+
+if([string]::IsNullOrWhiteSpace($Compiler)) {
+	$Compiler = if($interactive) { Read-Compiler } else { "MinGW" }
+}
 
 if([string]::IsNullOrWhiteSpace($Configuration)) {
 	$Configuration = Read-Configuration
+}
+
+if($BuildSystem -eq "Auto") {
+	$BuildSystem = if($Compiler -eq "MSVC") { "CMake" } elseif($interactive) { Read-BuildSystem } else { "SCons" }
+}
+if($Compiler -eq "MSVC" -and $BuildSystem -ne "CMake") {
+	throw "MSVC distribution builds use CMake. Select -BuildSystem CMake or omit -BuildSystem."
 }
 
 $defaultOutputDirectory = Join-Path $repoRoot "dist"
@@ -346,25 +431,20 @@ if([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 }
 $OutputDirectory = Resolve-OutputDirectory -Path $OutputDirectory -RepoRoot $repoRoot
 $versionNumber = Get-VersionNumber -RepoRoot $repoRoot
-$compilerName = if([string]::IsNullOrWhiteSpace($CompilerLabel)) {
-	Get-CompilerLabel
-} else {
-	ConvertTo-PackageToken -Value $CompilerLabel
-}
 $gitRevision = Get-GitRevision -RepoRoot $repoRoot
 $buildTimestamp = [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss'Z'", [System.Globalization.CultureInfo]::InvariantCulture)
-
-$runBuild = -not $NoBuild
-if($runBuild -and $promptForBuild) {
-	$runBuild = Read-YesNo -Prompt "Run SCons before packaging?" -DefaultYes $true
-}
 
 $modes = Get-ModeList -SelectedConfiguration $Configuration
 $packages = @()
 
 foreach($mode in $modes) {
-	if($runBuild) {
-		Invoke-DistBuild -RepoRoot $repoRoot -Mode $mode -SCons $SConsCommand
+	if(-not $NoBuild) {
+		Invoke-DistBuild -RepoRoot $repoRoot -Mode $mode
+	}
+	$compilerName = if([string]::IsNullOrWhiteSpace($CompilerLabel)) {
+		Get-CompilerLabel -RepoRoot $repoRoot -Mode $mode
+	} else {
+		ConvertTo-PackageToken -Value $CompilerLabel
 	}
 	$packages += New-DistPackage -RepoRoot $repoRoot -Mode $mode -OutputRoot $OutputDirectory -VersionNumber $versionNumber -CompilerName $compilerName -GitRevision $gitRevision -BuildTimestamp $buildTimestamp -OverwriteExisting ([bool]$Force)
 }
