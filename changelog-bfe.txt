@@ -1,6 +1,8 @@
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
 * Replace legacy GeoIP with libmaxminddb 1.14.1 and GeoLite2 Country IPv4/IPv6 lookups; add bounded HTTPS database updates, transfer-view progress/cancellation, a protected MaxMind testing override and country flags with icon-pack overrides (iceman50)
 * Support per-column country-flag callbacks in DWT tables and expandable rows; keep private-chat transfer icons confined to the File column (iceman50)
+* Deliver dropped chat attachments as preparation completes, report failures and cancellation, ignore stale completion callbacks and route text dropped on chat history into the message draft; reject unterminated OLE text without reading beyond its allocation (iceman50)
+* Add optional minute-based expiration for temporary chat shares, renewed when re-added; expiration preserves local files, permanent shares and exact-only protocol documents (iceman50)
 * Prevent duplicate HTTP completion/failure notifications and late data writes when callbacks cancel a completed transfer; preserve active retry rows when an earlier download expires (iceman50)
 * Return a defined empty toolbar size when no native button rectangle is available; correct the client-frame fixture to install its toolbar button before checking band height (iceman50)
 * Harden DWT registry value validation and handle ownership, button image lifetimes, clipboard failure cleanup, string conversion errors and native dialog appearance ownership (iceman50)

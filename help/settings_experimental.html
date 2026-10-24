@@ -51,6 +51,8 @@ which now includes interface colors, chat formatting and a live RichEdit preview
   <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CHAT_LINK_MAX_LENGTH">Maximum URL or magnet URI length that will be turned into a clickable chat link. Longer links remain visible as plain text. Minimum: 1 character. Default: 256 characters.</dd>
   <dt>Maximum temporary shares</dt>
   <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_LIMIT">Maximum number of temporary RTF0 attachments retained for the current application session. Adding another entry removes the least recently used entries first. Minimum: 1. Default: 256.</dd>
+  <dt>Automatically remove temporary shares after</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_EXPIRATION">Set the lifetime in minutes, measured from the most recent addition of the file to a chat draft. Default: 0 (no automatic expiration). Changes apply to existing entries too. Expiration stops new searches and downloads through the temporary share; it does not delete the local file, remove posted messages, or affect normally shared files. Expired entries are cleaned up every minute.</dd>
   <dt>Active temporary shares</dt>
   <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES">Lists the session-only files currently addressable by exact TTH, including their route and local path. These files appear in search results only on the hub or CCPM route where they were added, remain absent from file lists and share totals, and can be downloaded by TTH only from that route. Remove selected entries, clear the full list, or refresh file availability from here.</dd>
 </dl>

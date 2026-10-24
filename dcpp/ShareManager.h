@@ -78,6 +78,8 @@ public:
 		uint32_t timestamp;
 		/** Exact-only entries are protocol documents and never match name/size searches. */
 		bool exactOnly;
+		/** Monotonic time of the most recent addition to a chat draft. */
+		uint64_t added = 0;
 	};
 	struct ChatAttachmentInfo {
 		string realPath;
@@ -369,6 +371,7 @@ private:
 	unordered_map<TTHValue, const Directory::File*> tthIndex;
 
 	vector<TempShareInfo> tempShares;
+	static bool tempShareExpired(const TempShareInfo& item, uint64_t tick) noexcept;
 	struct PendingChatAttachment {
 		uint64_t requestId;
 		string realPath;

@@ -170,6 +170,9 @@ public:
 	/// Enable or disable file drops for this control's OLE and WM_DROPFILES paths.
 	void setFileDropEnabled(bool accept = true);
 
+	/// Route dropped text to another control (also permits drops on a read-only view).
+	void onTextDrop(std::function<bool(const tstring&)> f) { textDropCallback = std::move(f); }
+
 	/// Compatibility wrappers for the inherited WM_DROPFILES API. Text boxes also
 	/// have an OLE target, so both paths must update the same explicit state.
 	void onDragDrop(std::function<void (const std::vector<tstring>&, Point)> f);
@@ -221,6 +224,7 @@ private:
 	unsigned lines;
 	Menu::Seed menuSeed;
 	std::function<bool (const std::vector<tstring>&, Point)> fileDropCallback;
+	std::function<bool(const tstring&)> textDropCallback;
 	bool fileDropEnabled;
 };
 

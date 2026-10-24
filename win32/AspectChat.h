@@ -85,6 +85,13 @@ protected:
 			return this->handleDroppedFiles(files);
 		});
 		chat->setFileDropEnabled(false);
+		chat->onTextDrop([this](const tstring& text) {
+			if(text.empty())
+				return false;
+			insertDroppedAttachment(text, false);
+			t().addStatus(T_("Dropped text added to the message. Ready to send."));
+			return true;
+		});
 		t().onDragDrop([this](const TStringList& files, dwt::Point) { this->handleDroppedFiles(files); });
 		t().setDragAcceptFiles(false);
 
@@ -114,7 +121,11 @@ protected:
 		richTextHubUrl = hubUrl;
 		richText = richText && SETTING(ENABLE_RICH_TEXT);
 		const auto acceptTempFiles = temporarySharing && !hubUrl.empty() && SETTING(ENABLE_RTF_TEMP_SHARES);
-		if(routeChanged || !acceptTempFiles) cancelAttachmentRequests();
+		if(routeChanged || !acceptTempFiles) {
+			if(!attachmentRequests.empty())
+				t().addStatus(T_("Dropped attachment preparation cancelled: the chat route is unavailable or changed."));
+			cancelAttachmentRequests();
+		}
 		message->setFileDropEnabled(acceptTempFiles);
 		chat->setFileDropEnabled(acceptTempFiles);
 		t().setDragAcceptFiles(acceptTempFiles);
@@ -356,6 +367,8 @@ private:
 		vector<std::optional<ShareManager::ChatAttachmentResult>> results;
 		bool richText = false;
 		size_t remaining = 0;
+		size_t inserted = 0;
+		size_t failed = 0;
 	};
 
 	bool handleDroppedFiles(const TStringList& files) {
@@ -369,6 +382,8 @@ private:
 		batch->names.reserve(files.size());
 		batch->inlineMedia.reserve(files.size());
 		batch->results.resize(files.size());
+		t().addStatus(
+			files.size() == 1 ? T_("Preparing dropped attachment...") : str(TF_("Preparing %1% dropped attachments...") % files.size()));
 
 		for(size_t index = 0; index < files.size(); ++index) {
 			const auto realPath = Text::fromT(files[index]);
@@ -381,16 +396,16 @@ private:
 					dwt::Application::instance().callAsync(
 						[this, alive, batch, index, result = std::move(result)]() mutable {
 							if(!alive->load()) return;
-							removeAttachmentRequest(result.requestId);
+							if(!removeAttachmentRequest(result.requestId))
+								return;
 							batch->results[index] = std::move(result);
-							if(--batch->remaining == 0) finishDroppedAttachments(batch);
+							--batch->remaining;
+							finishDroppedAttachments(batch);
 						});
 				});
 			attachmentRequests.push_back(requestId);
 		}
 
-		t().addStatus(files.size() == 1 ? T_("Preparing dropped attachment...") :
-			str(TF_("Preparing %1% dropped attachments...") % files.size()));
 		return true;
 	}
 
@@ -400,8 +415,10 @@ private:
 
 		for(size_t i = 0; i < batch->results.size(); ++i) {
 			if(!batch->results[i]) continue;
-			auto& result = *batch->results[i];
+			auto result = std::move(*batch->results[i]);
+			batch->results[i].reset();
 			if(!result.attachment) {
+				++batch->failed;
 				t().addStatus(T_("Unable to prepare dropped attachment: ") +
 					Text::toT(batch->names[i]) + _T(" (") + Text::toT(result.error) + _T(")"));
 				continue;
@@ -411,6 +428,7 @@ private:
 			if(!ShareManager::getInstance()->validateChatAttachment(
 				attachment.tth, attachment.size, batch->hubUrl))
 			{
+				++batch->failed;
 				t().addStatus(T_("The dropped attachment is no longer available: ") +
 					Text::toT(batch->names[i]));
 				continue;
@@ -424,12 +442,24 @@ private:
 				insertDroppedAttachment(Text::toT(RichText::makeAttachmentMagnet(batch->names[i],
 					attachment.tth.toBase32(), attachment.size)), false);
 			}
+			++batch->inserted;
+		}
+		if(batch->remaining) {
+			t().addStatus(str(TF_("%1% attachment(s) added to the message; preparing %2% more...") % batch->inserted % batch->remaining));
+		} else if(batch->failed == 0) {
+			t().addStatus(batch->inserted == 1 ? T_("Attachment added to the message. Ready to send.") :
+				str(TF_("%1% attachments added to the message. Ready to send.") % batch->inserted));
+		} else if(batch->inserted) {
+			t().addStatus(str(TF_("%1% attachment(s) added to the message; %2% could not be prepared.") % batch->inserted % batch->failed));
 		}
 	}
 
-	void removeAttachmentRequest(uint64_t requestId) {
-		attachmentRequests.erase(std::remove(attachmentRequests.begin(), attachmentRequests.end(), requestId),
-			attachmentRequests.end());
+	bool removeAttachmentRequest(uint64_t requestId) {
+		const auto request = std::find(attachmentRequests.begin(), attachmentRequests.end(), requestId);
+		if(request == attachmentRequests.end())
+			return false;
+		attachmentRequests.erase(request);
+		return true;
 	}
 
 	void cancelAttachmentRequests() {

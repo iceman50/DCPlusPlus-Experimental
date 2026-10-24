@@ -406,6 +406,8 @@ StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl)
 		collect(*dir.second);
 	}
 	for(const auto& temp: tempShares) {
+		if(tempShareExpired(temp, GET_TICK()))
+			continue;
 		if(temp.tth == tth && Util::stricmp(temp.hubUrl, hubUrl) == 0 &&
 			std::none_of(ret.begin(), ret.end(), [&temp](const string& path) {
 				return Util::stricmp(path, temp.realPath) == 0;
@@ -476,7 +478,7 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 		// Reuse is an access: move the entry to the newest end so it isn't the next
 		// item evicted immediately after being inserted into another draft.
 		tempShares.erase(existing);
-		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly });
+		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly, GET_TICK() });
 	} else {
 		const auto maxTempShares = exactOnly ? size_t(1024) :
 			static_cast<size_t>(std::max(1, SETTING(RTF_TEMP_SHARE_LIMIT)));
@@ -489,7 +491,7 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 			tempShares.erase(oldest);
 			--count;
 		}
-		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly });
+		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly, GET_TICK() });
 	}
 	return true;
 }
@@ -499,7 +501,7 @@ bool ShareManager::isTempShare(const TTHValue& tth, const string& realPath,
 {
 	Lock l(cs);
 	return std::any_of(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
-		return !item.exactOnly && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
+		return !item.exactOnly && !tempShareExpired(item, GET_TICK()) && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
 			Util::stricmp(item.hubUrl, hubUrl) == 0;
 	});
 }
@@ -507,7 +509,9 @@ bool ShareManager::isTempShare(const TTHValue& tth, const string& realPath,
 vector<ShareManager::TempShareInfo> ShareManager::getTempShares() const {
 	Lock l(cs);
 	vector<TempShareInfo> result;
-	for(const auto& item: tempShares) if(!item.exactOnly) result.push_back(item);
+	for(const auto& item : tempShares)
+		if(!item.exactOnly && !tempShareExpired(item, GET_TICK()))
+			result.push_back(item);
 	return result;
 }
 
@@ -1079,10 +1083,17 @@ const ShareManager::Directory::File& ShareManager::findFile(const string& virtua
 	return *it;
 }
 
+bool ShareManager::tempShareExpired(const TempShareInfo& item, uint64_t tick) noexcept {
+	const auto minutes = SETTING(RTF_TEMP_SHARE_EXPIRATION);
+	return !item.exactOnly && minutes > 0 && tick >= item.added && tick - item.added >= static_cast<uint64_t>(minutes) * 60 * 1000;
+}
+
 const ShareManager::TempShareInfo* ShareManager::findTempShare(const TTHValue& tth,
 	const string* hubUrl, const bool* exactOnly) const noexcept
 {
 	for(auto i = tempShares.rbegin(); i != tempShares.rend(); ++i) {
+		if(tempShareExpired(*i, GET_TICK()))
+			continue;
 		if(!i->exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES)) continue;
 		if(i->tth == tth && (!hubUrl || Util::stricmp(i->hubUrl, *hubUrl) == 0) &&
 			(!exactOnly || i->exactOnly == *exactOnly)) return &*i;
@@ -2817,7 +2828,8 @@ void ShareManager::appendTempSearchResults(SearchResultList& results, SearchQuer
 	{
 		Lock l(cs);
 		for(const auto& item: tempShares) {
-			if(Util::stricmp(item.hubUrl, hubUrl) == 0) candidates.push_back(item);
+			if(!tempShareExpired(item, GET_TICK()) && Util::stricmp(item.hubUrl, hubUrl) == 0)
+				candidates.push_back(item);
 		}
 	}
 
@@ -3079,6 +3091,11 @@ void ShareManager::on(HashManagerListener::TTHFailed, const string& realPath, in
 }
 
 void ShareManager::on(TimerManagerListener::Minute, uint64_t tick) noexcept {
+	{
+		Lock l(cs);
+		tempShares.erase(std::remove_if(tempShares.begin(), tempShares.end(),
+			[tick](const TempShareInfo& item) { return tempShareExpired(item, tick); }), tempShares.end());
+	}
 	if(SETTING(AUTO_REFRESH_TIME) > 0) {
 		if(lastFullUpdate + SETTING(AUTO_REFRESH_TIME) * 60 * 1000 <= tick) {
 			refresh(true, true);

@@ -106,8 +106,9 @@ public:
 			const auto hasFiles = pDataObj->QueryGetData(&files) == S_OK;
 			// Shell file data objects may also expose text. A disabled file drop must not
 			// unexpectedly paste a path or URL through that secondary format.
-			dragging = hasFiles ? (w->acceptsFileDrops() ? DROP_FILES : DROP_NONE) :
-				(!w->hasStyle(ES_READONLY) && pDataObj->QueryGetData(&text) == S_OK ? DROP_TEXT : DROP_NONE);
+			dragging = hasFiles
+				? (w->acceptsFileDrops() ? DROP_FILES : DROP_NONE)
+				: ((w->textDropCallback || !w->hasStyle(ES_READONLY)) && pDataObj->QueryGetData(&text) == S_OK ? DROP_TEXT : DROP_NONE);
 			if(dragging != DROP_NONE && (*pdwEffect & DROPEFFECT_COPY)) {
 				w->setFocus(); // focus to display the caret
 				*pdwEffect = DROPEFFECT_COPY;
@@ -206,10 +207,22 @@ public:
 						auto buf = reinterpret_cast<LPCTSTR>(::GlobalLock(stgmedium.hGlobal));
 						globalLocked = buf != nullptr;
 						if(buf) {
-							tstring text { buf };
+							const auto bytes = ::GlobalSize(stgmedium.hGlobal);
+							const auto end = buf + bytes / sizeof(TCHAR);
+							const auto terminator = std::find(buf, end, TCHAR());
+							if(bytes % sizeof(TCHAR) || terminator == end) {
+								::GlobalUnlock(stgmedium.hGlobal);
+								::ReleaseStgMedium(&stgmedium);
+								dragging = DROP_NONE;
+								return DV_E_FORMATETC;
+							}
+							tstring text(buf, terminator);
 							::GlobalUnlock(stgmedium.hGlobal);
 							globalLocked = false;
-							if(w->hasStyle(ES_NUMBER) && text.find_first_not_of(_T("0123456789")) != tstring::npos) {
+							if(w->textDropCallback) {
+								if(w->textDropCallback(text))
+									*pdwEffect = DROPEFFECT_COPY;
+							} else if(w->hasStyle(ES_NUMBER) && text.find_first_not_of(_T("0123456789")) != tstring::npos) {
 								w->sendMessage(WM_CHAR, 'A'); // simulate a key press to show the error popup
 							} else {
 								moveCaret(pt);

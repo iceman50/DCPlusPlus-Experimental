@@ -173,7 +173,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 	{
 		auto group = chatGrid->addChild(GroupBox::Seed(T_("Rich text and temporary shares")));
 		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES);
-		auto cur = group->addChild(Grid::Seed(4, 1));
+		auto cur = group->addChild(Grid::Seed(5, 1));
 		cur->column(0).mode = GridInfo::FILL;
 
 		auto checks = cur->addChild(Grid::Seed(3, 1));
@@ -194,6 +194,8 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			IDH_SETTINGS_EXPERIMENTAL_CHAT_LINK_MAX_LENGTH, T_("characters"), 1, UD_MAXVAL);
 		addIntItem(cur, T_("Maximum temporary shares"), SettingsManager::RTF_TEMP_SHARE_LIMIT,
 			IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_LIMIT, T_("files"), 1, 10000);
+		addIntItem(cur, T_("Automatically remove temporary shares after"), SettingsManager::RTF_TEMP_SHARE_EXPIRATION,
+			IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_EXPIRATION, T_("minutes (0 = never)"), 0, UD_MAXVAL);
 	}
 
 	{
@@ -419,6 +421,7 @@ void ExperimentalPage::write() {
 	clampRange(SettingsManager::HASHING_THREADS, SettingsManager::HASHING_THREADS_MIN, SettingsManager::HASHING_THREADS_MAX);
 	clamp(SettingsManager::HASH_DB_WRITE_BATCH_SIZE, 1);
 	clamp(SettingsManager::RTF_TEMP_SHARE_LIMIT, 1);
+	clamp(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 0);
 	clampRange(SettingsManager::CCPM_RECONNECT_BASE_DELAY,
 		SettingsManager::CCPM_RECONNECT_DELAY_MIN, SettingsManager::CCPM_RECONNECT_DELAY_MAX);
 	clampRange(SettingsManager::CCPM_RECONNECT_MAX_DELAY,

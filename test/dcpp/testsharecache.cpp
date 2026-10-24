@@ -13,6 +13,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 
 #define private public
 #include <dcpp/BBSManager.h>
@@ -701,6 +702,66 @@ TEST_F(ShareCacheTest, preparing_existing_temp_share_moves_it_to_newest_position
 	ASSERT_EQ(shares.size(), 2U);
 	EXPECT_EQ(shares[0].tth, second.tth);
 	EXPECT_EQ(shares[1].tth, first.tth);
+}
+
+TEST_F(ShareCacheTest, uncached_chat_attachment_completes_on_hash_worker) {
+	const auto path = configPath + "dropped attachment.bin";
+	{
+		std::ofstream output(path, std::ios::binary);
+		output << "newly dropped attachment";
+	}
+	HashManager::getInstance()->startup([](float) {});
+	auto promise = std::make_shared<std::promise<ShareManager::ChatAttachmentResult>>();
+	auto result = promise->get_future();
+	auto sm = ShareManager::getInstance();
+	const string route = "adc://attachments.example.invalid";
+	const auto request = sm->prepareChatAttachment(
+		path, route, [promise](ShareManager::ChatAttachmentResult value) { promise->set_value(std::move(value)); });
+	const auto ready = result.wait_for(std::chrono::seconds(10));
+	if(ready != std::future_status::ready)
+		sm->cancelChatAttachment(request);
+	ASSERT_EQ(ready, std::future_status::ready);
+	const auto completed = result.get();
+	ASSERT_TRUE(completed.attachment) << completed.error;
+	EXPECT_EQ(completed.requestId, request);
+	EXPECT_TRUE(sm->validateChatAttachment(completed.attachment->tth, completed.attachment->size, route));
+}
+
+TEST_F(ShareCacheTest, temporary_share_expiration_removes_only_chat_shares_at_deadline) {
+	auto sm = ShareManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 2);
+	const string route = "adc://attachments.example.invalid";
+	const auto file = cacheFile(configPath + "expiring attachment.bin", "expiring attachment");
+	ASSERT_TRUE(sm->addTempShare(file.path, file.size, file.timestamp, file.tth, route));
+	ASSERT_TRUE(sm->addTTHOnlyShare(file.path, file.size, file.timestamp, file.tth, route));
+	const auto added = sm->tempShares.front().added;
+	sm->on(TimerManagerListener::Minute(), added + 119999);
+	EXPECT_EQ(sm->tempShares.size(), 2U);
+	sm->on(TimerManagerListener::Minute(), added + 120000);
+	ASSERT_EQ(sm->tempShares.size(), 1U);
+	EXPECT_TRUE(sm->tempShares.front().exactOnly);
+	EXPECT_TRUE(sm->getTempShares().empty());
+	EXPECT_FALSE(sm->validateChatAttachment(file.tth, file.size, route));
+	EXPECT_EQ(File::getSize(file.path), file.size);
+}
+
+TEST_F(ShareCacheTest, expiration_is_optional_and_readding_renews_the_lifetime) {
+	auto sm = ShareManager::getInstance();
+	const string route = "adc://attachments.example.invalid";
+	const auto file = cacheFile(configPath + "renewed attachment.bin", "renewed attachment");
+	ASSERT_TRUE(sm->addTempShare(file.path, file.size, file.timestamp, file.tth, route));
+	sm->tempShares.front().added = 1;
+	EXPECT_FALSE(sm->tempShareExpired(sm->tempShares.front(), 120001));
+	SettingsManager::getInstance()->set(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 2);
+	EXPECT_TRUE(sm->tempShareExpired(sm->tempShares.front(), 120001));
+	ASSERT_TRUE(sm->addTempShare(file.path, file.size, file.timestamp, file.tth, route));
+	ASSERT_EQ(sm->tempShares.size(), 1U);
+	const auto added = sm->tempShares.front().added;
+	EXPECT_FALSE(sm->tempShareExpired(sm->tempShares.front(), added + 119999));
+	EXPECT_TRUE(sm->tempShareExpired(sm->tempShares.front(), added + 120000));
+	SettingsManager::getInstance()->set(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 0);
+	sm->on(TimerManagerListener::Minute(), added + 120000);
+	EXPECT_EQ(sm->getTempShares().size(), 1U);
 }
 
 TEST_F(ShareCacheTest, preparing_permanently_visible_file_does_not_create_temp_share) {
