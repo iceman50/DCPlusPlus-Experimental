@@ -1,0 +1,31 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "mingw-release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../build/cmake/${presetName}",
+      "toolchainFile": "${sourceDir}/toolchains/mingw.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "mingw-debug",
+      "inherits": "mingw-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "msvc",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/../build/cmake/${presetName}",
+      "cacheVariables": { "DCPP_PCH": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "mingw-release", "configurePreset": "mingw-release", "targets": ["application"] },
+    { "name": "mingw-debug", "configurePreset": "mingw-debug", "targets": ["application"] },
+    { "name": "msvc-release", "configurePreset": "msvc", "configuration": "Release", "targets": ["application"] },
+    { "name": "msvc-debug", "configurePreset": "msvc", "configuration": "Debug", "targets": ["application"] }
+  ]
+}

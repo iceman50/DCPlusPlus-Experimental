@@ -123,10 +123,10 @@ int dwtMain(dwt::Application& app) {
 			check(table->countSelected() == 1, "Resizing lost the selected user");
 			return rect.bottom - rect.top;
 		};
-		const auto small = rowHeight(16);
+		const auto smallHeight = rowHeight(16);
 		const auto large = rowHeight(48);
-		check(large >= 48 && large > small, "Large user icon did not increase row height");
-		check(rowHeight(16) == small, "Small user icon did not restore row height");
+		check(large >= 48 && large > smallHeight, "Large user icon did not increase row height");
+		check(rowHeight(16) == smallHeight, "Small user icon did not restore row height");
 		std::puts("PASS: native RGBA/masked menu icons, theme switching, bitmap lifetime, user row sizing and selection");
 	} catch(const std::exception& error) {
 		std::fprintf(stderr, "FAIL: %s\n", error.what());
