@@ -1,71 +1,113 @@
+# Tests are opt-in; every component is rooted below test/.
 Import("dev source_path")
 
+import subprocess
+from pathlib import Path
 
-def runUnitTest(env, target, source):
-    import subprocess
+class TestBuild:
+    def __init__(self):
+        self.root = Dir("#").abspath
+        self.google_objects = None
+        self.targets = [str(t).replace("\\", "/").rstrip("/") for t in COMMAND_LINE_TARGETS]
+        self.timeout = int(dev.env["test_timeout"])
+        if self.timeout <= 0:
+            raise ValueError("test_timeout must be positive")
 
-    app = str(source[0].abspath)
-    result = subprocess.call(app)
-    if result:
+    def selected(self, component):
+        if any(t in ("test", "test-build") for t in self.targets):
+            return True
+        if component == "win32" and any(t in ("theme-test", "geoip-test", "attachment-drop-test") for t in self.targets):
+            return True
+        return any(t in ("test-manual", "test-bench") or
+                   ("/" + component + "/") in ("/" + t + "/") for t in self.targets)
+
+    def google(self):
+        if self.google_objects is None:
+            env = dev.env.Clone()
+            dev.force_console(env)
+            env.Append(CPPPATH=["#/test/googletest/include", "#/test/googletest", "#/test/support"])
+            obj = env.Object(dev.get_target("test/googletest/", "gtest-all", False),
+                             "#/test/googletest/gtest-all.cpp")
+            lib = env.StaticLibrary(dev.get_target("test/googletest/", "gtest", False), obj)
+            main = env.Object(dev.get_target("test/support/", "gtest_main", False),
+                              "#/test/support/gtest_main.cpp")
+            self.google_objects = [main, lib]
+        return self.google_objects
+
+    def core_env(self):
+        env = dev.env.Clone()
+        env.Append(CPPPATH=["#/test/support", "#/test/googletest/include"])
+        dev.add_dcpp(env)
+        dev.add_intl(env)
+        dev.add_openssl(env)
+        dev.force_console(env)
+        if dev.is_win32():
+            env.Append(LIBS=["comctl32", "comdlg32", "oleaut32", "shlwapi",
+                             "uuid", "uxtheme", "winmm", "wtsapi32"])
+        return env
+
+    def core_libraries(self):
+        return [dev.client, dev.zlib, dev.zstd, dev.sqlite, dev.bzip2,
+                getattr(dev, "maxminddb", getattr(dev, "geoip", [])),
+                dev.miniupnpc, dev.natpmp, dev.md4c, dev.intl]
+
+    def register(self, env, component, program, args=(), dependencies=(), manual=False, runner=None):
+        name = Path(str(program[0])).stem
+        if manual:
+            env.Alias("test-manual/" + component, program)
+            env.Alias("test-manual", program)
+            return
+        env.Alias("test-build/" + component, [program, dependencies])
+        env.Alias("test-build", [program, dependencies])
+
+        def run(target, source, env):
+            stamp = Path(target[0].abspath)
+            if stamp.exists():
+                stamp.unlink()
+            try:
+                if runner:
+                    runner(source[0].abspath)
+                else:
+                    # Explicit pipes also preserve diagnostics from GUI-subsystem
+                    # executables on Windows, which otherwise lose inherited output.
+                    completed = subprocess.run([source[0].abspath, *args], cwd=self.root,
+                                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                               timeout=self.timeout)
+                    stamp.with_suffix(".log").write_bytes(completed.stdout)
+                    print(completed.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n"), end="", flush=True)
+                    completed.check_returncode()
+            except (OSError, subprocess.SubprocessError) as error:
+                if isinstance(error, subprocess.TimeoutExpired) and error.output:
+                    stamp.with_suffix(".log").write_bytes(error.output)
+                    print(error.output.decode("utf-8", errors="replace").replace("\r\n", "\n"), end="", flush=True)
+                print("FAIL:", name, error)
+                return 1
+            stamp.write_text("PASSED\n", encoding="utf-8")
+            return 0
+
+        result = env.Command(dev.get_target("test/" + component + "/", name + ".passed", False),
+                             [program, dependencies], Action(run, "Running " + component + "/" + name))
+        env.AlwaysBuild(result)
+        # GUI checks and shared fixtures must not race when compilation uses -j.
+        env.SideEffect(dev.get_build_root() + "test/run.lock", result)
+        env.Alias("test/" + component, result)
+        env.Alias("test", result)
         return result
-    open(str(target[0]), "w").write("PASSED\n")
-    return 0
 
+    def google_args(self):
+        return ["--gtest_filter=" + dev.env["test_filter"], "--gtest_fail_if_no_test_linked"]
 
-env, target, sources = dev.prepare_build(
-    source_path, "gtest", source_glob="*.cpp", in_bin=False
-)
-env.Append(CPPPATH=["#/test/googletest/include", "#/test/googletest"])
-
-# not every lib is strictly required here but we want to match the main program
-# as much as possible.
-
-dev.add_boost(env)
-dev.add_crashlog(env)
-dev.add_dcpp(env)
-dev.add_intl(env)
-dev.add_openssl(env)
-
-dev.force_console(env)
-
+tests = TestBuild()
+components = ["dcpp", "zlib"]
 if dev.is_win32():
-    env.Append(
-        LIBS=[
-            "comctl32",
-            "comdlg32",
-            "oleaut32",
-            "shlwapi",
-            "uuid",
-            "uxtheme",
-            "winmm",
-            "wtsapi32",
-        ]
-    )
+    components += ["dwt", "win32"]
+if "mingw" in dev.env["TOOLS"]:
+    components += ["dwarf"]
+for component in components:
+    if tests.selected(component):
+        dev.env.SConscript("#/test/" + component + "/SConscript",
+            exports={"dev": dev, "source_path": "test/" + component + "/", "tests": tests})
 
-if "HAVE_HTMLHELP_H" in env["CPPDEFINES"]:
-    env.Append(LIBS=["htmlhelp"])
-
-if env["msvcproj"]:
-    ret = dev.build_lib(env, target, sources, dev.cpp_lib)
-else:
-    ret = dev.build_program(env, target, sources)
-    test_sources = [ret[0].abspath]
-    if "mingw" in env["TOOLS"]:
-        debug_companion = env.Command(
-            target + ".pdb",
-            ret[0],
-            Action(
-                env["strip"] + ' --only-keep-debug "$SOURCE" -o "$TARGET"',
-                "Extracting debugging symbols to $TARGET",
-            ),
-        )
-        test_sources.append(debug_companion[0].abspath)
-    ret = env.Command(
-        dev.get_target(source_path, "gtest.passed", in_bin=False),
-        test_sources,
-        runUnitTest,
-    )
-
-env.Help("\nYou can run the test suite by running 'scons test'\n")
-
-Return("ret")
+Help("\nTests: scons test/<component>; build only: scons test-build/<component>.\n"
+     "Components: " + ", ".join(components) + ". Interactive demos: test-manual/dwt.\n"
+     "Benchmarks (build only): test-bench/dcpp. Runner: python test/run.py --help\n")

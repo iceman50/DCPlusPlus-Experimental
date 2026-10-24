@@ -1,0 +1,18 @@
+Import("dev source_path tests")
+import os
+
+env = dev.env.Clone()
+env.Append(CPPPATH=["#/dwt/include"])
+env.Append(LIBS=["comctl32", "comdlg32", "gdi32", "ole32", "oleaut32",
+                 "shlwapi", "uuid", "uxtheme", "winmm", "wtsapi32", "dwmapi"])
+env.Append(RCFLAGS=[("/d" if env["RC"] == "rc" else "-D") + env["arch"]])
+env.VariantDir(dev.get_build_path(source_path), ".", duplicate=0)
+res = env.RES(dev.get_sources(source_path, "*.rc"))
+env.Depends(res, "#/res/DCPlusPlus.manifest." + env["arch"])
+manual = {"RichTextBoxTest", "SplitTest", "TableTest", "TableTreeTest", "TreeTest"}
+for source in dev.get_sources(source_path, "*.cpp"):
+    name = os.path.splitext(os.path.basename(source))[0]
+    # DWT tests need DWT, not the entire client and its third-party libraries.
+    program = env.Program(dev.get_target(source_path, name, False), [source, res, dev.dwt])
+    args = ["--registry"] if name == "ResourceSafetyTest" and env["test_registry"] else []
+    tests.register(env, "dwt", program, args, manual=name in manual)

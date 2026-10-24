@@ -168,6 +168,9 @@ opts.AddVariables(
     ),
     EnumVariable("arch", "Target architecture", "x64", ["x86", "x64"]),
     BoolVariable("msvcproj", "Build MSVC project files", "no"),
+    ("test_filter", "GoogleTest filter for explicitly requested tests", "*"),
+    ("test_timeout", "Maximum seconds per automated test executable", "600"),
+    BoolVariable("test_registry", "Include isolated HKCU registry regression checks", "no"),
     BoolVariable(
         "distro",
         "Produce the official distro (forces tools=mingw, mode=release, "
@@ -226,6 +229,18 @@ SourceFileScanner.function[".hpp"].recurse_nodes = filterExternalDeps
 
 dev = Dev(env)
 dev.prepare()
+
+test_aliases = {"theme-test", "geoip-test", "attachment-drop-test"}
+test_targets = [str(t).replace("\\", "/").rstrip("/") for t in COMMAND_LINE_TARGETS]
+
+
+def is_test_target(target):
+    return (target in test_aliases or target in ("test", "test-build", "test-manual", "test-bench")
+            or target.startswith(("test/", "test-build/", "test-manual/", "test-bench/"))
+            or "/test/" in target)
+
+
+dev.tests_only = bool(test_targets) and all(is_test_target(t) for t in test_targets) and not env["distro"]
 
 env.SConsignFile()
 
@@ -451,7 +466,6 @@ dev.dwarf = dev.build("dwarf/") if "mingw" in dev.env["TOOLS"] else []
 dev.zlib = dev.build("zlib/")
 dev.zstd = dev.build("zstd/")
 dev.sqlite = dev.build("sqlite/")
-dev.build("zlib/test/")
 dev.bzip2 = dev.build("bzip2/") if dev.is_win32() else []
 dev.geoip = dev.build("geoip/")
 dev.intl = dev.build("intl/") if dev.is_win32() else []
@@ -461,18 +475,23 @@ dev.md4c = dev.build("md4c/")
 dev.client = dev.build("dcpp/")
 
 dev.dwt = dev.build("dwt/src/") if dev.is_win32() else []
-if dev.is_win32():
-    dev.build("dwt/test/")
 
 if dev.is_win32():
     dev.build("help/")
 
-dev.build("test/")
 dev.build("utils/")
 
 if dev.is_win32():
-    dev.build("win32/")
+    application = dev.build("win32/")
 
     dev.build("installer/")
+
+# Normal application builds do not compile or run tests. Register their build
+# graphs only when a root test target (or a legacy integration alias) is requested.
+if any(is_test_target(t) for t in test_targets):
+    dev.build("test/")
+
+if not env["distro"] and not env["msvcproj"]:
+    Default(application if dev.is_win32() else dev.client)
 
 dev.finalize()

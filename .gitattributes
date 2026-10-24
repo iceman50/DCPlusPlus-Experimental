@@ -2,6 +2,6 @@
 * text=eol=lf
 
 # Archive and zlib tests compare this immutable input with binary fixtures.
-test/data/gtest_h_original.txt text eol=lf
-test/gtest.h text eol=lf
-test/data/gtest_h_compressed binary
+test/dcpp/data/gtest_h_original.txt text eol=lf
+test/support/gtest.h text eol=lf
+test/dcpp/data/gtest_h_compressed binary

@@ -2,7 +2,7 @@
  * the way the dcpp lib uses these wrappers to compress / decompress files when uploading /
  * downloading them.
  *
- * We also run tests from the zlib project itself (they are in the "zlib/test" directory). */
+ * We also run tests from the zlib project itself (they are in the "test/zlib" directory). */
 
 #include "testbase.h"
 
@@ -13,6 +13,13 @@
 #include <dcpp/ZUtils.h>
 
 using namespace dcpp;
+
+class testzutils : public ::testing::Test {
+protected:
+	void SetUp() override {
+		File::ensureDirectory("test/dcpp/data/out/");
+	}
+};
 
 template<class PathT>
 TTHValue tiger(const PathT& path) {
@@ -40,37 +47,37 @@ void runTransfer(InStreamT& inStream, OutStreamT& outStream, const size_t bufSiz
 	}
 }
 
-TEST(testzutils, test_compression)
+TEST_F(testzutils, test_compression)
 {
 	// Test a compression using dcpp::ZFilter.
 
 	{
-		File f_in("test/data/gtest_h_original.txt", File::READ, File::OPEN);
-		File f_out("test/data/out/gtest_h_compressed", File::WRITE, File::CREATE | File::TRUNCATE);
+		File f_in("test/dcpp/data/gtest_h_original.txt", File::READ, File::OPEN);
+		File f_out("test/dcpp/data/out/gtest_h_compressed", File::WRITE, File::CREATE | File::TRUNCATE);
 		FilteredInputStream<ZFilter, false> stream_in(&f_in);
 
 		runTransfer(stream_in, f_out);
 	}
 
-	ASSERT_EQ(tiger("test/data/gtest_h_compressed"), tiger("test/data/out/gtest_h_compressed"));
+	ASSERT_EQ(tiger("test/dcpp/data/gtest_h_compressed"), tiger("test/dcpp/data/out/gtest_h_compressed"));
 }
 
-TEST(testzutils, test_decompression)
+TEST_F(testzutils, test_decompression)
 {
 	// Test a decompression using dcpp::UnZFilter.
 
 	{
-		File f_in("test/data/gtest_h_compressed", File::READ, File::OPEN);
-		File f_out("test/data/out/gtest_h_decompressed", File::WRITE, File::CREATE | File::TRUNCATE);
+		File f_in("test/dcpp/data/gtest_h_compressed", File::READ, File::OPEN);
+		File f_out("test/dcpp/data/out/gtest_h_decompressed", File::WRITE, File::CREATE | File::TRUNCATE);
 		FilteredOutputStream<UnZFilter, false> stream_out(&f_out);
 
 		runTransfer(f_in, stream_out);
 	}
 
-	ASSERT_EQ(tiger("test/data/gtest_h_original.txt"), tiger("test/data/out/gtest_h_decompressed"));
+	ASSERT_EQ(tiger("test/dcpp/data/gtest_h_original.txt"), tiger("test/dcpp/data/out/gtest_h_decompressed"));
 }
 
-TEST(testzutils, test_compression_dynamically_disabled)
+TEST_F(testzutils, test_compression_dynamically_disabled)
 {
 	// Same as test_compression, but we simulate compression being dynamically disabled during a
 	// transfer:
@@ -83,8 +90,8 @@ TEST(testzutils, test_compression_dynamically_disabled)
 
 	// Compress (with the buffer size tweak).
 	{
-		File f_in("test/data/test.dcext", File::READ, File::OPEN);
-		File f_out("test/data/out/compression_dynamically_disabled_compressed", File::WRITE, File::CREATE | File::TRUNCATE);
+		File f_in("test/dcpp/data/test.dcext", File::READ, File::OPEN);
+		File f_out("test/dcpp/data/out/compression_dynamically_disabled_compressed", File::WRITE, File::CREATE | File::TRUNCATE);
 		FilteredInputStream<ZFilter, false> stream_in(&f_in);
 
 		runTransfer(stream_in, f_out, 1024);
@@ -92,12 +99,12 @@ TEST(testzutils, test_compression_dynamically_disabled)
 
 	// Decompress.
 	{
-		File f_in("test/data/out/compression_dynamically_disabled_compressed", File::READ, File::OPEN);
-		File f_out("test/data/out/compression_dynamically_disabled_decompressed", File::WRITE, File::CREATE | File::TRUNCATE);
+		File f_in("test/dcpp/data/out/compression_dynamically_disabled_compressed", File::READ, File::OPEN);
+		File f_out("test/dcpp/data/out/compression_dynamically_disabled_decompressed", File::WRITE, File::CREATE | File::TRUNCATE);
 		FilteredOutputStream<UnZFilter, false> stream_out(&f_out);
 
 		runTransfer(f_in, stream_out);
 	}
 
-	ASSERT_EQ(tiger("test/data/test.dcext"), tiger("test/data/out/compression_dynamically_disabled_decompressed"));
+	ASSERT_EQ(tiger("test/dcpp/data/test.dcext"), tiger("test/dcpp/data/out/compression_dynamically_disabled_decompressed"));
 }

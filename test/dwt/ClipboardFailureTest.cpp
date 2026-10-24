@@ -43,7 +43,7 @@ HANDLE WINAPI auditSetClipboardData(UINT, HANDLE handle) {
 #define GlobalFree auditGlobalFree
 #define SetClipboardData auditSetClipboardData
 #define setData setDataUnderTest
-#include "../src/Clipboard.cpp"
+#include "../../dwt/src/Clipboard.cpp"
 #undef setData
 #undef SetClipboardData
 #undef GlobalFree

@@ -23,7 +23,7 @@ BOOL WINAPI auditSetWindowSubclass(HWND window, SUBCLASSPROC procedure,
 }
 
 #define SetWindowSubclass auditSetWindowSubclass
-#include "../src/util/win32/NativeDialogAppearance.cpp"
+#include "../../dwt/src/util/win32/NativeDialogAppearance.cpp"
 #undef SetWindowSubclass
 
 int dwtMain(dwt::Application& app) {

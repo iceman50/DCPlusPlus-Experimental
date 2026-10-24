@@ -1,0 +1,26 @@
+Import("dev source_path tests")
+import os
+
+env = tests.core_env()
+env.VariantDir(dev.get_build_path(source_path), ".", duplicate=0)
+unit_sources = dev.get_sources(source_path, "test*.cpp")
+if unit_sources:
+    unit = env.Program(dev.get_target(source_path, "win32_tests", False),
+                       [unit_sources, tests.google(), tests.core_libraries()])
+    tests.register(env, "win32", unit, tests.google_args())
+
+# Reuse application objects with exactly the production compilation settings.
+env = dev.win32_test_env
+entry_env = env.Clone()
+entry_env.Append(CPPPATH=["#/win32"])
+aliases = {"ThemeTest": "theme-test", "GeoIPTest": "geoip-test",
+           "AttachmentDropTest": "attachment-drop-test"}
+for source in dev.get_sources(source_path, "*Test.cpp"):
+    name = os.path.splitext(os.path.basename(source))[0]
+    entry = entry_env.Object(dev.get_target(source_path, name, False),
+                             "#/test/win32/" + name + ".cpp")
+    program = dev.build_program(env, dev.get_target(source_path, name, False),
+                                [dev.win32_test_sources, entry])
+    tests.register(env, "win32", program)
+    if name in aliases:
+        env.Alias(aliases[name], program)

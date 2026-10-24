@@ -107,7 +107,7 @@ TEST(FileTest, opensLongPathsInIntegratedFileConsumers) {
 	const auto archive = fixture.directory + PATH_SEPARATOR_STR "test.zip";
 	const auto outputDirectory = fixture.directory + PATH_SEPARATOR_STR "archive-out" PATH_SEPARATOR_STR;
 	const auto extracted = outputDirectory + "gtest.h";
-	File::copyFile("test/data/gtest_h.zip", archive);
+	File::copyFile("test/dcpp/data/gtest_h.zip", archive);
 	Archive(archive).extract(outputDirectory);
 	EXPECT_GT(File::getSize(extracted), 0);
 

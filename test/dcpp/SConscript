@@ -1,0 +1,15 @@
+Import("dev source_path tests")
+
+env = tests.core_env()
+env.VariantDir(dev.get_build_path(source_path), ".", duplicate=0)
+sources = dev.get_sources(source_path, "test*.cpp")
+program = env.Program(dev.get_target(source_path, "dcpp_tests", False),
+                      [sources, tests.google(), tests.core_libraries()])
+tests.register(env, "dcpp", program, tests.google_args())
+
+# Benchmark translation units are absent from the normal unit-test executable.
+bench_sources = dev.get_sources(source_path, "bench*.cpp", recursive=True)
+bench = env.Program(dev.get_target(source_path, "dcpp_benchmarks", False),
+                    [bench_sources, tests.google(), tests.core_libraries()])
+env.Alias("test-bench/dcpp", bench)
+env.Alias("test-bench", bench)

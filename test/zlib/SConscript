@@ -1,0 +1,25 @@
+Import("dev source_path tests")
+import subprocess
+from pathlib import Path
+
+env = dev.env.Clone()
+env.Append(CPPPATH=["#/zlib"])
+dev.force_console(env)
+env.VariantDir(dev.get_build_path(source_path), ".", duplicate=0)
+for name in ("example", "minigzip"):
+    program = env.Program(dev.get_target(source_path, name, False),
+                          [dev.get_sources(source_path, name + ".c"), dev.zlib])
+    def run(executable, name=name):
+        directory = Path(executable).parent / (name + "-run")
+        directory.mkdir(exist_ok=True)
+        if name == "example":
+            subprocess.run([executable], cwd=directory, check=True, timeout=tests.timeout)
+        else:
+            payload = b"hello world\n"
+            compressed = subprocess.run([executable], input=payload, capture_output=True,
+                                        cwd=directory, check=True, timeout=tests.timeout).stdout
+            restored = subprocess.run([executable, "-d"], input=compressed, capture_output=True,
+                                      cwd=directory, check=True, timeout=tests.timeout).stdout
+            if restored != payload:
+                raise subprocess.SubprocessError("minigzip round trip differs from the input")
+    tests.register(env, "zlib", program, runner=run)

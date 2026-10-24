@@ -1,0 +1,13 @@
+Import("dev source_path tests")
+
+env = dev.env.Clone()
+dev.force_console(env)
+dev.add_crashlog(env)
+env.Append(CPPPATH=["#/test/support", "#/test/googletest/include"])
+env.VariantDir(dev.get_build_path(source_path), ".", duplicate=0)
+program = env.Program(dev.get_target(source_path, "dwarf_tests", False),
+                      [dev.get_sources(source_path, "*.cpp"), tests.google(), dev.dwarf, dev.zlib])
+companion = env.Command(dev.get_target(source_path, "dwarf_tests.pdb", False), program,
+                       Action(env["strip"] + ' --only-keep-debug "$SOURCE" -o "$TARGET"',
+                              "Extracting debugging symbols to $TARGET"))
+tests.register(env, "dwarf", program, tests.google_args(), dependencies=companion)

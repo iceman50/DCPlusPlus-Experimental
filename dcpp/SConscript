@@ -26,6 +26,7 @@ if ret:
 
     env.Command(rev_id_path, None, Action(gen_rev_id, "Generating $TARGET"))
     env.Depends(sources, rev_id_path)
-    env.AlwaysBuild(rev_id_path)
+    if not dev.tests_only:
+        env.AlwaysBuild(rev_id_path)
 
 Return("ret")
