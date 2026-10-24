@@ -1,4 +1,5 @@
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
+* Prevent duplicate HTTP completion/failure notifications and late data writes when callbacks cancel a completed transfer; preserve active retry rows when an earlier download expires (iceman50)
 * Return a defined empty toolbar size when no native button rectangle is available; correct the client-frame fixture to install its toolbar button before checking band height (iceman50)
 * Harden DWT registry value validation and handle ownership, button image lifetimes, clipboard failure cleanup, string conversion errors and native dialog appearance ownership (iceman50)
 * Keep duplicate-named user matching definitions distinct when rendering and refreshing chat or previewing and exporting themes; preserve live appearance references across renaming and reordering, and retain compatibility with name-only themes (iceman50)

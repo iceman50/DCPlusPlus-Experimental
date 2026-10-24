@@ -54,16 +54,20 @@ HttpConnection* HttpManager::download(string url, const string& file, HttpManage
 	return conn;
 }
 
+HttpConnection* HttpManager::download(std::shared_ptr<HttpConnection> connection, string url, OutputStream* stream, CallBack callback) {
+	auto conn = makeConn(move(url), stream, callback, Util::emptyString, 0, move(connection));
+	conn->download();
+	return conn;
+}
+
 void HttpManager::disconnect(const string& url) {
-	HttpConnection* c = nullptr;
+	std::shared_ptr<HttpConnection> c;
 
 	{
 		Lock l(cs);
 		for(auto& conn: conns) {
-			if(conn.c->getUrl() == url) {
-				if(!conn.remove) {
-					c = conn.c;
-				}
+			if(conn.c->getUrl() == url && !conn.terminal) {
+				c = conn.c;
 				break;
 			}
 		}
@@ -71,22 +75,34 @@ void HttpManager::disconnect(const string& url) {
 
 	if(c) {
 		c->abort();
-		resetStream(c);
-		fire(HttpManagerListener::Failed(), c, _("Disconnected"));
-		removeLater(c);
+		// A custom transport may have delivered its terminal event during abort().
+		{
+			Lock l(cs);
+			auto conn = findConn(c.get());
+			if(!conn || conn->terminal)
+				return;
+		}
+		on(HttpConnectionListener::Failed(), c.get(), _("Disconnected"));
 	}
 }
 
 void HttpManager::shutdown() {
 	TimerManager::getInstance()->removeListener(this);
 
-	Lock l(cs);
-	for(auto& conn: conns) {
-		delete conn.c;
-		if (conn.isSet(HttpManager::CONN_MANAGED)) {
-			delete conn.stream;
-		}
+	vector<Conn> stopped;
+	{
+		Lock l(cs);
+		stopped = conns;
 	}
+	// Stop callbacks and join transports outside cs: worker callbacks acquire cs.
+	for(auto& conn : stopped) {
+		conn.c->removeListener(this);
+		conn.c->abort();
+		if(conn.isSet(HttpManager::CONN_MANAGED))
+			delete conn.stream;
+	}
+	Lock l(cs);
+	conns.clear();
 }
 
 File* HttpManager::createFile(const string& file) {
@@ -103,8 +119,9 @@ File* HttpManager::createFile(const string& file) {
 	return f;
 }
 
-HttpConnection* HttpManager::makeConn(string&& url, OutputStream* stream, HttpManager::CallBack callback, const string& userAgent, Flags::MaskType connFlags) {
-	auto c = new HttpConnection(userAgent);
+HttpConnection* HttpManager::makeConn(string&& url, OutputStream* stream, HttpManager::CallBack callback, const string& userAgent,
+	Flags::MaskType connFlags, std::shared_ptr<HttpConnection> connection) {
+	auto c = connection ? move(connection) : std::make_shared<HttpConnection>(userAgent);
 	{
 		Lock l(cs);
 		Conn conn { c, stream ? stream : new StringOutputStream(), callback };
@@ -116,13 +133,13 @@ HttpConnection* HttpManager::makeConn(string&& url, OutputStream* stream, HttpMa
 	}
 	c->addListener(this);
 	c->setUrl(move(url));
-	fire(HttpManagerListener::Added(), c);
-	return c;
+	fire(HttpManagerListener::Added(), c.get());
+	return c.get();
 }
 
 HttpManager::Conn* HttpManager::findConn(HttpConnection* c) {
 	for(auto& conn: conns) {
-		if(conn.c == c) {
+		if(conn.c.get() == c) {
 			return &conn;
 		}
 	}
@@ -152,20 +169,37 @@ void HttpManager::resetStream(HttpConnection* c) {
 void HttpManager::removeLater(HttpConnection* c) {
 	auto later = GET_TICK() + 60 * 1000;
 	Lock l(cs);
-	findConn(c)->remove = later;
+	if(auto conn = findConn(c))
+		conn->remove = later;
+}
+
+bool HttpManager::beginCompletion(HttpConnection* c) {
+	Lock l(cs);
+	auto conn = findConn(c);
+	if(!conn || conn->terminal)
+		return false;
+	// Claim the terminal event before invoking callbacks, which may disconnect
+	// this URL again. Delay reclamation until those callbacks have returned.
+	conn->terminal = true;
+	return true;
 }
 
 void HttpManager::on(HttpConnectionListener::Data, HttpConnection* c, const uint8_t* data, size_t len) noexcept {
 	OutputStream* stream;
 	{
 		Lock l(cs);
-		stream = findConn(c)->stream;
+		auto conn = findConn(c);
+		if(!conn || conn->terminal)
+			return;
+		stream = conn->stream;
 	}
 	stream->write(data, len);
 	fire(HttpManagerListener::Updated(), c, data, len);
 }
 
 void HttpManager::on(HttpConnectionListener::Failed, HttpConnection* c, const string& str) noexcept {
+	if(!beginCompletion(c))
+		return;
 	resetStream(c);
 
 	OutputStream* stream;
@@ -186,6 +220,8 @@ void HttpManager::on(HttpConnectionListener::Failed, HttpConnection* c, const st
 }
 
 void HttpManager::on(HttpConnectionListener::Complete, HttpConnection* c) noexcept {
+	if(!beginCompletion(c))
+		return;
 	OutputStream* stream;
 	HttpManager::CallBack callback;
 	Flags::MaskType connFlags;
@@ -212,7 +248,7 @@ void HttpManager::on(HttpConnectionListener::Redirected, HttpConnection* c, cons
 }
 
 void HttpManager::on(TimerManagerListener::Minute, uint64_t tick) noexcept {
-	vector<pair<HttpConnection*, OutputStream*>> removed;
+	vector<pair<std::shared_ptr<HttpConnection>, OutputStream*>> removed;
 
 	{
 		Lock l(cs);
@@ -226,8 +262,17 @@ void HttpManager::on(TimerManagerListener::Minute, uint64_t tick) noexcept {
 	}
 
 	for(auto& rem: removed) {
-		fire(HttpManagerListener::Removed(), rem.first);
-		delete rem.first;
+		bool replaced;
+		{
+			Lock l(cs);
+			replaced =
+				std::any_of(conns.begin(), conns.end(), [&rem](const Conn& conn) { return conn.c->getUrl() == rem.first->getUrl(); });
+		}
+		// TransferView identifies HTTP rows by URL. Expiring an earlier attempt
+		// must not remove a newer transfer using the same stable download URL.
+		if(!replaced)
+			fire(HttpManagerListener::Removed(), rem.first.get());
+		rem.first->removeListener(this);
 		if(rem.second) {
 			delete rem.second;
 		}

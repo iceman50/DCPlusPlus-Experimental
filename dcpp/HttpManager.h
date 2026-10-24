@@ -20,6 +20,7 @@
 
 #include <string>
 #include <functional>
+#include <memory>
 
 #include "forward.h"
 #include "Flags.h"
@@ -66,17 +67,26 @@ public:
 	/** Send a GET request to the designated url. Uses a managed File stream */
 	HttpConnection* download(string url, const string& file, CallBack callback = CallBack(), const string& userAgent = Util::emptyString);
 
+	/** Own a custom HTTP transport and expose its normal transfer events.
+	 * The caller retains ownership of a supplied stream. */
+	HttpConnection* download(std::shared_ptr<HttpConnection> connection, string url, OutputStream* stream, CallBack callback = CallBack());
+
 	void disconnect(const string& url);
 
 	void shutdown();
 
 private:
 	struct Conn : Flags {
-		Conn(HttpConnection* conn, OutputStream* os, CallBack cbfunc, uint64_t rtime = 0) : c(conn), stream(os), remove(rtime), callback(cbfunc) { }
+		Conn(std::shared_ptr<HttpConnection> conn, OutputStream* os, CallBack cbfunc, uint64_t rtime = 0) :
+			c(conn),
+			stream(os),
+			remove(rtime),
+			callback(cbfunc) {}
 
-		HttpConnection* c; 
+		std::shared_ptr<HttpConnection> c;
 		OutputStream* stream; 
 		uint64_t remove;
+		bool terminal = false;
 		CallBack callback;
 	};
 
@@ -87,10 +97,12 @@ private:
 
 	File* createFile(const string& file);
 
-	HttpConnection* makeConn(string&& url, OutputStream* stream, CallBack callback, const string& userAgent, Flags::MaskType connFlags = 0);
+	HttpConnection* makeConn(string&& url, OutputStream* stream, CallBack callback, const string& userAgent, Flags::MaskType connFlags = 0,
+		std::shared_ptr<HttpConnection> connection = {});
 	Conn* findConn(HttpConnection* c);
 	void resetStream(HttpConnection* c);
 	void removeLater(HttpConnection* c);
+	bool beginCompletion(HttpConnection* c);
 
 	// HttpConnectionListener
 	void on(HttpConnectionListener::Data, HttpConnection*, const uint8_t*, size_t) noexcept;

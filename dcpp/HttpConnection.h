@@ -39,17 +39,20 @@ public:
 	HttpConnection(const string& aUserAgent = Util::emptyString);
 	virtual ~HttpConnection();
 
-	void download();
+	virtual void download();
 	void download(const StringMap& postData);
 
-	void abort();
+	virtual void abort();
 
 	const string& getMimeType() const { return mimeType; }
-	const string& getStatus() const { return statusLine; }
 
-	int64_t getSize() const { return size; }
-	int64_t getDone() const { return done; }
-	double getSpeed() const { return speed; }
+	virtual const string& getStatus() const { return statusLine; }
+
+	virtual int64_t getSize() const { return size; }
+
+	virtual int64_t getDone() const { return done; }
+
+	virtual double getSpeed() const { return speed; }
 
 	GETSET(string, url, Url);
 
