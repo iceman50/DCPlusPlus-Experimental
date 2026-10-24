@@ -61,7 +61,9 @@ Tree::Seed::Seed() :
 
 void Tree::create( const Seed & cs )
 {
-	Control::Seed mySeed(WS_CHILD, WS_EX_CONTROLPARENT);
+	// The native tree (and optional header) own their pixels. Do not let the
+	// wrapper's class background erase over them before their buffered paint.
+	Control::Seed mySeed(WS_CHILD | WS_CLIPCHILDREN, WS_EX_CONTROLPARENT);
 	Seed treeSeed = cs;
 	const bool checkBoxes = treeSeed.checkBoxes || (treeSeed.style & TVS_CHECKBOXES) != 0;
 	treeSeed.style &= ~TVS_CHECKBOXES;

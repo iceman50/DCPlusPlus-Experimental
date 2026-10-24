@@ -424,8 +424,22 @@ int dwtMain(dwt::Application& app) {
 		// Construct the real settings pages, select a preset through the native
 		// combo notification, and verify that cancellation leaves settings alone.
 		app.getAppearance().configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
+		settings->set(SettingsManager::SETTINGS_PAGE, 23); // Search types, near the bottom.
 		SettingsDialog dialog(window);
-		dialog.create(dwt::ModalDialog::Seed(dwt::Point(1000, 800), WS_SIZEBOX));
+		dialog.create(dwt::ModalDialog::Seed(dwt::Point(650, 420), WS_SIZEBOX));
+		std::vector<HWND> openingChildren;
+		EnumChildWindows(dialog.handle(), collectChildren, reinterpret_cast<LPARAM>(&openingChildren));
+		dwt::Tree* navigation = nullptr;
+		for(auto child : openingChildren) {
+			if(auto candidate = dwt::hwnd_cast<dwt::Tree*>(child)) { navigation = candidate; break; }
+		}
+		check(navigation && navigation->getSelected(), "Settings first shows an unselected tree before restoring its saved page");
+		check(navigation->getText(navigation->getSelected()) == L"Search types", "Settings did not restore the saved page before showing");
+		const auto selectedBounds = navigation->getItemRect(navigation->getSelected());
+		RECT treeClient {};
+		GetClientRect(navigation->treeHandle(), &treeClient);
+		check(selectedBounds.top() >= 0 && selectedBounds.bottom() <= treeClient.bottom,
+			"Settings first shows the wrong tree scroll position");
 		auto page = dialog.getPage<ThemePage>();
 		dialog.getPage<UserMatchPage>()->updateStyles();
 		dialog.activatePage<ThemePage>();
@@ -450,6 +464,9 @@ int dwtMain(dwt::Application& app) {
 		dialog.resize(dwt::Rectangle(-32000, -32000, 1100, 850));
 		page->layout();
 		ShowWindow(dialog.handle(), SW_SHOWNOACTIVATE);
+		settleSettingsMessages();
+		check(navigation->getText(navigation->getSelected()) == L"Themes",
+			"Deferred settings initialization overwrote a subsequent page selection");
 		RedrawWindow(dialog.handle(), nullptr, nullptr, RDW_VALIDATE | RDW_NOERASE | RDW_NOFRAME | RDW_ALLCHILDREN);
 		dialog.setText(L"Settings painting regression");
 		dialog.sendMessage(WM_NCACTIVATE, FALSE);

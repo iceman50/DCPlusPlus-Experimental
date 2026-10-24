@@ -119,6 +119,7 @@ bool SettingsDialog::initDialog() {
 	grid->column(0).size = 170;
 	grid->column(0).mode = GridInfo::STATIC;
 	grid->column(1).mode = GridInfo::FILL;
+	HTREEITEM selectedPage = nullptr;
 
 	{
 		auto seed = Tree::Seed();
@@ -147,7 +148,6 @@ bool SettingsDialog::initDialog() {
 		pageHost = container;
 
 		const size_t setting = SETTING(SETTINGS_PAGE);
-		HTREEITEM selectedPage = nullptr;
 		auto addPage = [&](const tstring& title, const std::type_info& type, std::function<PropPage* ()> create, unsigned icon, HTREEITEM parent) -> HTREEITEM {
 			auto index = static_cast<int>(pages.size());
 			images->add(*WinUtil::createIcon(icon, size.x));
@@ -234,10 +234,6 @@ bool SettingsDialog::initDialog() {
 		if(!selectedPage) {
 			selectedPage = tree->getFirst();
 		}
-		callAsync([=] {
-			tree->setSelected(selectedPage);
-			tree->ensureVisible(selectedPage);
-		});
 	}
 
 	/* use a hidden tooltip to determine when to show the help tooltip, so we don't have to manage
@@ -286,6 +282,10 @@ bool SettingsDialog::initDialog() {
 	centerWindow();
 	onSized([this](const dwt::SizedEvent&) { layout(); });
 	layout();
+	// Restore selection and scroll position while still hidden, after the tree
+	// has its final size. Posting this work shows an unselected tree first.
+	tree->setSelected(selectedPage);
+	tree->ensureVisible(selectedPage);
 
 	return false;
 }

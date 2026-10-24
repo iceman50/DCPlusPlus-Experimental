@@ -1,4 +1,5 @@
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
+* Prevent the tree wrapper from erasing over its child controls, restore the saved settings page and tree scroll position before showing the dialog, and suppress the native light erase before buffered dark rebar painting (iceman50)
 * Add Private Send (experimental PFT1, disabled by default): recipient-bound TLS 1.2+ file offers, explicit consent, configurable expiration, pause/resume, integrity checks and protected Windows saving outside public shares; manual contact verification is optional and off by default for testing, and advanced-configuration changes immediately reapply transfer permissions (iceman50)
 * Add a private-transfer queue, progress and contact controls, deferred private-chat notices and a status-bar indicator for incoming offers; cover protocol parsing, authorization, storage, TLS transfers and notification behavior with automated tests (iceman50)
 * Replace legacy GeoIP with libmaxminddb 1.14.1 and GeoLite2 Country IPv4/IPv6 lookups; add bounded HTTPS database updates, transfer-view progress/cancellation, a protected MaxMind testing override and country flags with icon-pack overrides (iceman50)

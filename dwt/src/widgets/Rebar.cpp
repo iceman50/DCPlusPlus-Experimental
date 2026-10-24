@@ -130,6 +130,12 @@ unsigned Rebar::size() const {
 
 bool Rebar::handleMessage(const MSG& msg, LRESULT& retVal) {
 	auto handled = BaseType::handleMessage(msg, retVal);
+	if(!handled && isManualAppearance() && msg.message == WM_ERASEBKGND) {
+		// The buffered custom draw fills the background as well as the bands.
+		// A native erase exposes a light frame, especially beside the first grip.
+		retVal = TRUE;
+		return true;
+	}
 	if(!isManualAppearance() || msg.message != WM_NOTIFY ||
 		!msg.lParam || (retVal && retVal != CDRF_DODEFAULT)) {
 		return handled;
