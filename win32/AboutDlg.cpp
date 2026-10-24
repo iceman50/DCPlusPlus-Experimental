@@ -26,7 +26,7 @@
 #include <dcpp/SQLiteDB.h>
 #include <dcpp/Streams.h>
 #include <dcpp/version.h>
-#include <GeoIP.h>
+#include <maxminddb.h>
 #include <bzlib.h>
 #include <zlib.h>
 #include <zstd.h>
@@ -300,7 +300,7 @@ string getAboutInfo() {
 	addInfoLine(info, "DWT", DWT_VERSION_STRING);
 	addInfoLine(info, "MiniUPnPc", string(MINIUPNPC_VERSION) + " (API " + Util::toString(MINIUPNPC_API_VERSION) + ")");
 	addInfoLine(info, "libnatpmp", "Bundled");
-	addInfoLine(info, "GeoIP C API", getVersionString(GeoIP_lib_version()));
+	addInfoLine(info, "libmaxminddb", getVersionString(MMDB_lib_version()));
 #if defined(__GNUC__)
 	addInfoLine(info, "libdwarf", DW_LIBDWARF_VERSION);
 #else

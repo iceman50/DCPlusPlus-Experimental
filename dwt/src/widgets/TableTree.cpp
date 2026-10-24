@@ -462,7 +462,9 @@ void TableTree::handleSetItem(LVITEM& lv, int itemIndex) {
 		}
 	}
 
-	if(newData) {
+	// Subitem image callbacks are configured per column and reapplied on expansion.
+	// Do not create an empty StoredRow for a callback-only child just for its flag.
+	if(newData && ((lv.mask & LVIF_TEXT) || ((lv.mask & LVIF_IMAGE) && lv.iSubItem == 0))) {
 		auto& row = storedRows[newData];
 		if((lv.mask & LVIF_TEXT) == LVIF_TEXT && lv.iSubItem >= 0) {
 			auto column = static_cast<size_t>(lv.iSubItem);
@@ -513,6 +515,7 @@ void TableTree::insertStoredRow(LPARAM data, int index, int itemIndent) {
 
 	auto inserted = static_cast<int>(sendMsg(LVM_INSERTITEM, 0,
 		reinterpret_cast<LPARAM>(&item)));
+	initializeImageColumns(inserted);
 	if(inserted < 0 || found == storedRows.end()) {
 		return;
 	}

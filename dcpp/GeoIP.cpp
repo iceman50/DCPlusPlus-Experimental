@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,227 +17,200 @@
  */
 
 #include "stdinc.h"
+
 #include "GeoIP.h"
 
 #include "File.h"
-#include "format.h"
-#include "GeoManager.h"
-#include "SettingsManager.h"
+#include "Text.h"
 #include "Util.h"
-#include "ZUtils.h"
 
-#include <GeoIP.h>
-#include <GeoIPCity.h>
+#include <maxminddb.h>
+#include <array>
+#include <cstring>
+#ifndef _WIN32
+#include <arpa/inet.h>
+#endif
 
 namespace dcpp {
-
-GeoIP::GeoIP(string&& path) : geo(0), path(move(path)) {
-	if(File::getSize(path) > 0 || decompress()) {
-		open();
-	}
-}
-
-GeoIP::~GeoIP() {
-	Lock l(cs);
-	close();
-}
-
-const string& GeoIP::getCountry(const string& ip) const {
-	Lock l(cs);
-	if(geo) {
-		auto i = cache.find((city() ? (v6() ? GeoIP_record_id_by_addr_v6 : GeoIP_record_id_by_addr) :
-			(v6() ? GeoIP_id_by_addr_v6 : GeoIP_id_by_addr))(geo, ip.c_str()));
-		if(i != cache.end()) {
-			return i->second;
-		}
-	}
-	return Util::emptyString;
-}
-
-void GeoIP::update() {
-	Lock l(cs);
-
-	close();
-
-	if(decompress()) {
-		open();
-	}
-}
-
-void GeoIP::rebuild() {
-	Lock l(cs);
-	if(geo) {
-		city() ? rebuild_cities() : rebuild_countries();
-	}
-}
-
-bool GeoIP::decompress() const {
-	if(File::getSize(path + ".gz") <= 0) {
-		return false;
-	}
-
-	try { GZ::decompress(path + ".gz", path); }
-	catch(const Exception&) { return false; }
-
-	return true;
-}
-
-void GeoIP::open() {
-#ifdef _WIN32
-	geo = GeoIP_open(Text::fromT(File::toNativePath(path)).c_str(), GEOIP_STANDARD);
-#else
-	geo = GeoIP_open(path.c_str(), GEOIP_STANDARD);
-#endif
-	if(geo) {
-		GeoIP_set_charset(geo, GEOIP_CHARSET_UTF8);
-	}
-}
-
-void GeoIP::close() {
-	cache.clear();
-
-	GeoIP_delete(geo);
-	geo = 0;
-}
-
 namespace {
 
-string forwardRet(const char* ret) {
-	return ret ? ret : Util::emptyString;
+constexpr size_t MAX_DATABASE_SIZE = 32 * 1024 * 1024;
+
+std::string field(MMDB_entry_s& entry, const char* group, const char* name, const char* locale = nullptr) {
+	MMDB_entry_data_s value {};
+	int result =
+		locale ? MMDB_get_value(&entry, &value, group, name, locale, nullptr) : MMDB_get_value(&entry, &value, group, name, nullptr);
+	return result == MMDB_SUCCESS && value.has_data && value.type == MMDB_DATA_TYPE_UTF8_STRING
+		? std::string(value.utf8_string, value.data_size)
+		: std::string();
 }
 
+bool countryCode(const std::string& code) {
+	return code.size() == 2 && code[0] >= 'A' && code[0] <= 'Z' && code[1] >= 'A' && code[1] <= 'Z';
+}
 #ifdef _WIN32
-string getGeoInfo(int id, GEOTYPE type) {
-	id = GeoIP_Win_GEOID_by_id(id);
-	if(id) {
-		tstring str(GetGeoInfo(id, type, 0, 0, 0), 0);
-		str.resize(std::max(GetGeoInfo(id, type, &str[0], str.size(), 0), 1) - 1);
-		if(!str.empty()) {
-			return Text::fromT(str);
+std::unordered_map<std::string, GEOID>& geoIds() {
+	static std::unordered_map<std::string, GEOID> ids;
+
+	return ids;
+}
+
+BOOL CALLBACK collectGeoId(GEOID id) {
+	wchar_t code[4] {};
+	if(GetGeoInfoW(id, GEO_ISO2, code, 4, 0))
+		geoIds().emplace(Text::fromT(code), id);
+	return TRUE;
+}
+
+std::string windowsName(const std::string& code, GEOTYPE type) {
+	static const bool initialized = EnumSystemGeoID(GEOCLASS_NATION, 0, collectGeoId) != FALSE;
+	(void)initialized;
+	auto i = geoIds().find(code);
+	if(i == geoIds().end())
+		return {};
+
+	wchar_t value[256] {};
+	return GetGeoInfoW(i->second, type, value, 256, 0) ? Text::fromT(value) : std::string();
+}
+#endif
+}
+
+struct GeoIP::Database {
+	MMDB_s mmdb {};
+
+	explicit Database(const std::string& path) {
+		const auto size = File::getSize(path);
+		if(size <= 0 || static_cast<uint64_t>(size) > MAX_DATABASE_SIZE)
+			throw Exception("Invalid GeoLite2 Country database size");
+
+		auto status = MMDB_open(path.c_str(), MMDB_MODE_MMAP, &mmdb);
+		if(status != MMDB_SUCCESS)
+			throw Exception("Invalid GeoLite2 Country database");
+
+		const std::string type = mmdb.metadata.database_type ? mmdb.metadata.database_type : "";
+		if((type != "GeoLite2-Country" && type != "GeoIP2-Country") || mmdb.metadata.ip_version != 6 ||
+			mmdb.metadata.binary_format_major_version != 2 || !mmdb.metadata.build_epoch) {
+			MMDB_close(&mmdb);
+			throw Exception("Expected an IPv4/IPv6 GeoLite2 Country database");
 		}
 	}
-	return Util::emptyString;
-}
-#endif
 
-void countryParams(ParamMap& params, int id) {
-	params["2code"] = [id] { return forwardRet(GeoIP_code_by_id(id)); };
-	params["3code"] = [id] { return forwardRet(GeoIP_code3_by_id(id)); };
-	params["continent"] = [id] { return forwardRet(GeoIP_continent_by_id(id)); };
-	params["engname"] = [id] { return forwardRet(GeoIP_name_by_id(id)); };
-#ifdef _WIN32
-	params["name"] = [id]() -> string {
-		auto str = getGeoInfo(id, GEO_FRIENDLYNAME);
-		return str.empty() ? forwardRet(GeoIP_name_by_id(id)) : str;
-	};
-	params["officialname"] = [id]() -> string {
-		auto str = getGeoInfo(id, GEO_OFFICIALNAME);
-		return str.empty() ? forwardRet(GeoIP_name_by_id(id)) : str;
-	};
-#else
-	/// @todo any way to get localized country names on non-Windows?
-	params["name"] = [id] { return forwardRet(GeoIP_name_by_id(id)); };
-	params["officialname"] = [id] { return forwardRet(GeoIP_name_by_id(id)); };
-#endif
+	~Database() { MMDB_close(&mmdb); }
+};
+
+GeoIP::GeoIP(std::string path) :
+	path(std::move(path))
+{
+	reload();
 }
 
-inline uint32_t regionCode(char country0, char country1, char region0, char region1) {
-	union { char chars[4]; uint32_t i; } u = { { country0, country1, region0, region1 } };
-	return u.i;
-}
+GeoIP::~GeoIP() = default;
 
-unordered_map<uint32_t, string> getRegions() {
-	unordered_map<uint32_t, string> ret;
-	if(!SETTING(GEO_REGION))
-		return ret;
-	if(SETTING(COUNTRY_FORMAT).find("%[region]") == string::npos)
-		return ret;
+bool GeoIP::reload() {
+	Lock lock(cs);
+
 	try {
-		auto regions = File(GeoManager::getRegionDbPath(), File::READ, File::OPEN).read();
-		size_t begin = 0, end;
-		while((end = regions.find('\n', begin)) != string::npos) {
-			if(begin + 9 > end) { break; } // corrupted file
-			auto country0 = regions[begin++];
-			auto country1 = regions[begin++];
-			++begin; // comma
-			auto region0 = regions[begin++];
-			auto region1 = regions[begin++];
-			++begin; // comma
-			++begin; // begin quote
-			--end; // end quote
-			ret[regionCode(country0, country1, region0, region1)] = regions.substr(begin, end - begin);
-			begin = end + 2; // end quote + new line
-		}
-	} catch (const FileException&) { }
-	return ret;
-}
+		database = std::make_unique<Database>(path);
 
-string regionName(const unordered_map<uint32_t, string>& regions, const char* country, const char* region) {
-	auto i = regions.find(regionCode(country[0], country[1], region[0], region[1]));
-	return i != regions.cend() ? i->second : string();
-}
-
-} // unnamed namespace
-
-void GeoIP::rebuild_cities() {
-	cache.clear();
-
-	const auto& setting = SETTING(COUNTRY_FORMAT);
-
-	const auto regions = getRegions();
-
-	GeoIPRecord* record = nullptr;
-	auto id = GeoIP_init_record_iter(geo);
-	auto prev_id = id;
-	while(!GeoIP_next_record(geo, &record, &id) && record) {
-
-		ParamMap params;
-		countryParams(params, GeoIP_id_by_code(record->country_code));
-
-		params["areacode"] = [record] { return Util::toString(record->area_code); };
-		params["city"] = [record] { return forwardRet(record->city); };
-		params["lat"] = [record] { return Util::toString(record->latitude); };
-		params["long"] = [record] { return Util::toString(record->longitude); };
-		params["metrocode"] = [record] { return Util::toString(record->metro_code); };
-		params["postcode"] = [record] { return forwardRet(record->postal_code); };
-		params["region"] = [record, &regions]() -> string {
-			auto country = record->country_code;
-			auto region = record->region;
-			if(country && region) {
-				return regionName(regions, country, region);
-			}
-			return forwardRet(region);
-		};
-
-		cache[prev_id] = Util::formatParams(setting, params);
-		prev_id = id;
-
-		GeoIPRecord_delete(record);
+		return true;
+	} catch(const Exception&) {
+		return false;
 	}
 }
 
-void GeoIP::rebuild_countries() {
-	cache.clear();
+uint64_t GeoIP::buildEpoch() const {
+	Lock lock(cs);
 
-	const auto& setting = SETTING(COUNTRY_FORMAT);
+	return database ? database->mmdb.metadata.build_epoch : 0;
+}
 
-	for(int id = 1, size = GeoIP_num_countries(); id < size; ++id) {
+GeoCountry GeoIP::lookup(const std::string& ip) const {
+	GeoCountry country;
+	if(ip.empty() || ip.find('\0') != std::string::npos || ip.find('%') != std::string::npos)
+		return country;
 
-		ParamMap params;
-		countryParams(params, id);
+	sockaddr_storage address {};
+	auto* v4 = reinterpret_cast<sockaddr_in*>(&address);
+	auto* v6 = reinterpret_cast<sockaddr_in6*>(&address);
+#ifdef _WIN32
+	const auto parse = InetPtonA;
+#else
+	const auto parse = inet_pton;
+#endif
+	if(parse(AF_INET, ip.c_str(), &v4->sin_addr) == 1)
+		v4->sin_family = AF_INET;
+	else if(parse(AF_INET6, ip.c_str(), &v6->sin6_addr) == 1)
+		v6->sin6_family = AF_INET6;
+	else
+		return country;
 
-		cache[id] = Util::formatParams(setting, params);
+	Lock lock(cs);
+	if(!database)
+		return country;
+
+	int error = 0;
+	auto result = MMDB_lookup_sockaddr(&database->mmdb, reinterpret_cast<const sockaddr*>(&address), &error);
+	if(error || !result.found_entry)
+		return country;
+
+	// Registration country is not a substitute for the IP's location.
+	country.code = field(result.entry, "country", "iso_code");
+	if(!countryCode(country.code))
+		return {};
+
+	country.englishName = field(result.entry, "country", "names", "en");
+	country.continent = field(result.entry, "continent", "code");
+
+	return country;
+}
+
+std::string GeoCountry::format(const std::string& pattern) const {
+	if(code.empty())
+		return {};
+
+	std::string name = englishName, official = englishName, alpha3;
+#ifdef _WIN32
+	const auto localized = windowsName(code, GEO_FRIENDLYNAME);
+	if(!localized.empty())
+		name = localized;
+	const auto full = windowsName(code, GEO_OFFICIALNAME);
+	if(!full.empty())
+		official = full;
+	alpha3 = windowsName(code, GEO_ISO3);
+#endif
+	ParamMap params;
+	params["2code"] = code;
+	params["3code"] = alpha3;
+	params["continent"] = continent;
+	params["engname"] = englishName;
+	params["name"] = name;
+	params["officialname"] = official;
+
+	return Util::formatParams(pattern, params);
+}
+
+void GeoIP::install(const std::string& candidate) {
+	{
+		Database validated(candidate);
 	}
-}
 
-bool GeoIP::v6() const {
-	return geo->databaseType == GEOIP_COUNTRY_EDITION_V6 || geo->databaseType == GEOIP_LARGE_COUNTRY_EDITION_V6 ||
-		geo->databaseType == GEOIP_CITY_EDITION_REV1_V6 || geo->databaseType == GEOIP_CITY_EDITION_REV0_V6;
-}
+	Lock lock(cs);
 
-bool GeoIP::city() const {
-	return geo->databaseType == GEOIP_CITY_EDITION_REV0 || geo->databaseType == GEOIP_CITY_EDITION_REV1 ||
-		geo->databaseType == GEOIP_CITY_EDITION_REV1_V6 || geo->databaseType == GEOIP_CITY_EDITION_REV0_V6;
-}
+	// Windows mappings must close before replacing the file. The rename keeps
+	// the old file intact if replacement fails; reopen it under the same lock.
+	database.reset();
+#ifdef _WIN32
+	const bool replaced = MoveFileExW(File::toNativePath(candidate).c_str(), File::toNativePath(path).c_str(),
+		MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+#else
+	const bool replaced = ::rename(candidate.c_str(), path.c_str()) == 0;
+#endif
+	try {
+		database = std::make_unique<Database>(path);
+	} catch(const Exception&) {
+	}
 
-} // namespace dcpp
+	if(!replaced || !database)
+		throw Exception("Could not install GeoLite2 Country database");
+}
+}

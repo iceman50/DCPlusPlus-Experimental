@@ -34,27 +34,28 @@ using std::unique_ptr;
 class GeoManager : public Singleton<GeoManager>
 {
 public:
-	/** Prepare the databases and fill internal caches. */
+	/** Open the shared IPv4/IPv6 Country database. */
 	void init();
-	/** Update a database and its internal caches. Call after a new one have been downloaded. */
-	void update(bool v6);
-	/** Rebuild the internal caches. Call after a change of country settings. */
-	void rebuild();
-	/** Unload databases and clear internal caches. */
+	/** Install a validated download while lookups are locked. */
+	void install(const string& candidate);
+	uint64_t buildEpoch() const;
+	GeoCountry lookup(const string& ip) const;
+	/** Unload the database. */
 	void close();
 
-	enum { V6 = 1 << 1, V4 = 1 << 2 };
-	/** Map an IP address to a country. The flags specify which database(s) to look into. */
-	const string& getCountry(const string& ip, int flags = V6 | V4);
+	enum { V6 = 1 << 1, V4 = 1 << 2
+	};
 
-	static string getDbPath(bool v6);
-	static string getRegionDbPath();
+	/** Map an IP address to a country. The flags restrict the permitted address families. */
+	string getCountry(const string& ip, int flags = V6 | V4);
+
+	static string getDbPath();
 
 private:
 	friend class Singleton<GeoManager>;
 
-	// only these 2 for now. in the future, more databases could be added (region / city info...).
-	unique_ptr<GeoIP> geo6, geo4;
+	mutable CriticalSection cs;
+	unique_ptr<GeoIP> geo;
 
 	GeoManager() { }
 	virtual ~GeoManager() { }

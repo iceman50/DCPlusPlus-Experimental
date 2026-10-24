@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,76 +17,52 @@
  */
 
 #include "stdinc.h"
+
 #include "GeoManager.h"
 
-#include "GeoIP.h"
+#include "SettingsManager.h"
 #include "Util.h"
 
 namespace dcpp {
 
 void GeoManager::init() {
-	geo6.reset(new GeoIP(getDbPath(true)));
-	geo4.reset(new GeoIP(getDbPath(false)));
-
-	rebuild();
+	Lock lock(cs);
+	if(!geo)
+		geo = std::make_unique<GeoIP>(getDbPath());
 }
 
-void GeoManager::update(bool v6) {
-	auto geo = (v6 ? geo6 : geo4).get();
-	if(geo) {
-		geo->update();
-		geo->rebuild();
-	}
-}
-
-void GeoManager::rebuild() {
-	geo6->rebuild();
-	geo4->rebuild();
+void GeoManager::install(const string& candidate) {
+	Lock lock(cs);
+	if(!geo)
+		geo = std::make_unique<GeoIP>(getDbPath());
+	geo->install(candidate);
 }
 
 void GeoManager::close() {
-	geo6.reset();
-	geo4.reset();
+	Lock lock(cs);
+	geo.reset();
 }
 
-const string& GeoManager::getCountry(const string& ip, int flags) {
-	if(!ip.empty()) {
+uint64_t GeoManager::buildEpoch() const {
+	Lock lock(cs);
 
-		/*Check for the IP version when the caller didn't specify it.
-		  This hadn't needed for years but with GeoIP databases released 
-		  somewhere in mid 2018 and on for V4 addresses (and for any arbitrary
-		  string for the matter) the GeoIP_id_by_addr_v6 call, unlike before
-		  when it returned no hits, now always returns a specific id that is 
-		  actually in the database. This resulted the same invalid country
-		  returned by this function for V4 addresses in cases when called 
-		  with IP version unspecified.
-		  This also ensures that V4 IPs never looked up unnecessary in the 
-		  V6 database which should improve performance.*/
-
-		if((flags & V6) && (flags & V4)) {
-			flags = Util::isIpV4(ip) ? V4 : V6;
-		}
-
-		if((flags & V6) && geo6.get()) {
-			const auto& ret = geo6->getCountry(ip);
-			if(!ret.empty())
-				return ret;
-		}
-
-		if((flags & V4) && geo4.get()) {
-			return geo4->getCountry(ip);
-		}
-	}
-
-	return Util::emptyString;
+	return geo ? geo->buildEpoch() : 0;
 }
 
-string GeoManager::getDbPath(bool v6) {
-	return Util::getPath(Util::PATH_USER_LOCAL) + (v6 ? "GeoIPv6.dat" : "GeoIP.dat");
+GeoCountry GeoManager::lookup(const string& ip) const {
+	Lock lock(cs);
+
+	return geo && SETTING(GET_USER_COUNTRY) ? geo->lookup(ip) : GeoCountry();
 }
 
-string GeoManager::getRegionDbPath() {
-	return Util::getPath(Util::PATH_USER_LOCAL) + "GeoIP_Regions.csv";
+string GeoManager::getCountry(const string& ip, int flags) {
+	if(!(flags & (Util::isIpV4(ip) ? V4 : V6)))
+		return {};
+
+	return lookup(ip).format(SETTING(COUNTRY_FORMAT));
 }
 
-} // namespace dcpp
+string GeoManager::getDbPath() {
+	return Util::getPath(Util::PATH_USER_LOCAL) + "GeoLite2-Country.mmdb";
+}
+}

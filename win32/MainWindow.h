@@ -18,6 +18,7 @@
 #ifndef DCPLUSPLUS_WIN32_MAIN_WINDOW_H
 #define DCPLUSPLUS_WIN32_MAIN_WINDOW_H
 
+#include "GeoIPUpdate.h"
 #include <atomic>
 
 #include <dcpp/forward.h>
@@ -102,11 +103,6 @@ private:
 
 	struct {
 		tstring homepage;
-		tstring geoip6;
-		tstring geoip4;
-		tstring geoip6_city;
-		tstring geoip4_city;
-		tstring geoip_regions;
 		tstring bugs;
 		tstring community;
 		tstring pluginrepo;
@@ -114,13 +110,12 @@ private:
 
 	enum {
 		TIMER_STATUS,
-		TIMER_SAVE
+		TIMER_SAVE,
+		TIMER_GEO
 	};
 
 	enum {
 		CONN_VERSION,
-		CONN_GEO_V6,
-		CONN_GEO_V4,
 
 		CONN_LAST
 	};
@@ -145,10 +140,8 @@ private:
 	static unordered_map<string, map<tstring, pair<function<void ()>, tstring>, noCaseStringLess>> pluginCommands;
 
 	std::atomic<HttpConnection*> conns[CONN_LAST];
-	unique_ptr<File> geo6File, geo4File;
-	enum { GeoRegion_Idle, GeoRegion_FromV4, GeoRegion_FromV6 } geoRegion;
-	bool geoStaticServe; /// signals when GeoIP databases are not updated frequently for some reason
 
+	GeoIPUpdate geoUpdater;
 	HANDLE stopperThread;
 
 	uint64_t lastUp;
@@ -232,10 +225,8 @@ private:
 
 	void completeVersionUpdate(bool success, const string& result);
 	void checkGeoUpdate();
-	void checkGeoUpdate(bool v6);
+	void refreshGeo();
 	void updateGeo();
-	void updateGeo(bool v6);
-	void completeGeoUpdate(bool v6, bool success);
 
 	bool filter(MSG& msg);
 

@@ -18,6 +18,7 @@
 
 #include "stdafx.h"
 #include "TransferView.h"
+#include "CountryFlags.h"
 
 #include <dcpp/ClientManager.h>
 #include <dcpp/ConnectionManager.h>
@@ -75,6 +76,7 @@ TransferView::TransferView(dwt::Widget* parent, TabViewPtr mdi_) :
 	transfers = addChild(WidgetTransfers::Seed(WinUtil::Seeds::table));
 
 	transfers->setSmallImageList(WinUtil::fileImages);
+	transfers->setImageColumns({ COLUMN_IP });
 
 	WinUtil::makeColumns(transfers, columns, COLUMN_LAST, SETTING(TRANSFERS_ORDER), SETTING(TRANSFERS_WIDTHS));
 	WinUtil::setTableSort(transfers, COLUMN_LAST, SettingsManager::TRANSFERS_SORT, COLUMN_STATUS);
@@ -124,7 +126,7 @@ const tstring& TransferView::ItemInfo::getText(int col) const {
 }
 
 int TransferView::ItemInfo::getImage(int col) const {
-	return -1;
+	return col == COLUMN_IP && SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::fileFlagOffset) : -1;
 }
 
 int TransferView::ItemInfo::compareItems(const ItemInfo* a, const ItemInfo* b, int col) {
@@ -253,6 +255,7 @@ void TransferView::ConnectionInfo::update(const UpdateInfo& ui) {
 	
 	if(ui.updateMask & UpdateInfo::MASK_COUNTRY) {
 		columns[COLUMN_COUNTRY] = ui.country;
+		countryCode = ui.countryCode;
 	}
 }
 
@@ -295,8 +298,10 @@ bool TransferView::TransferInfo::operator==(const TransferInfo& other) const {
 }
 
 int TransferView::TransferInfo::getImage(int col) const {
-	return type == CONNECTION_TYPE_PM ? WinUtil::TRANSFER_ICON_PM :
-		col == COLUMN_FILE ? static_cast<int>(WinUtil::getFileIcon(path)) : ItemInfo::getImage(col);
+	if(col != COLUMN_FILE)
+		return ItemInfo::getImage(col);
+
+	return type == CONNECTION_TYPE_PM ? WinUtil::TRANSFER_ICON_PM : static_cast<int>(WinUtil::getFileIcon(path));
 }
 
 void TransferView::TransferInfo::update() {
@@ -345,6 +350,7 @@ void TransferView::TransferInfo::update() {
 		columns[COLUMN_CIPHER] = conn.getText(COLUMN_CIPHER);
 		columns[COLUMN_IP] = conn.getText(COLUMN_IP);
 		columns[COLUMN_COUNTRY] = conn.getText(COLUMN_COUNTRY);
+		countryCode = conn.countryCode;
 
 	} else {
 		if(type == CONNECTION_TYPE_PM) {
@@ -366,6 +372,7 @@ void TransferView::TransferInfo::update() {
 		columns[COLUMN_CIPHER].clear();
 		columns[COLUMN_IP].clear();
 		columns[COLUMN_COUNTRY].clear();
+		countryCode.clear();
 	}
 
 	if(type == CONNECTION_TYPE_PM) {
@@ -1380,7 +1387,8 @@ void TransferView::starting(UpdateInfo* ui, Transfer* t) {
 	const UserConnection& uc = t->getUserConnection();
 	ui->setCipher(Text::toT(uc.getCipherName()));
 	ui->setIP(Text::toT(uc.getRemoteIp()));
-	ui->setCountry(Text::toT(GeoManager::getInstance()->getCountry(uc.getRemoteIp())));
+	const auto location = GeoManager::getInstance()->lookup(uc.getRemoteIp());
+	ui->setCountry(Text::toT(location.format(SETTING(COUNTRY_FORMAT))), location.code);
 }
 
 void TransferView::onTransferComplete(Transfer* t, bool download) {
@@ -1409,4 +1417,17 @@ TransferView::UpdateInfo* TransferView::makeHttpUI(HttpConnection* c) {
 	ui->setHttp();
 	ui->setFile(c->getUrl());
 	return ui;
+}
+
+void TransferView::refreshCountries() {
+	for(auto& transfer : transferItems) {
+		for(auto& conn : transfer.conns) {
+			const auto location = GeoManager::getInstance()->lookup(Text::fromT(conn.columns[COLUMN_IP]));
+			conn.countryCode = location.code;
+			conn.columns[COLUMN_COUNTRY] = Text::toT(location.format(SETTING(COUNTRY_FORMAT)));
+		}
+		transfer.update();
+	}
+	transfers->resort();
+	transfers->redrawWindow();
 }

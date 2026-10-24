@@ -309,7 +309,7 @@ class Dev:
                 self.zstd,
                 self.sqlite,
                 self.bzip2,
-                self.geoip,
+                self.maxminddb,
                 self.miniupnpc,
                 self.natpmp,
                 self.md4c,
@@ -358,7 +358,7 @@ class Dev:
     def add_dcpp(self, env):
         if self.is_win32():
             env.Append(CPPPATH=["#/bzip2"])
-        env.Append(CPPPATH=["#/geoip", "#/sqlite", "#/zlib", "#/zstd/lib"])
+        env.Append(CPPPATH=["#/maxminddb", "#/sqlite", "#/zlib", "#/zstd/lib"])
 
         if self.is_win32():
             env.Append(LIBS=["gdi32", "iphlpapi", "ole32", "ws2_32"])

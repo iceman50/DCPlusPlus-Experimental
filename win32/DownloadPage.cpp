@@ -123,7 +123,7 @@ PropPage(parent, 3, 1)
 		resetList->setHelpId(IDH_SETTINGS_DOWNLOAD_RESETLISTS);
 		resetList->onClicked([this] { handleResetHubLists(); });
 
-		cur->addChild(Label::Seed(T_("HTTP Proxy (for hublist only)")))->setHelpId(IDH_SETTINGS_DOWNLOAD_PROXY);
+		cur->addChild(Label::Seed(T_("HTTP proxy (hub lists and GeoLite2)")))->setHelpId(IDH_SETTINGS_DOWNLOAD_PROXY);
 		TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::HTTP_PROXY, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_PROXY);

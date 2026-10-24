@@ -40,6 +40,7 @@ private:
 	ItemList items;
 	std::vector<ScaledIntItem> scaledIntItems;
 	ComboBoxPtr hubUserIconSize;
+	TextBoxPtr maxmindKey;
 	TablePtr tempShares;
 	std::vector<std::unique_ptr<TempShareRow>> tempShareRows;
 	LabelPtr tempSummary;

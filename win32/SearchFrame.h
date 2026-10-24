@@ -56,6 +56,7 @@ public:
 	static void openWindow(TabViewPtr parent, const tstring& str = Util::emptyStringT,
 		SearchManager::TypeModes type = SearchManager::TYPE_ANY, const tstring& url = Util::emptyStringT );
 	static void closeAll();
+	static void refreshCountries();
 
 private:
 	friend class MDIChildFrame<SearchFrame>;
@@ -141,6 +142,7 @@ private:
 		SearchInfo* parent;
 
 		tstring columns[COLUMN_LAST];
+		string countryCode;
 	};
 
 	struct HubInfo : public FastAlloc<HubInfo> {

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,50 +15,39 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #ifndef DCPLUSPLUS_DCPP_GEOIP_H
 #define DCPLUSPLUS_DCPP_GEOIP_H
-
 #include "CriticalSection.h"
-
+#include <memory>
 #include <string>
-#include <unordered_map>
-
-typedef struct GeoIPTag GeoIP;
-
+#include <cstdint>
 namespace dcpp {
-
-using std::string;
-using std::unordered_map;
-
-class GeoIP {
-public:
-	GeoIP(const GeoIP&) = delete;
-	GeoIP& operator=(const GeoIP&) = delete;
-
-	explicit GeoIP(string&& path);
-	~GeoIP();
-
-	const string& getCountry(const string& ip) const;
-	void update();
-	void rebuild();
-
-private:
-	bool decompress() const;
-	void open();
-	void close();
-	void rebuild_cities();
-	void rebuild_countries();
-	bool v6() const;
-	bool city() const;
-
-	mutable CriticalSection cs;
-	::GeoIP* geo;
-
-	const string path;
-	unordered_map<int, string> cache;
+struct GeoCountry {
+	std::string code, englishName, continent;
+	std::string format(const std::string& pattern) const;
 };
 
-} // namespace dcpp
+/** Local IPv4/IPv6 Country MMDB reader. Results own their strings so an update
+ * cannot invalidate values in use by UI or network threads. */
+class GeoIP {
+public:
+	explicit GeoIP(std::string path);
+	~GeoIP();
+	GeoIP(const GeoIP&) = delete;
+	GeoIP& operator=(const GeoIP&) = delete;
+	GeoCountry lookup(const std::string& ip) const;
+	uint64_t buildEpoch() const;
+	bool reload();
+	/** Validate before atomically replacing the database. Throws on failure. */
+	void install(const std::string& candidate);
+	/** Extract only GeoLite2-Country.mmdb from a bounded tar.gz download. */
+	static void extractCountry(const std::string& archive, const std::string& target);
 
-#endif // !defined(DCPLUSPLUS_DCPP_GEOIP_H)
+private:
+	struct Database;
+	const std::string path;
+	mutable CriticalSection cs;
+	std::unique_ptr<Database> database;
+};
+}
+#endif

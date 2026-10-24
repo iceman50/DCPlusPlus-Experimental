@@ -2,7 +2,7 @@
 #include "testbase.h"
 #include <dcpp/CID.h>
 #include <dcpp/Text.h>
-#include <GeoIP.h>
+#include <maxminddb.h>
 #include <openssl/crypto.h>
 #include <openssl/ssl.h>
 #include <filesystem>
@@ -22,43 +22,10 @@ void append32(std::string& data, uint32_t n) {
     for (unsigned i = 0; i < 4; ++i) data.push_back(static_cast<char>(n >> (8 * i)));
 }
 
-void writeCountryList(const std::filesystem::path& path, bool ipv6) {
-    std::string data;
-    for (const auto code : { "US", "GB" }) {
-        const uint32_t leaf = 16776960u + GeoIP_id_by_code(code);
-        for (unsigned i = 0; i < 3; ++i) data.push_back(static_cast<char>(leaf >> (8 * i)));
-    }
-    data.append(64, '\0');
-    data.append(3, '\xff');
-    data.push_back(ipv6 ? GEOIP_COUNTRY_EDITION_V6 : GEOIP_COUNTRY_EDITION);
-    std::ofstream(path, std::ios::binary).write(data.data(), data.size());
-}
 }
 
-TEST(DependencyRuntime, geoip_reads_country_databases_and_ipv6_literals) {
-    DependencyFiles files;
-#ifdef _WIN32
-    const auto path = files.folder / L"countries-\u00e9\u4e16.dat";
-    const auto filename = dcpp::Text::fromT(path.native());
-#else
-    const auto path = files.folder / "countries.dat";
-    const auto filename = path.string();
-#endif
-    writeCountryList(path, false);
-    std::unique_ptr<GeoIP, decltype(&GeoIP_delete)> db(GeoIP_open(filename.c_str(), GEOIP_STANDARD), GeoIP_delete);
-    ASSERT_NE(nullptr, db);
-    EXPECT_STREQ("US", GeoIP_country_code_by_addr(db.get(), "1.2.3.4"));
-    EXPECT_STREQ("GB", GeoIP_country_code_by_addr(db.get(), "200.1.2.3"));
-    db.reset();
-    writeCountryList(path, true);
-    db.reset(GeoIP_open(filename.c_str(), GEOIP_STANDARD));
-    ASSERT_NE(nullptr, db);
-    EXPECT_STREQ("US", GeoIP_country_code_by_addr_v6(db.get(), "2001:db8::1"));
-    EXPECT_STREQ("GB", GeoIP_country_code_by_addr_v6(db.get(), "fd00::1"));
-#ifdef _WIN32
-    EXPECT_EQ(244, GeoIP_Win_GEOID_by_id(GeoIP_id_by_code("US")));
-#endif
-    EXPECT_STREQ("1.6.12", GeoIP_lib_version());
+TEST(DependencyRuntime, maxminddb_version) {
+	EXPECT_STREQ("1.14.1", MMDB_lib_version());
 }
 
 #if defined(__MINGW32__) && defined(_WIN64)

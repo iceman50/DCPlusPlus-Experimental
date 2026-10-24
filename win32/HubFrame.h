@@ -88,6 +88,7 @@ public:
 	static void resortUsers();
 	static void refreshRichTextSettings();
 	static void refreshUserIconSizes();
+	static void refreshCountries();
 
 	WindowParams getWindowParams() const;
 	static void parseWindowParams(TabViewPtr parent, const WindowParams& params);
@@ -131,6 +132,7 @@ private:
 
 		static int compareItems(const UserInfo* a, const UserInfo* b, int col);
 		bool update(const Identity& identity, int sortCol);
+		void updateCountry();
 
 		string getNick() const { return identity.getNick(); }
 		bool isHidden() const { return identity.isHidden(); }
@@ -139,6 +141,7 @@ private:
 
 	private:
 		tstring columns[COLUMN_LAST];
+		string countryCode;
 	};
 
 	typedef unordered_map<UserPtr, UserInfo*, User::Hash> UserMap;

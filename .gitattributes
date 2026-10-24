@@ -5,3 +5,8 @@
 test/dcpp/data/gtest_h_original.txt text eol=lf
 test/support/gtest.h text eol=lf
 test/dcpp/data/gtest_h_compressed binary
+
+# Geolocation fixtures and embedded country artwork must remain byte-exact.
+res/flags/*.ico binary
+test/dcpp/data/geoip/*.mmdb binary
+test/dcpp/data/geoip/*.dcico binary

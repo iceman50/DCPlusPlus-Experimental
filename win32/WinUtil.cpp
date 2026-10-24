@@ -21,6 +21,7 @@
 #include "IconManager.h"
 
 #include "WinUtil.h"
+#include "CountryFlags.h"
 
 #include "resource.h"
 #include <mmsystem.h>
@@ -112,6 +113,7 @@ dwt::FontPtr WinUtil::uploadFont;
 dwt::FontPtr WinUtil::downloadFont;
 decltype(WinUtil::userMatchFonts) WinUtil::userMatchFonts;
 dwt::ImageListPtr WinUtil::fileImages;
+int WinUtil::fileFlagOffset = 0, WinUtil::userFlagOffset = 0;
 dwt::ImageListPtr WinUtil::userImages;
 decltype(WinUtil::fileIndexes) WinUtil::fileIndexes;
 TStringList WinUtil::lastDirs;
@@ -342,6 +344,7 @@ void WinUtil::init() {
 	fileImages->add(*createIcon(IDI_USER, 16));
 	fileImages->add(*createIcon(IDI_PRIVATE, 16));
 
+	fileFlagOffset = CountryFlags::append(*fileImages);
 	userImages = createUserImages(16);
 
 	registerHubHandlers();
@@ -1944,6 +1947,7 @@ dwt::ImageListPtr WinUtil::createUserImages(long pixels) {
 			images->add(*dwt::util::merge(icons));
 		}
 	}
+	userFlagOffset = CountryFlags::append(*images);
 	return images;
 }
 

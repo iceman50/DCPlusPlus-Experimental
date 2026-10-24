@@ -93,7 +93,10 @@ constexpr IconDefinition ICONS[] = {
 	{ IDI_REMOVEQUEUE, "RemoveQueue.ico" }, { IDI_DCPP_WARNING, "Warning.ico" }
 };
 
-constexpr size_t MAX_CACHED_ICONS = sizeof(ICONS) / sizeof(ICONS[0]) * 8;
+constexpr IconDefinition FLAGS[] = {
+#include "CountryFlagIcons.inc"
+};
+constexpr size_t MAX_CACHED_ICONS = (std::size(ICONS) + std::size(FLAGS)) * 8;
 
 struct State {
 	struct CachedIcon {
@@ -317,6 +320,10 @@ IconManager::RuntimeInfo IconManager::getRuntimeInfo() {
 const char* IconManager::getFileName(unsigned resourceId) noexcept {
 	for(const auto& icon: ICONS) {
 		if(icon.id == resourceId) return icon.fileName;
+	}
+	for(const auto& icon : FLAGS) {
+		if(icon.id == resourceId)
+			return icon.fileName;
 	}
 	return nullptr;
 }

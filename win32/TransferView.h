@@ -61,6 +61,7 @@ public:
 	virtual ~TransferView();
 
 	void prepareClose();
+	void refreshCountries();
 
 private:
 	enum {
@@ -112,6 +113,7 @@ private:
 		int64_t size;
 
 		tstring columns[COLUMN_LAST];
+		string countryCode;
 	};
 
 	struct ConnectionInfo : public ItemInfo, public UserInfoBase {
@@ -224,8 +226,14 @@ private:
 		tstring cipher;
 		void setIP(const tstring& aIp) { ip = aIp; updateMask |= MASK_IP; }
 		tstring ip;
-		void setCountry(const tstring& aCountry) { country = aCountry; updateMask |= MASK_COUNTRY; }
+
+		void setCountry(const tstring& aCountry, const string& code) {
+			country = aCountry;
+			countryCode = code;
+			updateMask |= MASK_COUNTRY;
+		}
 		tstring country;
+		string countryCode;
 
 		void setHttp() { updateMask |= MASK_HTTP; }
 		bool isHttp() const { return updateMask & MASK_HTTP; }

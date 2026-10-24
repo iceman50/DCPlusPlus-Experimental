@@ -19,6 +19,8 @@
 #include "stdafx.h"
 
 #include "HubFrame.h"
+#include "CountryFlags.h"
+#include <dcpp/GeoManager.h>
 
 #include <dcpp/AdcHub.h>
 #include <dcpp/BBSManager.h>
@@ -234,6 +236,7 @@ tabIcon(IDI_HUB)
 		userGrid->row(0).align = GridInfo::STRETCH;
 
 		users = userGrid->addChild(WidgetUsers::Seed(WinUtil::Seeds::table));
+		users->setImageColumns({ COLUMN_IP });
 		addWidget(users);
 
 		WinUtil::makeColumns(users, usersColumns, COLUMN_LAST, SETTING(HUBFRAME_ORDER), SETTING(HUBFRAME_WIDTHS));
@@ -1290,7 +1293,7 @@ bool HubFrame::UserInfo::update(const Identity& identity, int sortCol) {
 	columns[COLUMN_CONNECTION] = Text::toT(identity.getConnection());
 	// Show the addy where we actually connect to
 	columns[COLUMN_IP] = Text::toT(CONNSTATE(INCOMING_CONNECTIONS6) ? identity.getIp() : identity.getIp4());
-	columns[COLUMN_COUNTRY] = Text::toT(identity.getCountry());
+	updateCountry();
 	columns[COLUMN_EMAIL] = Text::toT(identity.getEmail());
 	columns[COLUMN_CID] = Text::toT(identity.getUser()->getCID().toBase32());
 
@@ -1347,6 +1350,8 @@ bool HubFrame::handleMessageKeyDown(int c) {
 }
 
 int HubFrame::UserInfo::getImage(int col) const {
+	if(col == COLUMN_IP)
+		return SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::userFlagOffset) : -1;
 	if(col != 0) {
 		return -1;
 	}
@@ -2161,5 +2166,20 @@ void HubFrame::setTabIcon()
 	if(setTabIcon)
 	{
 		setIcon(WinUtil::mergeIcons({ IDI_HUB, tabIcon }));
+	}
+}
+
+void HubFrame::UserInfo::updateCountry() {
+	const auto location = GeoManager::getInstance()->lookup(Text::fromT(columns[COLUMN_IP]));
+	countryCode = location.code;
+	columns[COLUMN_COUNTRY] = Text::toT(location.format(SETTING(COUNTRY_FORMAT)));
+}
+
+void HubFrame::refreshCountries() {
+	for(auto frame : frames) {
+		for(auto& item : frame->userMap)
+			item.second->updateCountry();
+		frame->users->resort();
+		frame->users->redrawWindow();
 	}
 }

@@ -70,7 +70,7 @@ const string SettingsManager::settingTags[] =
 	"Language", "Toolbar", "LastSearchType", "Mapper", "Mapper6", "EmoticonPack", "IconPack",
 	"SoundMainChat", "SoundPM", "SoundPMWindow", "SoundFinishedDL", "SoundFinishedFL", "LastSharedFolder",
 	"SharingSkiplistExtensions", "SharingSkiplistRegEx", "SharingSkiplistPaths", "WhitelistOpenURIs",
-	"ACFrameOrder", "ACFrameWidths",
+	"ACFrameOrder", "ACFrameWidths", "MaxMindAccountID", "MaxMindLicenseKey", "GeoIPDownloadURL",
 	"SENTRY",
 	// Ints
 	"IncomingConnections", "IncomingConnections6", "OutgoingConnections", "InPort", "InPort6", 
@@ -142,10 +142,10 @@ const string SettingsManager::settingTags[] =
 	"RegisterSystemStartup", "DontLogCCPMChat", "AboutCfgDisclaimer", "EnableTaskbarPreview",
 	"EnableSUDP", "BroadDetection", "BroadDetection6", "HashDbVerifyStartup", "HashDbCompactOnRebuild",
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
-	"PreferZstd", "FilelistCache",
+	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind",
 	"SENTRY",
 	// Int64
-	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize",
+	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize", "GeoIPLastSuccess", "GeoIPLastAttempt",
 	"SENTRY",
 	// Floats
 	"BBSFramePanedPos", "BBSFrameContentPanedPos", "FileListPanedPos", "HubPanedPos", "QueuePanedPos", "SearchPanedPos",
@@ -600,6 +600,10 @@ void SettingsManager::load(string const& aFileName)
 				unset(setting);
 			}
 		}
+
+		// Preserve the source selected by early GeoLite2 testing builds.
+		if(!isSet[GEOIP_USE_MAXMIND] && !get(MAXMIND_LICENSE_KEY).empty())
+			set(GEOIP_USE_MAXMIND, true);
 
 		double v = Util::toDouble(SETTING(CONFIG_VERSION));
 

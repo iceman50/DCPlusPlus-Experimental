@@ -143,6 +143,7 @@ private:
 public:
 	static tstring commands;
 	static dwt::ImageListPtr fileImages;
+	static int fileFlagOffset, userFlagOffset;
 	static dwt::ImageListPtr userImages;
 	static unordered_map<string, size_t> fileIndexes;
 	static TStringList lastDirs;

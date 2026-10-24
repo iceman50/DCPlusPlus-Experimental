@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include "ExperimentalPage.h"
+#include "GeoIPUpdate.h"
 
 #include <iterator>
 #include <limits>
@@ -330,7 +331,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 	}
 
-	auto themeGrid = tabs->addPage(T_("Interface"), 3)->content();
+	auto themeGrid = tabs->addPage(T_("Interface"), 4)->content();
 
 	{
 		auto group = themeGrid->addChild(GroupBox::Seed(T_("Hub user lists")));
@@ -359,6 +360,23 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			LogManager::MIN_HISTORY_ITEMS, LogManager::MAX_HISTORY_ITEMS);
 	}
 
+	{
+		auto group = themeGrid->addChild(GroupBox::Seed(T_("GeoLite2 Country testing")));
+		auto fields = group->addChild(Grid::Seed(4, 2));
+		fields->column(1).mode = GridInfo::FILL;
+		auto enabled = fields->addChild(CheckBox::Seed(T_("Download directly from MaxMind (testing override)")));
+		fields->setWidget(enabled, 0, 0, 1, 2);
+		items.emplace_back(enabled, SettingsManager::GEOIP_USE_MAXMIND, PropPage::T_BOOL);
+		fields->addChild(Label::Seed(T_("MaxMind account ID")));
+		items.emplace_back(fields->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::MAXMIND_ACCOUNT_ID, PropPage::T_STR);
+		fields->addChild(Label::Seed(T_("License key")));
+		maxmindKey = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		maxmindKey->setPassword();
+		maxmindKey->setText(Text::toT(GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY))));
+		auto note = fields->addChild(Label::Seed(T_("Overrides the hosted URL. Key protected for this Windows account.")));
+		fields->setWidget(note, 3, 0, 1, 2);
+	}
+
 	themeGrid->addChild(Button::Seed(T_("Edit themes, fonts and chat colors...")))->onClicked([this] {
 		static_cast<SettingsDialog*>(getRoot())->activatePage<ThemePage>();
 	});
@@ -378,6 +396,10 @@ void ExperimentalPage::layout() {
 }
 
 void ExperimentalPage::write() {
+	auto key = Text::fromT(maxmindKey->getText());
+	Util::trim(key);
+	if(key != GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY)))
+		SettingsManager::getInstance()->set(SettingsManager::MAXMIND_LICENSE_KEY, GeoIPUpdate::protectKey(key));
 	PropPage::write(items);
 	writeScaledIntItems();
 

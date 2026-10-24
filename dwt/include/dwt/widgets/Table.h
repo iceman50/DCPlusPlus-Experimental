@@ -207,6 +207,8 @@ public:
 	/** Sets a new icon for a given item
 	  */
 	void setIcon(unsigned row, unsigned column, int newIconIndex);
+	/** Enable callback icons in selected subitems, including newly inserted rows. */
+	void setImageColumns(const std::vector<int>& columns);
 
 	/// Returns a boolean indicating if the Grid is in "read only" mode or not
 	/** If the return value is true the Grid is in "read only" mode and cannot be
@@ -474,6 +476,7 @@ public:
 	explicit Table(dwt::Widget* parent);
 
 protected:
+	void initializeImageColumns(int row);
 	/// Adds or Removes extended list view styles from the list view
 	void addRemoveTableExtendedStyle( DWORD addStyle, bool add );
 	void setFontImpl();
@@ -489,6 +492,7 @@ private:
 	static const TCHAR windowClass[];
 
 	bool grouped;
+	std::vector<int> imageColumns;
 
 	Theme theme;
 	HeaderPtr header;

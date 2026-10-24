@@ -285,7 +285,9 @@ int Table::insert(unsigned mask, int i, LPCTSTR text, unsigned state, unsigned s
 	item.iImage = image;
 	item.lParam = lparam;
 	setIndex(item, i);
-	return ListView_InsertItem(handle(), &item);
+	const auto row = ListView_InsertItem(handle(), &item);
+	initializeImageColumns(row);
+	return row;
 }
 
 void Table::setIndex(LVITEM& item, int index) const {
@@ -606,6 +608,19 @@ void Table::clearImpl() {
 	if(grouped) {
 		ListView_RemoveAllGroups(handle());
 	}
+}
+
+void Table::setImageColumns(const std::vector<int>& columns) {
+	imageColumns = columns;
+	addRemoveTableExtendedStyle(LVS_EX_SUBITEMIMAGES, !columns.empty());
+	for(int row = 0; row < static_cast<int>(size()); ++row)
+		initializeImageColumns(row);
+}
+
+void Table::initializeImageColumns(int row) {
+	if(row >= 0)
+		for(auto column : imageColumns)
+			setIcon(row, column, I_IMAGECALLBACK);
 }
 
 void Table::setIcon(unsigned row, unsigned column, int newIconIndex) {

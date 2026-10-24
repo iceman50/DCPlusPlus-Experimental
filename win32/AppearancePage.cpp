@@ -43,17 +43,14 @@ PropPage::ListItem AppearancePage::listItems[] = {
 	{ SettingsManager::FAV_SHOW_JOINS, N_("Only show joins / parts for favorite users"), IDH_SETTINGS_APPEARANCE_FAV_SHOW_JOINS },
 	{ SettingsManager::SORT_FAVUSERS_FIRST, N_("Sort favorite users first"), IDH_SETTINGS_APPEARANCE_SORT_FAVUSERS_FIRST },
 	{ SettingsManager::GET_USER_COUNTRY, N_("Guess user country from IP"), IDH_SETTINGS_APPEARANCE_GET_USER_COUNTRY },
-	{ SettingsManager::GEO_CITY, N_("City-level geolocation database (allows parameters such as %[city])"), IDH_SETTINGS_APPEARANCE_GEO_CITY },
-	{ SettingsManager::GEO_REGION, N_("Region name geolocation database (allows %[region])"), IDH_SETTINGS_APPEARANCE_GEO_REGION },
 	{ SettingsManager::ENABLE_TASKBAR_PREVIEW, N_("Enable window previews in the taskbar (requires restart)"), IDH_SETTINGS_APPEARANCE_TASKBAR_PREVIEW },
 	{ 0, 0 }
 };
 
 AppearancePage::AppearancePage(dwt::Widget* parent) :
-PropPage(parent, 5, 1),
-options(0),
-languages(0)
-{
+	PropPage(parent, 6, 1),
+	options(0),
+	languages(0) {
 	setHelpId(IDH_APPEARANCEPAGE);
 
 	grid->column(0).mode = GridInfo::FILL;
@@ -102,6 +99,17 @@ languages(0)
 		cur->setWidget(spin);
 
 		cur->addChild(Label::Seed(T_("lines")));
+	}
+
+	{
+		auto group = grid->addChild(GroupBox::Seed(T_("Country database updates")));
+		auto fields = group->addChild(Grid::Seed(2, 2));
+		fields->column(1).mode = GridInfo::FILL;
+		fields->addChild(Label::Seed(T_("Download URL")));
+		items.emplace_back(fields->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::GEOIP_DOWNLOAD_URL, PropPage::T_STR);
+		auto note =
+			fields->addChild(Label::Seed(T_("HTTPS link to a Country .mmdb or .tar.gz file. GitHub release assets are supported.")));
+		fields->setWidget(note, 1, 0, 1, 2);
 	}
 
 	{

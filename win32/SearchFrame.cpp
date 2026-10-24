@@ -17,6 +17,7 @@
 
 #include "stdafx.h"
 #include "SearchFrame.h"
+#include "CountryFlags.h"
 
 #include <dcpp/ClientManager.h>
 #include <dcpp/FavoriteManager.h>
@@ -65,6 +66,8 @@ SearchFrame::FrameSet SearchFrame::frames;
 SearchFrame::SearchInfo::~SearchInfo() { }
 
 int SearchFrame::SearchInfo::getImage(int col) const {
+	if(col == COLUMN_IP)
+		return SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::fileFlagOffset) : -1;
 	if(col != 0) {
 		return -1;
 	}
@@ -262,6 +265,7 @@ droppedResults(0)
 		addWidget(results);
 
 		results->setSmallImageList(WinUtil::fileImages);
+		results->setImageColumns({ COLUMN_IP });
 
 		WinUtil::makeColumns(results, resultsColumns, COLUMN_LAST, SETTING(SEARCHFRAME_ORDER), SETTING(SEARCHFRAME_WIDTHS));
 		WinUtil::setTableSort(results, COLUMN_LAST, SettingsManager::SEARCHFRAME_SORT, COLUMN_HITS, false);
@@ -520,6 +524,7 @@ void SearchFrame::SearchInfo::update() {
 	if(srs.size() > 1) {
 		columns[COLUMN_CONNECTION].clear();
 		columns[COLUMN_IP].clear();
+		countryCode.clear();
 		columns[COLUMN_CID].clear();
 
 		std::set<std::string> nicks, hubs;
@@ -539,7 +544,9 @@ void SearchFrame::SearchInfo::update() {
 		columns[COLUMN_CONNECTION] = Text::toT(ClientManager::getInstance()->getConnection(sr->getUser().user->getCID()));
 		columns[COLUMN_SLOTS] = Text::toT(sr->getSlotString());
 		const auto& ip = sr->getIP();
-		const auto& country = GeoManager::getInstance()->getCountry(ip);
+		const auto location = GeoManager::getInstance()->lookup(ip);
+		countryCode = location.code;
+		const auto country = location.format(SETTING(COUNTRY_FORMAT));
 		columns[COLUMN_IP] = Text::toT(country.empty() ? ip : str(F_("%1% (%2%)") % country % ip));
 		columns[COLUMN_HUB] = Text::toT(sr->getHubName());
 		columns[COLUMN_CID] = Text::toT(sr->getUser().user->getCID().toBase32());
@@ -1271,4 +1278,13 @@ void SearchFrame::on(ClientDisconnected, Client* c) noexcept {
 
 void SearchFrame::on(SettingsManagerListener::SearchTypesChanged) noexcept {
 	callAsync([this] { searchTypesChanged(); });
+}
+
+void SearchFrame::refreshCountries() {
+	for(auto frame : frames) {
+		for(auto& result : frame->searchResults)
+			result.update();
+		frame->results->resort();
+		frame->results->redrawWindow();
+	}
 }

@@ -353,8 +353,8 @@ void EmoticonsPage::updateIconPackageStatus() {
 		return;
 	}
 	const auto& package = iconPackages[selected - 2];
-	iconPackageStatus->setText(str(TF_("%1% version %2%: %3% application icons; scheme %4%") %
-		Text::toT(package.name) % Text::toT(package.version) % package.iconCount % Text::toT(package.scheme)));
+	iconPackageStatus->setText(str(TF_("%1% version %2%: %3% icons; scheme %4%") % Text::toT(package.name) % Text::toT(package.version) %
+		package.iconCount % Text::toT(package.scheme)));
 }
 
 void EmoticonsPage::updatePreview() {
