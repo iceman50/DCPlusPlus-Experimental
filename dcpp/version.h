@@ -27,5 +27,6 @@
 
 namespace dcpp {
 extern const std::string buildLabel;
+extern const std::string hubVersionString;
 extern const std::string fullVersionString;
 }

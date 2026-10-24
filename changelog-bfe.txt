@@ -1,4 +1,5 @@
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
+* Include the generated build number in the client version advertised to ADC and NMDC hubs, using VERSION-BUILD in ADC VE and the NMDC <++ V:...> tag (iceman50)
 * Make the distribution builder interactive for MinGW/MSVC and Debug/Release/Both, support isolated CMake builds alongside the existing MinGW SCons route, and label packages by compiler, runtime and build system while retaining command-line automation (iceman50)
 * Add an isolated experimental CMake build under cmake/ with separate build/cmake outputs, native Visual Studio projects, MinGW debug companions, and opt-in component tests using independent fixtures and generated metadata; avoid an MSVC SDK macro collision in the icon-controls test (iceman50)
 * Reduce SCons startup by avoiding redundant compiler detection, limit Git revision rebuilds to version.cpp, and restore normal recursive header dependency scanning (iceman50)

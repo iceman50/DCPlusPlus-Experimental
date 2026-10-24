@@ -1411,7 +1411,7 @@ void AdcHub::infoImpl() {
 	addParam(lastInfoMap, c, "HR", std::to_string(counts[COUNT_REGISTERED]));
 	addParam(lastInfoMap, c, "HO", std::to_string(counts[COUNT_OP]));
 	addParam(lastInfoMap, c, "AP", "++");
-	addParam(lastInfoMap, c, "VE", VERSIONSTRING);
+	addParam(lastInfoMap, c, "VE", hubVersionString);
 	addParam(lastInfoMap, c, "AW", Util::getAway() ? "1" : Util::emptyString);
 
 	int limit = ThrottleManager::getInstance()->getDownLimit();

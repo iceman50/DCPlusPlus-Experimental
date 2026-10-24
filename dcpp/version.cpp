@@ -26,5 +26,6 @@
 
 namespace dcpp {
 const std::string buildLabel("[Build: " xstrver(DCPP_BUILD_NUMBER) "]");
+const std::string hubVersionString(VERSIONSTRING "-" xstrver(DCPP_BUILD_NUMBER));
 const std::string fullVersionString(APPNAME " v" VERSIONSTRING " (" xstrver(DCPP_REVISION) ")");
 }
