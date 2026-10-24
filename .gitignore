@@ -120,3 +120,4 @@ mingw/include/*.h
 
 # Local documentation and audit reports
 /docs/
+dcpp/version-rev-id.inc
