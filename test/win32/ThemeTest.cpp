@@ -8,6 +8,8 @@
 #include "SingleInstance.h"
 #include "UserMatchPage.h"
 #include "WindowsPage.h"
+#include "CertificatesPage.h"
+#include "SearchTypesPage.h"
 #include "HtmlToRtf.h"
 #include "WinUtil.h"
 #include "RichTextBox.h"
@@ -501,6 +503,34 @@ int dwtMain(dwt::Application& app) {
 			}
 		}
 		RemoveWindowSubclass(settingsTree, watchSettingsPaint, 10);
+		app.getAppearance().configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
+		dialog.resize(dwt::Rectangle(-32000, -32000, 780, 773));
+		dialog.activatePage<CertificatesPage>();
+		settleSettingsMessages();
+		dialog.activatePage<SearchTypesPage>();
+		settleSettingsMessages();
+		checkPresentedPage(dialog.getPage<SearchTypesPage>());
+		check(!IsWindowVisible(dialog.getPage<CertificatesPage>()->handle()),
+			"Certificate page remained visible after selecting search types");
+		snapshot(dialog.getPage<SearchTypesPage>()->handle(), directory + "search-types-after-certificates.bmp");
+		auto searchTypes = dialog.getPage<SearchTypesPage>();
+		bool shownWhileHostHidden = false;
+		searchTypes->onVisibilityChanged([searchTypes, &shownWhileHostHidden](bool shown) {
+			if(shown && !(GetWindowLongPtr(searchTypes->getParent()->handle(), GWL_STYLE) & WS_VISIBLE)) {
+				shownWhileHostHidden = true;
+			}
+		});
+		for(auto mode : { dwt::Appearance::Mode::Dark, dwt::Appearance::Mode::Light }) {
+			app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
+			for(unsigned visit = 0; visit < 3; ++visit) {
+				dialog.activatePage<CertificatesPage>();
+				settleSettingsMessages();
+				dialog.activatePage<SearchTypesPage>();
+				settleSettingsMessages();
+				checkPresentedPage(searchTypes);
+			}
+		}
+		check(!shownWhileHostHidden, "Search types was shown while its host was hidden by redraw suppression");
 		RemoveWindowSubclass(dialog.handle(), watchSettingsPaint, 10);
 		check(switchLayouts == 0 && switchTreeLayouts == 0, "Settings page switches relaid out the entire dialog and navigation tree");
 		RemoveWindowSubclass(page->getParent()->handle(), watchPageCreation, 9);

@@ -206,7 +206,11 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		cur->row(0).mode = GridInfo::FILL;
 		cur->row(0).size = cur->scale(110);
 		cur->row(0).align = GridInfo::STRETCH;
-		tempShares = cur->addChild(WinUtil::Seeds::Dialog::table);
+		// The group box supplies the themed frame. A native sunken edge inside
+		// the composited settings page can retain stale pixels after tab/layout changes.
+		auto tableSeed = WinUtil::Seeds::Dialog::table;
+		tableSeed.exStyle &= ~WS_EX_CLIENTEDGE;
+		tempShares = cur->addChild(tableSeed);
 		tempShares->setHelpId(IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES);
 		WinUtil::makeColumns(tempShares, tempColumns, 5);
 		tempShares->onGetEmptyText([] { return T_("No temporary attachment shares are active"); });

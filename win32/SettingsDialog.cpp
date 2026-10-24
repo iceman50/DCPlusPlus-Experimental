@@ -383,10 +383,8 @@ void SettingsDialog::handleSelectionChanged() {
 		}
 
 		{
-			/* Page creation, scroll-range changes and ShowWindow each invalidate
-			 * overlapping parts of the host. Suppress those intermediate paints,
-			 * size the new page while it is hidden, and expose it only after the
-			 * ScrolledContainer has its final geometry. */
+			/* Suppress intermediate paints during page creation and layout.
+			 * Keep the new page hidden until the host's redraw is restored. */
 			dwt::util::HoldRedraw hold(pageHost);
 			auto page = ensurePage(*pageInfo);
 			if(currentPage) {
@@ -397,9 +395,13 @@ void SettingsDialog::handleSelectionChanged() {
 			page->setZOrder(HWND_TOP);
 			currentPage = page;
 			pageHost->layout();
-			page->setVisible(true);
 			updateTitle();
 		}
+		// WM_SETREDRAW temporarily removes WS_VISIBLE from the host. Showing
+		// the page under that hidden ancestor can leave native list views with
+		// stale contents from the previous page. Deliver the show transition
+		// only once the host is visible again.
+		currentPage->setVisible(true);
 		// Paint the completed subtree together after the tree notification returns.
 		// Synchronous painting here can run inside the native tree's drawing cycle.
 		pageHost->redrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
