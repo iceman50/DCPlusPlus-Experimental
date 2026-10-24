@@ -1,1 +1,0 @@
-See <https://adc.sourceforge.io/> for ADC documentation.
