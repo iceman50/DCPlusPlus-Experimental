@@ -109,8 +109,10 @@ void ToolBar::create(const Seed& cs) {
 
 Point ToolBar::getPreferredSize() {
 	// get the rect of the last item
-	RECT rect;
-	sendMessage(TB_GETITEMRECT, size() - 1, reinterpret_cast<LPARAM>(&rect));
+	RECT rect = {};
+	const auto count = size();
+	if(!count || !sendMessage(TB_GETITEMRECT, count - 1, reinterpret_cast<LPARAM>(&rect)))
+		return Point();
 	return Point(rect.right, rect.bottom - rect.top);
 }
 

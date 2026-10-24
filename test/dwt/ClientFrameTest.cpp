@@ -422,7 +422,9 @@ int dwtMain(dwt::Application& app) {
 		menu->setMenu();
 		auto rebar = window->addChild(dwt::Rebar::Seed());
 		auto toolbar = window->addChild(dwt::ToolBar::Seed());
+		check(toolbar->getPreferredSize() == dwt::Point(), "Empty toolbar returned an undefined preferred size");
 		toolbar->addButton("test", -1, L"Test", true, 0, [] { });
+		toolbar->setLayout({ "test" });
 		rebar->add(toolbar);
 		rebar->refresh();
 		RECT band;
