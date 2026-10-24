@@ -54,17 +54,13 @@ GchBuilder = SCons.Builder.Builder(
 
 
 def pch_emitter(target, source, env, emitter, gchstr):
-    emitter(target, source, env)
+    target, source = emitter(target, source, env)
 
     if gchstr in env and env[gchstr]:
-        scanner = SCons.Scanner.C.CScanner()
-        path = scanner.path(env)
-
-        deps = scanner(source[0], env, path)
-        depstrings = set([str(x) for x in deps])
-
-        if str(env[gchstr].sources[0]) in depstrings:
-            env.Depends(target, env[gchstr])
+        # The build forces this header with -include, even when the source has
+        # no matching #include. Record the dependency without rescanning source
+        # files while constructing the graph (generated sources may not exist).
+        env.Depends(target, env[gchstr])
 
     return (target, source)
 
@@ -79,7 +75,7 @@ def shared_pch_emitter(target, source, env):
 
 def generate(env):
     """
-    Add builders and construction variables for the DistTar builder.
+    Add GCC precompiled-header builders and their object dependencies.
     """
     env.Append(
         BUILDERS={
@@ -105,10 +101,10 @@ def generate(env):
 
     env[
         "GCHCOM"
-    ] = "$CXX -o $TARGET -x c++-header -c $CCFLAGS $CXXFLAGS $_CCCOMCOM $SOURCE"
+    ] = '$CXX -o "$TARGET" -x c++-header -c $CCFLAGS $CXXFLAGS $_CCCOMCOM "$SOURCE"'
     env[
         "GCHSHCOM"
-    ] = "$CXX -o $TARGET -x c++-header -c $SHCCFLAGS $SHCXXFLAGS $_CCCOMCOM $SOURCE"
+    ] = '$CXX -o "$TARGET" -x c++-header -c $SHCCFLAGS $SHCXXFLAGS $_CCCOMCOM "$SOURCE"'
     env["GCHSUFFIX"] = ".gch"
 
     for suffix in SCons.Util.Split(".c .C .cc .cxx .cpp .c++"):

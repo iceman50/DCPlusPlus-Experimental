@@ -7,6 +7,10 @@ import sys
 
 from build_util import Dev, gen_po_name
 
+# Global helpers below only need file/alias operations. Avoid probing the host
+# compiler twice before creating the explicitly selected build environment.
+DefaultEnvironment(tools=[])
+
 # TODO enable "-fdebug-types-section" when
 # <https://sourceware.org/bugzilla/show_bug.cgi?id=20645> is resolved.
 
@@ -128,7 +132,7 @@ gcc_defs = {
 
 # defEnv will hold a temporary Environment used to get options that can't be
 # set after the actual Environment has been created
-defEnv = Environment(ENV=os.environ)
+defEnv = Environment(tools=[], ENV=os.environ)
 opts = Variables("custom.py", ARGUMENTS)
 
 if sys.platform == "win32":
@@ -139,7 +143,7 @@ else:
 opts.AddVariables(
     EnumVariable(
         "tools",
-        "Toolset to compile with, default = platform default (msvc under windows)",
+        "Toolset to compile with (default: mingw on Windows, default elsewhere)",
         tooldef,
         ["mingw", "default"],
     ),
@@ -190,8 +194,7 @@ if defEnv["distro"]:
     defEnv["webhelp"] = 1
     defEnv["arch"] = "x64"
 
-# workaround for SCons 1.2 which hard-codes possible archs (only allows 'x86'
-# and 'amd64'...) TODO remove when SCons knows about all available archs
+# SCons' MSVC architecture table uses amd64, not our public x64 option.
 TARGET_ARCH = defEnv["arch"]
 if TARGET_ARCH == "x64":
     TARGET_ARCH = "amd64"
@@ -214,19 +217,6 @@ if env["distro"]:
     env["arch"] = "x64"
 
 
-def filterExternalDeps(x):
-    """filter out external dependencies from rebuild scans for speed.
-    this means that if those dependencies change, scons -c needs to be run. delete
-    .sconsign.dblite to see the effects of this if you're upgrading.
-    """
-    return [y for y in x if str(y).find("boost") == -1]
-
-
-SourceFileScanner.function[".c"].recurse_nodes = filterExternalDeps
-SourceFileScanner.function[".cpp"].recurse_nodes = filterExternalDeps
-SourceFileScanner.function[".h"].recurse_nodes = filterExternalDeps
-SourceFileScanner.function[".hpp"].recurse_nodes = filterExternalDeps
-
 dev = Dev(env)
 dev.prepare()
 
@@ -241,8 +231,6 @@ def is_test_target(target):
 
 
 dev.tests_only = bool(test_targets) and all(is_test_target(t) for t in test_targets) and not env["distro"]
-
-env.SConsignFile()
 
 env.Append(CPPPATH=["#/"])
 
@@ -397,7 +385,7 @@ pot_args = [
     "--boost",
     "-s",
     "--output=$TARGET",
-    '${list(filter(lambda _: not str(_).endswith(".o"), SOURCES))}'
+    '${list(filter(lambda _: not str(_).endswith((".o", ".obj")), SOURCES))}'
 ]
 pot_bld = Builder(
     action=Action([pot_args], "Extracting messages to $TARGET from $SOURCES")

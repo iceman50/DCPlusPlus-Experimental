@@ -48,7 +48,9 @@ if ret:
     from gen_rev_id import gen_rev_id
 
     env.Command(rev_id_path, None, Action(gen_rev_id, "Generating $TARGET"))
-    env.Depends(sources, rev_id_path)
+    # Only version.cpp consumes this header. A new Git revision must not
+    # rebuild every unrelated core translation unit.
+    env.Depends(version_object, rev_id_path)
     if not dev.tests_only:
         env.AlwaysBuild(rev_id_path)
 

@@ -104,9 +104,7 @@ class Dev:
             msvcproj_arch = self.env["arch"]
             if msvcproj_arch == "x86":
                 msvcproj_arch = "Win32"
-            # TODO SCons doesn't seem to support multiple configs per project,
-            # so each config goes to a separate directory. when this is fixed,
-            # generate all projects in the root dir.
+            # Keep project outputs aligned with the selected build configuration.
             self.msvcproj_path = (
                 "#/msvc/" + self.env["mode"] + "-" + self.env["arch"] + "/"
             )
@@ -199,14 +197,8 @@ class Dev:
         sources = self.get_sources(source_path, source_glob, recursive)
 
         if precompiled_header is not None and env["pch"] and not env["msvcproj"]:
-            # TODO we work around the 2 problems described on
-            # <http://scons.tigris.org/issues/show_bug.cgi?id=2680> - remove
-            # once not needed
-
-            for i, source in enumerate(sources):
-                if source.find(precompiled_header + ".cpp") != -1:
-                    # the PCH/GCH builder will take care of this one
-                    del sources[i]
+            sources = [source for source in sources
+                       if os.path.basename(source) != precompiled_header + ".cpp"]
 
             if "msvc" in env["TOOLS"]:
                 env["PCHSTOP"] = precompiled_header + ".h"
@@ -215,7 +207,9 @@ class Dev:
                     precompiled_header + ".cpp",
                 )
                 env["PCH"] = pch[0]
-                env["ARFLAGS"] = env["ARFLAGS"] + " " + str(pch[1])
+                # SCons emits the PCH object alongside the header. Treat it as
+                # a normal library input so quoting and dependencies are tracked.
+                sources.append(pch[1])
 
             elif "gcc" in env["TOOLS"]:
                 env["Gch"] = env.Gch(
@@ -223,16 +217,10 @@ class Dev:
                     precompiled_header + ".h",
                 )[0]
 
-                # little dance to add the pch object to include paths, while
-                # overriding the current directory
-                env["CXXCOM"] = (
-                    env["CXXCOM"]
-                    + " -include "
-                    + env.Dir(build_path).abspath
-                    + "/"
-                    + precompiled_header
-                    + ".h"
-                )
+                # Force the variant header path so GCC finds its adjacent .gch.
+                # Keep this out of CXXFLAGS to avoid including the PCH in itself.
+                env["GCHHEADER"] = env.File(build_path + precompiled_header + ".h")
+                env["CXXCOM"] += ' -include "${GCHHEADER.abspath}"'
 
         return (env, self.get_target(source_path, name, in_bin), sources)
 
@@ -255,13 +243,6 @@ class Dev:
                 msvcproj_name = os.path.basename(os.path.dirname(sources[0]))
 
             glob_inc, glob_src = msvcproj_glob(env)
-            # when there's only 1 file, SCons strips directories from the
-            # path...
-            if len(glob_inc) == 1:
-                glob_inc.append(env.File("dummy"))
-            if len(glob_src) == 1:
-                glob_src.append(env.File("dummy"))
-
             path = self.msvcproj_path + msvcproj_name + env["MSVSPROJECTSUFFIX"]
             env.Precious(path)
 
@@ -584,14 +565,6 @@ def msvcproj_workarounds(target, source, env):
     # remove SConstruct from included files since it points nowhere anyway.
     contents = re.sub(
         br'<ItemGroup>\s*<None Include="SConstruct" />\s*</ItemGroup>', b"", contents
-    )
-
-    # update the platform toolset to the VS 2026 one.
-    # TODO remove when SCons adds this.
-    contents = contents.replace(
-        b"<UseOfMfc>false</UseOfMfc>",
-        b"<UseOfMfc>false</UseOfMfc>\r\n\t\t"
-        b"<PlatformToolset>v145</PlatformToolset>",
     )
 
     f = open(str(target[0]), "wb")

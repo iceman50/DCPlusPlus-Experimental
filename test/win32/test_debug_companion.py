@@ -49,6 +49,7 @@ class DebugCompanionTest(unittest.TestCase):
 import os, sys
 sys.path.insert(0, {str(ROOT)!r})
 from build_util import Dev
+DefaultEnvironment(tools=[])
 env = Environment(tools=['mingw'], ENV=os.environ, TARGET_ARCH='amd64')
 env['tools'] = 'mingw'
 env['mode'] = {mode!r}
