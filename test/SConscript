@@ -2,6 +2,8 @@
 Import("dev source_path")
 
 import subprocess
+import locale
+import sys
 from pathlib import Path
 
 class TestBuild:
@@ -64,6 +66,13 @@ class TestBuild:
             stamp = Path(target[0].abspath)
             if stamp.exists():
                 stamp.unlink()
+            def report(output):
+                stamp.with_suffix(".log").write_bytes(output)
+                text = output.decode("utf-8", errors="replace").replace("\r\n", "\n")
+                encoding = getattr(sys.stdout, "encoding", None) or locale.getpreferredencoding(False)
+                # SCons may wrap a legacy Windows console. Keep the raw log and
+                # escape unsupported characters instead of failing a passing test.
+                print(text.encode(encoding, errors="backslashreplace").decode(encoding), end="", flush=True)
             try:
                 if runner:
                     runner(source[0].abspath)
@@ -73,13 +82,11 @@ class TestBuild:
                     completed = subprocess.run([source[0].abspath, *args], cwd=self.root,
                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                                timeout=self.timeout)
-                    stamp.with_suffix(".log").write_bytes(completed.stdout)
-                    print(completed.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n"), end="", flush=True)
+                    report(completed.stdout)
                     completed.check_returncode()
             except (OSError, subprocess.SubprocessError) as error:
                 if isinstance(error, subprocess.TimeoutExpired) and error.output:
-                    stamp.with_suffix(".log").write_bytes(error.output)
-                    print(error.output.decode("utf-8", errors="replace").replace("\r\n", "\n"), end="", flush=True)
+                    report(error.output)
                 print("FAIL:", name, error)
                 return 1
             stamp.write_text("PASSED\n", encoding="utf-8")

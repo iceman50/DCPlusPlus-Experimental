@@ -10,6 +10,7 @@
 * Show a local build number in the title bar and About dialog; serialize counter updates across build configurations and avoid renumbering application builds during test-only runs (iceman50)
 * Return a defined empty toolbar size when no native button rectangle is available; correct the client-frame fixture to install its toolbar button before checking band height (iceman50)
 * Harden DWT registry value validation and handle ownership, button image lifetimes, clipboard failure cleanup, string conversion errors and native dialog appearance ownership (iceman50)
+* Organize tests under test/<component> with a root runner, shared GoogleTest build and component selection; keep automated tests, interactive demos and benchmarks out of normal application builds and preserve Unicode test logs on legacy Windows consoles (iceman50)
 * Keep duplicate-named user matching definitions distinct when rendering and refreshing chat or previewing and exporting themes; preserve live appearance references across renaming and reordering, and retain compatibility with name-only themes (iceman50)
 * Fix hub-chat RichEdit paragraph separation, character ranges and trimming when appending batches of formatted messages (iceman50)
 * Apply chat color and font changes immediately to retained messages without requiring a scroll; preserve the selection, scroll position, read-only state and trimmed history (iceman50)
