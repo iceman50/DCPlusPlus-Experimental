@@ -13,10 +13,10 @@
 namespace dcpp {
 namespace pft {
 
-/** Private Send owns a separate receive tree, permanently excluded from all
- * share scans. Version 1 deliberately cannot save inside arbitrary share roots.
- */
+/** Private staging is excluded from sharing; published files retain a private
+ * provenance marker even when the recipient chooses another directory. */
 std::string storageRoot();
+std::string defaultDownloadPath(const std::string& name);
 bool isPrivatePath(const std::string& path);
 
 /** Startup only: old grants cannot survive restart; remove owned partials
@@ -35,11 +35,12 @@ public:
 	};
 
 	static std::shared_ptr<PrivateFile> openSource(const std::string& path);
-	static std::shared_ptr<PrivateFile> createDestination(const Metadata& metadata);
+	static std::shared_ptr<PrivateFile> createDestination(const Metadata& metadata, const std::string& target = {});
 	~PrivateFile();
 
 	uint64_t size() const;
 	std::string name() const;
+	std::string targetPath() const;
 
 	size_t read(uint64_t offset, void* buffer, size_t size);
 	void write(uint64_t offset, const void* buffer, size_t size);

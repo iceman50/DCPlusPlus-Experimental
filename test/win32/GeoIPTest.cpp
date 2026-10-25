@@ -458,7 +458,9 @@ int dwtMain(dwt::Application& app) {
 				[](HWND child, LPARAM value) -> BOOL {
 					wchar_t text[512] {};
 					GetWindowTextW(child, text, std::size(text));
-					if(std::wstring(text).find(L"Saved files:") == 0) {
+					if(std::wstring(text).find(L"Default download folder:") == 0) {
+						check(std::wstring(text).find(Text::toT(SETTING(DOWNLOAD_DIRECTORY))) != std::wstring::npos,
+							"Private Send footer does not show the configured download folder");
 						const auto dialog = GetAncestor(child, GA_ROOT);
 						RECT row {}, client {};
 						GetWindowRect(child, &row);

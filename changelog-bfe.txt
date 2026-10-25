@@ -1,5 +1,6 @@
 == 10-25-2026 - 0.8842 !!!Experimental!!! ==
 * Track generated revision and build-number changes by content through compilation and linking so rapid builds cannot retain stale version metadata (iceman50)
+* Default Private Send to the configured download directory and let recipients choose a filename and folder when accepting; support saving across local drives while retaining verification, share exclusion and protection against overwriting existing files (iceman50)
 
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
 * Honor rebar border styles when painting dark bands, removing the stray colored edge below and to the left of the toolbar theme selector (iceman50)

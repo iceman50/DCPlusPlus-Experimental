@@ -17,6 +17,7 @@
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/LoadDialog.h>
 #include <dwt/widgets/MessageBox.h>
+#include <dwt/widgets/SaveDialog.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -143,7 +144,7 @@ bool PrivateSendDlg::init() {
 	{
 		auto actions = grid->addChild(Grid::Seed(1, 4));
 		actions->column(2).mode = GridInfo::FILL;
-		primary = actions->addChild(Button::Seed(T_("&Accept")));
+		primary = actions->addChild(Button::Seed(T_("&Accept...")));
 		primary->onClicked([this] { act([this] { primaryAction(); }); });
 		secondary = actions->addChild(Button::Seed(T_("&Decline")));
 		secondary->onClicked([this] { act([this] { secondaryAction(); }); });
@@ -151,7 +152,7 @@ bool PrivateSendDlg::init() {
 		actions->addChild(Button::Seed(T_("Close")))->onClicked([this] { endDialog(IDOK); });
 	}
 
-	status = grid->addChild(Label::Seed(Text::toT("Saved files: " + dcpp::pft::storageRoot() + "Received")));
+	status = grid->addChild(Label::Seed());
 
 	refresh();
 	setTimer([this] { return refresh(); }, 1000);
@@ -178,7 +179,7 @@ void PrivateSendDlg::updateActions() {
 	const auto resume = row && row->canResume;
 	const auto active = row && row->state < State::Completed;
 
-	const auto primaryText = offered ? T_("&Accept") : resume ? T_("&Resume") : T_("&Pause");
+	const auto primaryText = offered ? T_("&Accept...") : resume ? T_("&Resume") : T_("&Pause");
 	const auto secondaryText = offered ? T_("&Decline") : T_("&Cancel transfer");
 	const auto primaryVisible = offered || pause || resume;
 	const auto changed = primary->getText() != primaryText || secondary->getText() != secondaryText ||
@@ -204,6 +205,11 @@ void PrivateSendDlg::updateActions() {
 	}
 	if(statistics->getText() != text)
 		statistics->setText(text);
+	const auto location = row && row->incoming && !row->destinationPath.empty() ?
+		str(TF_("Save to: %1%") % Text::toT(row->destinationPath)) :
+		str(TF_("Default download folder: %1%") % Text::toT(SETTING(DOWNLOAD_DIRECTORY)));
+	if(status->getText() != location)
+		status->setText(location);
 }
 
 void PrivateSendDlg::primaryAction() {
@@ -211,11 +217,10 @@ void PrivateSendDlg::primaryAction() {
 	const auto id = selected();
 	const auto row = rows[table->getSelected()];
 	if(row.incoming && row.state == State::Offered) {
-		const auto text = str(TF_("Accept \"%1%\" (%2%)?\n\nSave to: %3%\n\nFiles are checked before saving and are never opened or shared automatically.") %
-			Text::toT(row.name) % Text::toT(Util::formatBytes(row.size)) % Text::toT(dcpp::pft::storageRoot() + "Received"));
-		if(dwt::MessageBox(this).show(text, T_("Accept private file"),
-			dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) == IDYES)
-			DirectTransferManager::getInstance()->accept(id);
+		auto target = Text::toT(dcpp::pft::defaultDownloadPath(row.name));
+		if(dwt::SaveDialog(this).setTitle(str(TF_("Accept private file (%1%) - Save As") % Text::toT(Util::formatBytes(row.size))))
+			.addFilter(T_("All files"), _T("*.*")).open(target, OFN_PATHMUSTEXIST | OFN_DONTADDTORECENT))
+			DirectTransferManager::getInstance()->accept(id, Text::fromT(target));
 	} else if(row.incoming && row.state == State::Paused) {
 		DirectTransferManager::getInstance()->resume(id);
 	} else {

@@ -64,6 +64,7 @@ public:
 
 		HintedUser contact;
 		bool canResume;
+		std::string destinationPath;
 	};
 
 	static bool available() noexcept { return instance != nullptr; }
@@ -87,7 +88,7 @@ public:
 	void forgetPeer(const HintedUser& peer);
 
 	std::string offer(const HintedUser& peer, const std::string& localPath);
-	void accept(const std::string& id);
+	void accept(const std::string& id, const std::string& target = {});
 	void decline(const std::string& id);
 	void cancel(const std::string& id);
 	void pause(const std::string& id);

@@ -282,7 +282,8 @@ std::vector<DirectTransferManager::View> DirectTransferManager::snapshot(const H
 			percent,
 			session.peer,
 			session.incoming && session.state == State::Paused && !session.job.valid() &&
-				!session.data && session.file && tick < session.resumeBy && session.resumes < 3
+				!session.data && session.file && tick < session.resumeBy && session.resumes < 3,
+			session.incoming && session.file ? session.file->targetPath() : session.path
 		});
 	}
 
@@ -379,7 +380,7 @@ string DirectTransferManager::offer(const HintedUser& peer, const string& path) 
 	return session->metadata.id;
 }
 
-void DirectTransferManager::accept(const string& id) {
+void DirectTransferManager::accept(const string& id, const string& target) {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	auto session = find(id);
@@ -388,7 +389,7 @@ void DirectTransferManager::accept(const string& id) {
 	control(session->peer);
 	limitTransfers(*session);
 
-	session->file = pft::PrivateFile::createDestination(session->metadata);
+	session->file = pft::PrivateFile::createDestination(session->metadata, target);
 	session->nonce = pft::randomHex(16);
 	session->hardStop = pft::now() + transferMilliseconds;
 	session->state = State::Connecting;

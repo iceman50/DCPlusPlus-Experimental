@@ -423,7 +423,14 @@ TEST_P(PrivateTransferTest, receiver_requires_consent_and_publishes_only_verifie
 	const HintedUser unrelated(UserPtr(new User(CID::generate())), peer.hint);
 	EXPECT_TRUE(manager->snapshot(unrelated).empty());
 	EXPECT_FALSE(std::filesystem::exists(base / "PrivateSend"));
-	manager->accept(m.id);
+	const auto downloads = base / "downloads";
+	std::filesystem::create_directory(downloads);
+	SettingsManager::getInstance()->set(SettingsManager::DOWNLOAD_DIRECTORY, downloads.u8string());
+	const auto target = GetParam().second ? (base / "chosen name.txt").u8string() : (downloads / m.name).u8string();
+	manager->accept(m.id, GetParam().second ? target : std::string());
+	EXPECT_EQ(target, state(m.id).destinationPath);
+	EXPECT_TRUE(state(m.id).savedPath.empty());
+	EXPECT_FALSE(std::filesystem::exists(target));
 	auto accepted = pft::Record::decode(read(control));
 	ASSERT_EQ(pft::Op::Accept, accepted.op);
 	const auto attempt = pft::randomHex(16), secret = pft::randomHex(32);
@@ -441,6 +448,7 @@ TEST_P(PrivateTransferTest, receiver_requires_consent_and_publishes_only_verifie
 	auto receipt = pft::Record::decode(read(control));
 	EXPECT_EQ(pft::Op::Receipt, receipt.op);
 	write(control, pft::Record { pft::Op::Ack, receipt.fields }.encode());
+	EXPECT_EQ(target, state(m.id).savedPath);
 	EXPECT_EQ(body, File(state(m.id).savedPath, File::READ, File::OPEN).read());
 	EXPECT_TRUE(pft::isPrivatePath(state(m.id).savedPath));
 }

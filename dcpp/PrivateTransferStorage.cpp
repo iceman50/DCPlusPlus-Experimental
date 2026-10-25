@@ -8,6 +8,7 @@
 
 #include "File.h"
 #include "MerkleTree.h"
+#include "SettingsManager.h"
 #include "Text.h"
 #include "Util.h"
 
@@ -22,11 +23,36 @@
 namespace dcpp {
 namespace pft {
 
+namespace {
+const std::string publicationPrefix = ".DCPlusPlus-PrivateSend-";
+
+bool isPublicationStaging(const std::filesystem::path& path) {
+	for(const auto& component : path) {
+		const auto name = component.u8string();
+		if(name.size() == publicationPrefix.size() + 32 &&
+			Util::strnicmp(name, publicationPrefix, publicationPrefix.size()) == 0 &&
+			isHex(name.substr(publicationPrefix.size()), 16))
+			return true;
+	}
+	return false;
+}
+}
+
 std::string storageRoot() {
 	return Util::getPath(Util::PATH_USER_LOCAL) + "PrivateSend" PATH_SEPARATOR_STR;
 }
 
+std::string defaultDownloadPath(const std::string& name) {
+	if(!safeName(name))
+		throw ProtocolException("Invalid private transfer filename");
+	const auto& directory = SETTING(DOWNLOAD_DIRECTORY);
+	return (std::filesystem::u8path(directory.empty() ? Util::getPath(Util::PATH_DOWNLOADS) : directory) /
+		std::filesystem::u8path(name)).u8string();
+}
+
 bool isPrivatePath(const std::string& path) {
+	if(isPublicationStaging(std::filesystem::u8path(path)))
+		return true;
 	auto root = storageRoot();
 	auto within = [](const std::string& p, const std::string& r) {
 		return Util::strnicmp(p, r, r.size()) == 0 || Util::stricmp(p, r.substr(0, r.size() - 1)) == 0;
@@ -39,6 +65,8 @@ bool isPrivatePath(const std::string& path) {
 	std::error_code ec;
 	const auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(path), ec);
 	if(ec)
+		return true;
+	if(isPublicationStaging(canonical))
 		return true;
 
 	const auto canonicalRoot = std::filesystem::weakly_canonical(std::filesystem::u8path(root), ec);
@@ -159,7 +187,7 @@ void seek(HANDLE h, uint64_t pos) {
 	check(SetFilePointerEx(h, n, nullptr, FILE_BEGIN));
 }
 
-void privateDirectory(const std::wstring& path) {
+void privateDirectory(const std::wstring& path, bool createOnly = false) {
 	// Explicit account SID avoids relying on inherited ACLs from a user-selected
 	// or portable application directory. Existing directories are validated below.
 	HANDLE token = nullptr;
@@ -181,6 +209,10 @@ void privateDirectory(const std::wstring& path) {
 	SECURITY_ATTRIBUTES sa { sizeof(sa), sd, FALSE };
 	const bool made = CreateDirectoryW(path.c_str(), &sa) != 0;
 	const auto error = GetLastError();
+	if(!made && createOnly) {
+		LocalFree(sd);
+		check(false);
+	}
 	if(!made && error == ERROR_ALREADY_EXISTS) {
 		const auto attrs = GetFileAttributesW(path.c_str());
 		if(attrs == INVALID_FILE_ATTRIBUTES || !(attrs & FILE_ATTRIBUTE_DIRECTORY) || (attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
@@ -197,12 +229,33 @@ void privateDirectory(const std::wstring& path) {
 	LocalFree(sd);
 	check(made || error == ERROR_ALREADY_EXISTS);
 }
+
+DWORD CALLBACK copyProgress(LARGE_INTEGER, LARGE_INTEGER, LARGE_INTEGER, LARGE_INTEGER,
+	DWORD, DWORD, HANDLE, HANDLE, LPVOID context) {
+	try {
+		return (*static_cast<const PrivateFile::Cancelled*>(context))() ? PROGRESS_CANCEL : PROGRESS_CONTINUE;
+	} catch(...) {
+		return PROGRESS_CANCEL;
+	}
+}
+
+std::string readEvidence(const std::wstring& path) {
+	Handle file(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+	check(file.value != INVALID_HANDLE_VALUE);
+	char bytes[256];
+	DWORD count = 0;
+	check(ReadFile(file.value, bytes, sizeof(bytes), &count, nullptr));
+	return std::string(bytes, count);
+}
 }
 
 struct PrivateFile::Impl {
 	Handle handle;
 	std::vector<Handle> ancestors;
-	std::wstring path, directory, target;
+	std::wstring path, directory, target, publicationDirectory, publicationPath;
+	std::string offeredName;
+	DWORD targetVolume = 0;
 	std::mutex mutex;
 	uint64_t expected = 0;
 	bool destination = false, published = false, verified = false;
@@ -275,15 +328,27 @@ PrivateFile::~PrivateFile() {
 		}
 
 		impl->handle.close();
+		// A failed cross-volume copy can leave a partial file. Keep the parent
+		// pinned while acquiring its handle; never clean it up through a path
+		// whose directory could have been replaced after releasing our pins.
+		if(!impl->publicationPath.empty() && impl->publicationPath != impl->path) {
+			Handle partial(CreateFileW(impl->publicationPath.c_str(), DELETE | FILE_READ_ATTRIBUTES, FILE_SHARE_READ,
+				nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+			BY_HANDLE_FILE_INFORMATION info {};
+			if(partial.value != INVALID_HANDLE_VALUE && GetFileInformationByHandle(partial.value, &info) &&
+				!(info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
+				FILE_DISPOSITION_INFO discard { TRUE };
+				SetFileInformationByHandle(partial.value, FileDispositionInfo, &discard, sizeof(discard));
+			}
+		}
 		impl->ancestors.clear();
 		if(!impl->directory.empty())
 			RemoveDirectoryW(impl->directory.c_str());
 
-		// Acceptance creates a destination directory before publication. Remove
-		// that empty directory on failure too; RemoveDirectory never deletes an
-		// existing received file or any other nonempty directory.
-		if(!impl->target.empty())
-			RemoveDirectoryW(impl->target.substr(0, impl->target.find_last_of(L'\\')).c_str());
+		// Only remove staging we created, never the user's destination folder.
+		if(!impl->publicationDirectory.empty()) {
+			RemoveDirectoryW(impl->publicationDirectory.c_str());
+		}
 	}
 }
 
@@ -301,9 +366,29 @@ std::shared_ptr<PrivateFile> PrivateFile::openSource(const std::string& path) {
 	return f;
 }
 
-std::shared_ptr<PrivateFile> PrivateFile::createDestination(const Metadata& m) {
+std::shared_ptr<PrivateFile> PrivateFile::createDestination(const Metadata& m, const std::string& target) {
 	check(safeName(m.name) && isHex(m.id, 16) && m.size <= MAX_FILE_SIZE);
 	auto f = std::shared_ptr<PrivateFile>(new PrivateFile);
+	const auto selected = target.empty() ? defaultDownloadPath(m.name) : target;
+	check(safeName(selected.substr(selected.find_last_of("\\/") + 1)));
+	f->impl->target = absoluteLocal(selected);
+	const auto filename = f->impl->target.substr(f->impl->target.find_last_of(L'\\') + 1);
+	check(safeName(Text::fromT(filename)));
+	const auto attributes = GetFileAttributesW(f->impl->target.c_str());
+	if(attributes != INVALID_FILE_ATTRIBUTES)
+		throw FileException("A file or folder already exists at the selected destination. Choose another filename.");
+	check(GetLastError() == ERROR_FILE_NOT_FOUND);
+	check(!isPrivatePath(Text::fromT(f->impl->target)));
+	f->impl->ancestors = pinAncestors(f->impl->target);
+	const auto targetDirectory = f->impl->target.substr(0, f->impl->target.find_last_of(L'\\') + 1);
+	Handle targetParent(CreateFileW(targetDirectory.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
+		nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+	BY_HANDLE_FILE_INFORMATION targetInfo {};
+	check(targetParent.value != INVALID_HANDLE_VALUE && GetFileInformationByHandle(targetParent.value, &targetInfo));
+	check((targetInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(targetInfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT));
+	f->impl->targetVolume = targetInfo.dwVolumeSerialNumber;
+	f->impl->ancestors.push_back(std::move(targetParent));
+	f->impl->offeredName = m.name;
 	auto root = absoluteLocal(storageRoot());
 	if(root.back() == L'\\')
 		root.pop_back();
@@ -313,25 +398,21 @@ std::shared_ptr<PrivateFile> PrivateFile::createDestination(const Metadata& m) {
 	privateDirectory(root);
 	const auto staging = root + L"\\Pending";
 	privateDirectory(staging);
-	const auto received = root + L"\\Received";
-	privateDirectory(received);
 
 	const auto dir = staging + L"\\" + Text::toT(randomHex(16));
 	privateDirectory(dir);
 	f->impl->directory = dir;
-	f->impl->path = dir + L"\\" + Text::toT(m.name);
+	// Scan using the recipient's chosen filename and extension.
+	f->impl->path = dir + L"\\" + filename;
 	f->impl->destination = true;
-	const auto targetDirectory = received + L"\\" + Text::toT(m.id);
-	f->impl->target = targetDirectory + L"\\" + Text::toT(m.name);
-	privateDirectory(targetDirectory);
 
-	f->impl->ancestors = pinAncestors(f->impl->path);
-	auto targetPins = pinAncestors(f->impl->target);
-	for(auto& h : targetPins)
+	auto stagingPins = pinAncestors(f->impl->path);
+	for(auto& h : stagingPins)
 		f->impl->ancestors.push_back(std::move(h));
 
 	ULARGE_INTEGER free {};
 	check(GetDiskFreeSpaceExW(root.c_str(), &free, nullptr, nullptr) && free.QuadPart >= m.size + 16 * 1024 * 1024);
+	check(GetDiskFreeSpaceExW(targetDirectory.c_str(), &free, nullptr, nullptr) && free.QuadPart >= m.size + 16 * 1024 * 1024);
 
 	f->impl->handle = Handle(CreateFileW(f->impl->path.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, FILE_SHARE_READ, nullptr, CREATE_NEW,
 		FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
@@ -349,6 +430,10 @@ uint64_t PrivateFile::size() const {
 
 std::string PrivateFile::name() const {
 	return Text::fromT(impl->path.substr(impl->path.find_last_of(L'\\') + 1));
+}
+
+std::string PrivateFile::targetPath() const {
+	return Text::fromT(impl->target);
 }
 
 size_t PrivateFile::read(uint64_t offset, void* buffer, size_t bytes) {
@@ -399,7 +484,7 @@ PrivateFile::Hashes PrivateFile::hashes(uint64_t bytes, const Cancelled& cancell
 }
 
 void PrivateFile::verifyAndScan(const Metadata& m, const Cancelled& cancelled) {
-	check(impl->destination && !impl->verified && !impl->published && m.size == impl->expected && m.name == name() &&
+	check(impl->destination && !impl->verified && !impl->published && m.size == impl->expected && m.name == impl->offeredName &&
 		fileSize(impl->handle.value) == m.size && FlushFileBuffers(impl->handle.value));
 	auto h = hashes(m.size, cancelled);
 	check(h.sha256 == m.sha256 && h.tth == m.tth);
@@ -422,7 +507,7 @@ void PrivateFile::verifyAndScan(const Metadata& m, const Cancelled& cancelled) {
 	if(SUCCEEDED(status)) {
 		status = attachment->SetLocalPath(impl->path.c_str());
 		if(SUCCEEDED(status))
-			status = attachment->SetFileName(Text::toT(m.name).c_str());
+			status = attachment->SetFileName(Text::toT(name()).c_str());
 		if(SUCCEEDED(status))
 			status = attachment->SetSource(L"https://private-send.invalid/");
 		if(SUCCEEDED(status))
@@ -472,6 +557,33 @@ void PrivateFile::verifyAndScan(const Metadata& m, const Cancelled& cancelled) {
 
 	h = hashes(m.size, cancelled);
 	check(h.sha256 == m.sha256 && h.tth == m.tth && !cancelled());
+	if(reopened.dwVolumeSerialNumber != impl->targetVolume) {
+		// Prepare on the destination volume in this worker, before the manager
+		// takes its publication lock. The final rename stays atomic and cheap.
+		const auto directory = impl->target.substr(0, impl->target.find_last_of(L'\\') + 1) +
+			Text::toT(publicationPrefix + randomHex(16));
+		privateDirectory(directory, true);
+		impl->publicationDirectory = directory;
+		SetFileAttributesW(directory.c_str(), FILE_ATTRIBUTE_HIDDEN);
+		impl->publicationPath = directory + L"\\" + Text::toT(name());
+		auto pins = pinAncestors(impl->publicationPath);
+		for(auto& pin : pins)
+			impl->ancestors.push_back(std::move(pin));
+		check(CopyFileExW(impl->path.c_str(), impl->publicationPath.c_str(), copyProgress,
+			const_cast<Cancelled*>(&cancelled), nullptr, COPY_FILE_FAIL_IF_EXISTS) != 0);
+		Handle copy(CreateFileW(impl->publicationPath.c_str(), GENERIC_READ | DELETE, FILE_SHARE_READ,
+			nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+		check(copy.value != INVALID_HANDLE_VALUE);
+		regular(copy.value);
+		check(fileSize(copy.value) == m.size && readEvidence(impl->publicationPath + L":DCPlusPlus.PrivateSend") == "PFT1" &&
+			readEvidence(impl->publicationPath + L":Zone.Identifier").find("ZoneId=3") != std::string::npos);
+		FILE_DISPOSITION_INFO discard { TRUE };
+		check(SetFileInformationByHandle(impl->handle.value, FileDispositionInfo, &discard, sizeof(discard)));
+		impl->handle = std::move(copy);
+		impl->path = impl->publicationPath;
+		h = hashes(m.size, cancelled);
+		check(h.sha256 == m.sha256 && h.tth == m.tth && !cancelled());
+	}
 	impl->verified = true;
 }
 
@@ -492,6 +604,8 @@ std::string PrivateFile::publish() {
 	impl->handle.close();
 	impl->ancestors.clear();
 	RemoveDirectoryW(impl->directory.c_str());
+	if(!impl->publicationDirectory.empty())
+		RemoveDirectoryW(impl->publicationDirectory.c_str());
 
 	return Text::fromT(impl->target);
 }
@@ -513,7 +627,7 @@ std::shared_ptr<PrivateFile> PrivateFile::openSource(const std::string&) {
 	throw FileException("Private Send requires Windows");
 }
 
-std::shared_ptr<PrivateFile> PrivateFile::createDestination(const Metadata&) {
+std::shared_ptr<PrivateFile> PrivateFile::createDestination(const Metadata&, const std::string&) {
 	throw FileException("Private Send requires Windows");
 }
 
@@ -522,6 +636,10 @@ uint64_t PrivateFile::size() const {
 }
 
 std::string PrivateFile::name() const {
+	return {};
+}
+
+std::string PrivateFile::targetPath() const {
 	return {};
 }
 
