@@ -38,6 +38,9 @@ param(
 	[ValidateSet("Auto", "SCons", "CMake")]
 	[string]$BuildSystem = "Auto",
 
+	[ValidateSet("default", "nehalem", "x86-64-v2", "x86-64-v3")]
+	[string]$CpuTarget = "default",
+
 	[string]$OutputDirectory,
 
 	[string]$SConsCommand = "scons",
@@ -124,9 +127,15 @@ function Read-BuildSystem {
 
 function Get-BuildDirectory {
 	param([string]$RepoRoot, [string]$Mode)
-	if($BuildSystem -eq "SCons") { return Join-Path $RepoRoot "build\$Mode-mingw-x64" }
+	$suffix = Get-CpuSuffix
+	if($BuildSystem -eq "SCons") { return Join-Path $RepoRoot "build\$Mode-mingw-x64$suffix" }
 	if($Compiler -eq "MSVC") { return Join-Path $RepoRoot "build\cmake\msvc" }
-	return Join-Path $RepoRoot "build\cmake\mingw-$Mode"
+	return Join-Path $RepoRoot "build\cmake\mingw-$Mode$suffix"
+}
+
+function Get-CpuSuffix {
+	if($CpuTarget -in @("default", "nehalem")) { return "" }
+	return "-$CpuTarget"
 }
 
 function Get-BinaryDirectory {
@@ -296,11 +305,12 @@ function Invoke-DistBuild {
 	)
 
 	Write-Host ""
-	Write-Host "Building $Mode x64 $Compiler with $BuildSystem..."
+	Write-Host "Building $Mode x64 $Compiler with $BuildSystem (CPU: $CpuTarget)..."
 	Push-Location -LiteralPath $RepoRoot
 	try {
 		if($BuildSystem -eq "SCons") {
-			$sconsArgs = @("tools=mingw", "arch=x64", "mode=$Mode", "-j$Jobs", "build/$Mode-mingw-x64/bin/DCPlusPlus.exe")
+			$suffix = Get-CpuSuffix
+			$sconsArgs = @("tools=mingw", "arch=x64", "mode=$Mode", "cpu=$CpuTarget", "-j$Jobs", "build/$Mode-mingw-x64$suffix/bin/DCPlusPlus.exe")
 			Write-Host "$SConsCommand $($sconsArgs -join ' ')"
 			& $SConsCommand @sconsArgs
 			if($LASTEXITCODE -ne 0) { throw "SCons failed for $Mode with exit code $LASTEXITCODE." }
@@ -308,6 +318,7 @@ function Invoke-DistBuild {
 			$preset = if($Compiler -eq "MSVC") { "msvc" } else { "mingw-$Mode" }
 			$configureArgs = @("-S", (Join-Path $RepoRoot "cmake"), "--preset", $preset)
 			$buildDirectory = Get-BuildDirectory -RepoRoot $RepoRoot -Mode $Mode
+			$configureArgs += @("-B", $buildDirectory, "-DDCPP_CPU_TARGET=$CpuTarget")
 			if($Compiler -eq "MinGW" -and -not (Test-Path -LiteralPath (Join-Path $buildDirectory "CMakeCache.txt"))) {
 				$ninja = Get-Command ninja -ErrorAction SilentlyContinue
 				if($null -ne $ninja) {
@@ -342,7 +353,8 @@ function New-DistPackage {
 		[bool]$OverwriteExisting
 	)
 
-	$buildName = "$Mode-$Compiler-$BuildSystem-x64"
+	$cpuSuffix = Get-CpuSuffix
+	$buildName = "$Mode-$Compiler-$BuildSystem-x64$cpuSuffix"
 	$binDir = Get-BinaryDirectory -RepoRoot $RepoRoot -Mode $Mode
 	$exePath = Join-Path $binDir "DCPlusPlus.exe"
 	$pdbPath = Join-Path $binDir "DCPlusPlus.pdb"
@@ -371,7 +383,7 @@ function New-DistPackage {
 
 	$configurationName = Get-PackageConfigurationName -Mode $Mode
 	$runtimeName = if($Compiler -eq "MinGW") { "MSVCRT" } elseif($Mode -eq "debug") { "DebugCRT" } else { "UCRT" }
-	$zipName = "DCPlusPlus-Experimental-$VersionNumber-$CompilerName-$configurationName-$runtimeName-$BuildSystem-$GitRevision-$BuildTimestamp.zip"
+	$zipName = "DCPlusPlus-Experimental-$VersionNumber-$CompilerName-$configurationName-$runtimeName-$BuildSystem$cpuSuffix-$GitRevision-$BuildTimestamp.zip"
 	$zipPath = Join-Path $OutputRoot $zipName
 	$stageDir = Join-Path $OutputRoot ".stage-$buildName-$([Guid]::NewGuid().ToString('N'))"
 	$temporaryZip = "$stageDir.zip"
@@ -408,6 +420,7 @@ function New-DistPackage {
 }
 
 $repoRoot = Get-RepositoryRoot
+$CpuTarget = $CpuTarget.ToLowerInvariant()
 $interactive = -not $PSBoundParameters.ContainsKey("Configuration")
 
 if([string]::IsNullOrWhiteSpace($Compiler)) {
@@ -423,6 +436,9 @@ if($BuildSystem -eq "Auto") {
 }
 if($Compiler -eq "MSVC" -and $BuildSystem -ne "CMake") {
 	throw "MSVC distribution builds use CMake. Select -BuildSystem CMake or omit -BuildSystem."
+}
+if($Compiler -eq "MSVC" -and $CpuTarget -ne "default") {
+	throw "-CpuTarget requires MinGW. Use -CpuTarget default for MSVC."
 }
 
 $defaultOutputDirectory = Join-Path $repoRoot "dist"

@@ -11,6 +11,8 @@ class Dev:
         self.build_root = "#/build/" + env["mode"] + "-" + env["tools"]
         if env["arch"] != "x86":
             self.build_root += "-" + env["arch"]
+        if env.get("cpu", "default") not in ("default", "nehalem"):
+            self.build_root += "-" + env["cpu"]
         self.build_root += "/"
 
     def prepare(self):

@@ -171,6 +171,8 @@ opts.AddVariables(
         'May be forced to nothing via "prefix=".',
     ),
     EnumVariable("arch", "Target architecture", "x64", ["x86", "x64"]),
+    EnumVariable("cpu", "Optional GCC x64 instruction baseline", "default",
+                 ["default", "nehalem", "x86-64-v2", "x86-64-v3"]),
     BoolVariable("msvcproj", "Build MSVC project files", "no"),
     ("test_filter", "GoogleTest filter for explicitly requested tests", "*"),
     ("test_timeout", "Maximum seconds per automated test executable", "600"),
@@ -216,6 +218,10 @@ if env["distro"]:
     env["webhelp"] = 1
     env["arch"] = "x64"
 
+
+if env["cpu"] != "default" and (env["arch"] != "x64" or "gcc" not in env["TOOLS"]):
+    print("cpu requires a GCC x64 build; use cpu=default for other targets.")
+    Exit(1)
 
 dev = Dev(env)
 dev.prepare()
@@ -267,7 +273,8 @@ if "gcc" in env["TOOLS"]:
     if env["arch"] == "x86":
         env.Append(CCFLAGS=["-march=nocona", "-mtune=generic"])  # Through SSE3
     elif env["arch"] == "x64":
-        env.Append(CCFLAGS=["-march=nehalem", "-mtune=generic"])  # Through SSE4
+        cpu = "nehalem" if env["cpu"] == "default" else env["cpu"]
+        env.Append(CCFLAGS=["-march=" + cpu, "-mtune=generic"])
 
 if "msvc" in env["TOOLS"]:
     env["pch"] = True

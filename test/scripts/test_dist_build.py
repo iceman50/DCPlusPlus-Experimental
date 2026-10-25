@@ -53,11 +53,12 @@ $global:LASTEXITCODE = 0
         path.write_text(contents, encoding="utf-8")
         return path
 
-    def outputs(self, backend, compiler, mode):
+    def outputs(self, backend, compiler, mode, cpu="default"):
+        suffix = "" if cpu in ("default", "nehalem") else "-" + cpu
         if backend == "SCons":
-            directory = f"build/{mode}-mingw-x64/bin"
+            directory = f"build/{mode}-mingw-x64{suffix}/bin"
         else:
-            build = "build/cmake/" + ("msvc" if compiler == "MSVC" else "mingw-" + mode)
+            build = "build/cmake/" + ("msvc" if compiler == "MSVC" else "mingw-" + mode) + suffix
             directory = build + "/bin/" + mode.title()
             identity = "MSVC" if compiler == "MSVC" else "GNU"
             version = "19.51.12345.0" if compiler == "MSVC" else "13.2.0"
@@ -111,7 +112,7 @@ $global:LASTEXITCODE = 0
         self.run_builder("-Configuration", "Both", "-CompilerLabel", "MinGW-fixture", "-Jobs", "3")
         self.check_packages("SCons", "MinGW", ("debug", "release"))
         commands = (self.root / "commands.txt").read_text()
-        self.assertIn("tools=mingw|arch=x64|mode=debug|-j3|build/debug-mingw-x64/bin/DCPlusPlus.exe", commands)
+        self.assertIn("tools=mingw|arch=x64|mode=debug|cpu=default|-j3|build/debug-mingw-x64/bin/DCPlusPlus.exe", commands)
         self.assertIn("mode=release", commands)
 
     def test_cmake_mingw_both_configurations(self):
@@ -131,6 +132,36 @@ $global:LASTEXITCODE = 0
         self.assertIn("--config|Debug", commands)
         self.assertIn("--config|Release", commands)
         self.assertTrue(all("MSVC-19.51.12345.0" in p.name for p in (self.root / "dist").glob("*.zip")))
+
+    def test_custom_cpu_builds_use_separate_outputs_and_package_labels(self):
+        for backend, cpu in (("SCons", "x86-64-v3"), ("CMake", "x86-64-v2")):
+            with self.subTest(backend=backend):
+                binary = self.outputs(backend, "MinGW", "release", cpu)
+                (binary / "DCPlusPlus.exe").write_text(cpu)
+                self.run_builder("-Configuration", "Release", "-BuildSystem", backend,
+                                 "-CpuTarget", cpu.upper(), "-CompilerLabel", "fixture")
+                commands = (self.root / "commands.txt").read_text()
+                if backend == "SCons":
+                    self.assertIn("cpu=" + cpu, commands)
+                    self.assertIn("build/release-mingw-x64-" + cpu + "/bin/DCPlusPlus.exe", commands)
+                else:
+                    self.assertIn("-DDCPP_CPU_TARGET=" + cpu, commands)
+                    self.assertIn("-B|" + str(self.root / ("build/cmake/mingw-release-" + cpu)), commands)
+                archive, = (self.root / "dist").glob("*" + cpu + "*.zip")
+                with zipfile.ZipFile(archive) as package:
+                    self.assertEqual(package.read("DCPlusPlus.exe").decode(), cpu)
+
+    def test_custom_cpu_no_build_never_falls_back_to_default_outputs(self):
+        output = self.run_builder("-Configuration", "Release", "-CpuTarget", "x86-64-v3",
+                                  "-NoBuild", "-CompilerLabel", "fixture", success=False)
+        self.assertIn("x86-64-v3", output)
+        self.assertFalse((self.root / "dist").exists())
+
+    def test_rejects_msvc_cpu_override(self):
+        output = self.run_builder("-Configuration", "Release", "-Compiler", "MSVC",
+                                  "-CpuTarget", "x86-64-v3", success=False)
+        self.assertIn("-CpuTarget requires MinGW", output)
+        self.assertFalse((self.root / "commands.txt").exists())
 
     def test_interactive_msvc_reprompts_invalid_choices(self):
         self.run_builder("-NoBuild", answers="invalid\n2\ninvalid\nrelease\n")
@@ -183,6 +214,7 @@ foreach($definition in $ast.EndBlock.Statements) {
 }
 $Compiler = 'MSVC'
 $BuildSystem = 'CMake'
+$CpuTarget = 'default'
 if($Action -eq 'fail') {
     function Compress-Archive { throw 'Simulated compression failure' }
 }

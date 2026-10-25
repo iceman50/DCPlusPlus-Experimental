@@ -46,6 +46,29 @@ class BuildSystemTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, (result.stdout + result.stderr).decode(errors="replace"))
         return (result.stdout + result.stderr).decode(errors="replace")
 
+    def test_custom_cpu_outputs_do_not_replace_normal_builds(self):
+        with self.workspace() as directory:
+            script = MINGW.replace("dev = Dev(env)", "env['cpu'] = ARGUMENTS.get('cpu', 'default')\ndev = Dev(env)")
+            self.write(directory, "SConstruct", script + "\nobj = env.Object(dev.get_build_path('probe.o'), 'probe.cpp')\nDefault(env.Program(dev.get_target('sample/', 'probe'), obj))\n")
+            self.write(directory, "probe.cpp", "int main() { return 1; }\n")
+            self.build(directory)
+            normal = directory / "build/release-mingw-x64/bin/probe.exe"
+            before = normal.read_bytes()
+            self.write(directory, "probe.cpp", "int main() { return 2; } // custom build\n")
+            self.build(directory, "cpu=x86-64-v3")
+            custom = directory / "build/release-mingw-x64-x86-64-v3/bin/probe.exe"
+            self.assertEqual(subprocess.run([str(custom)], timeout=10).returncode, 2)
+            self.assertEqual(normal.read_bytes(), before)
+            self.assertEqual(subprocess.run([str(normal)], timeout=10).returncode, 1)
+
+    def test_rejects_invalid_cpu_and_x86_override(self):
+        for args, message in ((["arch=x64", "cpu=typo"], "Invalid value"),
+                              (["arch=x86", "cpu=x86-64-v3"], "cpu requires a GCC x64 build")):
+            result = subprocess.run([sys.executable, "-m", "SCons", "-Q", "-n",
+                                     "tools=mingw", *args], cwd=ROOT, capture_output=True, timeout=60)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(message, (result.stdout + result.stderr).decode(errors="replace"))
+
     def test_forced_pch_generated_source_and_nested_header_rebuild(self):
         with self.workspace() as directory:
             self.write(directory, "SConstruct", MINGW + f"""
