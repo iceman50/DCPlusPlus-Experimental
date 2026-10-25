@@ -22,7 +22,7 @@ if not env["msvcproj"]:
     from gen_build_number import gen_build_number
 
     build_number = env.Command(
-        dev.get_build_path("dcpp/version-build.inc"),
+        env.File(dev.get_build_path("dcpp/version-build.inc")),
         [],
         Action(gen_build_number, "Generating local build number: $TARGET"),
     )
@@ -35,19 +35,27 @@ if not env["msvcproj"]:
     # Only this object includes the generated number. Keep its include path
     # separate so numbering a build does not recompile the rest of the client.
     version_env = env.Clone()
+    # Generated metadata may change more than once in the filesystem timestamp
+    # interval. Compare content along the version -> archive -> executable chain.
+    version_env.Decider("content")
     version_env.Append(CPPPATH=[env.Dir(dev.get_build_path("dcpp/"))])
     version_source = dev.get_build_path("dcpp/version.cpp")
     version_object = version_env.Object(version_source)
+    for node in build_number + version_object:
+        env.File(node.abspath).Decider(version_env.decide_source)
     env.Depends(version_object, build_number)
     sources = [s for s in sources if env.File(s) != env.File(version_source)] + version_object
 
 ret = dev.build_lib(env, target, sources, dev.cpp_lib)
 
 if ret:
+    for node in ret:
+        env.File(node.abspath).Decider(version_env.decide_source)
     rev_id_path = "#/dcpp/version-rev-id.inc"
     from gen_rev_id import gen_rev_id
 
     env.Command(rev_id_path, None, Action(gen_rev_id, "Generating $TARGET"))
+    env.File(rev_id_path).Decider(version_env.decide_source)
     # Only version.cpp consumes this header. A new Git revision must not
     # rebuild every unrelated core translation unit.
     env.Depends(version_object, rev_id_path)

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -114,27 +115,48 @@ Return('ret')
             self.write(directory, "SConstruct", MINGW + f"""
 sys.path.insert(0, {str(ROOT / 'dcpp')!r})
 import gen_rev_id
+import gen_build_number
 from pathlib import Path
 gen_rev_id.get_rev_id = lambda env: Path(env.File('#/revision.txt').abspath).read_text()
+# Preserve timestamps deliberately, reproducing rapid builds deterministically.
+stamp = int(Path('timestamp.txt').read_text())
+def fixed_timestamp(generator):
+    def generate(target, source, env):
+        result = generator(target, source, env)
+        os.utime(str(target[0]), (stamp, stamp))
+        return result
+    return generate
+gen_rev_id.gen_rev_id = fixed_timestamp(gen_rev_id.gen_rev_id)
+gen_build_number.gen_build_number = fixed_timestamp(gen_build_number.gen_build_number)
 dev.tests_only = False
 dev.add_dcpp = dev.add_intl = dev.add_openssl = lambda env: None
-Default(dev.build('dcpp/'))
+library = dev.build('dcpp/')
+env.AddPostAction(dev.get_build_path('dcpp/version.o'),
+    lambda target, source, env: os.utime(str(target[0]), (stamp, stamp)))
+env.AddPostAction(library,
+    lambda target, source, env: os.utime(str(target[0]), (stamp, stamp)))
+Default(env.Program('probe', ['main.cpp', library]))
 """)
+            self.write(directory, "timestamp.txt", str(int(time.time()) + 60))
+            self.write(directory, "main.cpp", '#include <cstdio>\nconst char* revision(); int build();\n'
+                       'int main() { std::printf("%s:%d", revision(), build()); }\n')
             self.write(directory, "dcpp/version.cpp",
                        '#include "version-rev-id.inc"\n#include "version-build.inc"\n'
-                       'const char* revision() { return DCPP_REVISION; }\n')
+                       'const char* revision() { return DCPP_REVISION; }\n'
+                       'int build() { return DCPP_BUILD_NUMBER; }\n')
             self.write(directory, "dcpp/unrelated.cpp", 'int unrelated() { return 1; }\n')
             shutil.copyfile(ROOT / "dcpp/SConscript", directory / "dcpp/SConscript")
             self.write(directory, "revision.txt", "first")
             self.build(directory)
             core = directory / "build/release-mingw-x64/dcpp"
             before = (core / "unrelated.o").stat().st_mtime_ns
-            version_before = (core / "version.o").stat().st_mtime_ns
-            self.write(directory, "revision.txt", "second")
+            probe = directory / "probe.exe"
+            self.assertEqual(subprocess.check_output([str(probe)], text=True), "first:1")
+            self.write(directory, "revision.txt", "other")
             self.build(directory)
             self.assertEqual(before, (core / "unrelated.o").stat().st_mtime_ns)
-            self.assertNotEqual(version_before, (core / "version.o").stat().st_mtime_ns)
-            self.assertIn('"second"', (directory / "dcpp/version-rev-id.inc").read_text())
+            self.assertEqual(subprocess.check_output([str(probe)], text=True), "other:2")
+            self.assertIn('"other"', (directory / "dcpp/version-rev-id.inc").read_text())
             self.assertEqual((directory / ".build-number").read_text().strip(), "2")
 
     def test_single_file_msvc_projects_use_selected_toolset(self):
