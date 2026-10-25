@@ -36,6 +36,7 @@
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Pen.h>
 #include <dwt/widgets/Frame.h>
+#include <dwt/widgets/ToolBar.h>
 
 namespace dwt {
 
@@ -89,7 +90,9 @@ void Rebar::add(Widget* w, unsigned style, const tstring& text) {
 	if(size() == 0)
 		setVisible(true);
 
-	w->addRemoveStyle(CCS_NORESIZE, true);
+	// CCS_NORESIZE shares its bit with CBS_OWNERDRAWFIXED in a combo box.
+	// Only toolbars understand this common-control layout flag.
+	if(dynamic_cast<ToolBar*>(w)) w->addRemoveStyle(CCS_NORESIZE, true);
 
 	REBARBANDINFO info = { sizeof(REBARBANDINFO), RBBIM_CHILD | RBBIM_CHILDSIZE | RBBIM_STYLE, style };
 
@@ -269,7 +272,9 @@ void Rebar::handlePainting(NMCUSTOMDRAW& data) {
 				DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 		}
 
-		if((info.fStyle & RBBS_CHILDEDGE) || index + 1 < count) {
+		// An adjacent band alone does not request a border. With clipped child
+		// windows, that extra edge leaves a colored fragment beside the child.
+		if((info.fStyle & RBBS_CHILDEDGE) || (style & RBS_BANDBORDERS)) {
 			drawBandBorder(canvas, band, palette.border);
 		}
 	}

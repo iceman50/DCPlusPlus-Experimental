@@ -5,6 +5,7 @@
 #include <dwt/widgets/TextBox.h>
 #include <dwt/widgets/Rebar.h>
 #include <dwt/widgets/ToolBar.h>
+#include <dwt/widgets/ComboBox.h>
 #include <dwt/widgets/StatusBar.h>
 #include <dwt/resources/Bitmap.h>
 #include <dwt/resources/Icon.h>
@@ -426,6 +427,22 @@ int dwtMain(dwt::Application& app) {
 		toolbar->addButton("test", -1, L"Test", true, 0, [] { });
 		toolbar->setLayout({ "test" });
 		rebar->add(toolbar);
+		dwt::ComboBox::Seed themeSeed;
+		themeSeed.style = (themeSeed.style & ~CBS_DROPDOWN) | CBS_DROPDOWNLIST;
+		auto theme = window->addChild(themeSeed);
+		theme->addValue(L"Theme one");
+		theme->addValue(L"Theme two");
+		theme->setSelected(0);
+		const auto comboStyle = GetWindowLongPtr(theme->handle(), GWL_STYLE);
+		rebar->add(theme, RBBS_NOGRIPPER, L"Theme");
+		check(GetWindowLongPtr(theme->handle(), GWL_STYLE) == comboStyle, "Rebar changed combo-box behavior flags");
+		unsigned selections = 0;
+		theme->onSelectionChanged([&] { ++selections; });
+		theme->setSelected(1);
+		SendMessage(rebar->handle(), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(theme->handle()), CBN_SELENDOK), reinterpret_cast<LPARAM>(theme->handle()));
+		check(selections == 1 && theme->getSelected() == 1, "Rebar failed to route a committed theme selection");
+		SendMessage(rebar->handle(), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(theme->handle()), CBN_SELENDCANCEL), reinterpret_cast<LPARAM>(theme->handle()));
+		check(selections == 1, "Cancelled combo-box selection triggered a theme change");
 		rebar->refresh();
 		RECT band;
 		GetWindowRect(rebar->handle(), &band);

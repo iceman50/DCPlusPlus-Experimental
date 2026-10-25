@@ -195,6 +195,21 @@ int dwtMain(dwt::Application& app) {
 		check(imported[2].style.textColor == -1, "Missing occurrence reused a sibling's appearance");
 		check(imported[1].rules == rulesBefore && imported[1].styleId == idBefore &&
 			imported[1].isSet(UserMatch::IGNORE_CHAT | UserMatch::GENERATED), "Theme import changed matching rules or identity");
+		const auto previousMode = SETTING(THEME_MODE);
+		UserMatchManager::getInstance()->setList(std::vector<UserMatch>(imported), false);
+		ThemeManager::apply(duplicateTheme, false);
+		check(ThemeManager::isCurrent(duplicateTheme), "Applied theme was not recognized as current");
+		const auto appliedMatches = UserMatchManager::getInstance()->getList();
+		check(appliedMatches[1].rules == rulesBefore && appliedMatches[1].styleId == idBefore &&
+			appliedMatches[1].isSet(UserMatch::IGNORE_CHAT | UserMatch::GENERATED), "Live theme application changed matching rules");
+		settings->set(SettingsManager::CHAT_TEXT_COLOR, duplicateTheme.colors.at(SettingsManager::CHAT_TEXT_COLOR) ^ 1);
+		check(!ThemeManager::isCurrent(duplicateTheme), "Custom chat appearance was mistaken for an unchanged preset");
+		ThemeManager::apply(duplicateTheme, false);
+		settings->set(SettingsManager::THEME_MODE, SettingsManager::THEME_LIGHT);
+		check(!ThemeManager::isCurrent(duplicateTheme), "Native light mode was mistaken for a custom palette");
+		UserMatchManager::getInstance()->setList({ alice, bob }, false);
+		ThemeManager::apply(duplicates, false);
+		settings->set(SettingsManager::THEME_MODE, previousMode);
 		auto nameOnly = duplicates;
 		nameOnly.userStyles.clear();
 		nameOnly.userStyles[{ "Friends", 0 }] = alice.style;

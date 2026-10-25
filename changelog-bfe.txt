@@ -2,6 +2,10 @@
 * Track generated revision and build-number changes by content through compilation and linking so rapid builds cannot retain stale version metadata (iceman50)
 
 == 10-24-2026 - 0.8842 !!!Experimental!!! ==
+* Honor rebar border styles when painting dark bands, removing the stray colored edge below and to the left of the toolbar theme selector (iceman50)
+* Match the toolbar theme dropdown and unused tab-strip space to the surrounding dark background, including after live theme changes (iceman50)
+* Host the toolbar theme label and dropdown in one DPI-aware layout container instead of a native rebar caption, keeping their background, alignment and sizing together across theme/font changes (iceman50)
+* Add a main-toolbar theme selector that applies installed palettes, fonts and chat styles immediately, preserves user-matching rules, saves the chosen appearance and reflects custom changes made in Settings; avoid applying toolbar-only style flags to combobox rebar bands (iceman50)
 * Add optional x86-64-v2/v3 CPU targets for MinGW x64 test builds in SCons, CMake and the distribution builder; preserve the Nehalem default and isolate custom distribution outputs and package names (iceman50)
 * Include the generated build number in the client version advertised to ADC and NMDC hubs, using VERSION-BUILD in ADC VE and the NMDC <++ V:...> tag (iceman50)
 * Make the distribution builder interactive for MinGW/MSVC and Debug/Release/Both, support isolated CMake builds alongside the existing MinGW SCons route, and label packages by compiler, runtime and build system while retaining command-line automation (iceman50)

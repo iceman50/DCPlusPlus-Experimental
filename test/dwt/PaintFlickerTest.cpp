@@ -3,6 +3,7 @@
 #include <dwt/widgets/Tree.h>
 #include <dwt/widgets/Rebar.h>
 #include <dwt/widgets/ToolBar.h>
+#include <dwt/widgets/ComboBox.h>
 #include <dwt/resources/Bitmap.h>
 #include <cstdio>
 #include <stdexcept>
@@ -46,6 +47,41 @@ void settle(dwt::Application& app) {
 	for(unsigned i = 0; app.dispatch(); ++i) check(i < 2000, "Paint queue did not settle");
 }
 
+void checkComboBand(dwt::Rebar* rebar, dwt::ComboBox* combo, COLORREF background) {
+	RECT bounds {}, child {};
+	GetClientRect(rebar->handle(), &bounds);
+	GetWindowRect(combo->handle(), &child);
+	MapWindowPoints(nullptr, rebar->handle(), reinterpret_cast<POINT*>(&child), 2);
+	COMBOBOXINFO info { sizeof(info) };
+	GetComboBoxInfo(combo->handle(), &info);
+	auto screen = GetDC(rebar->handle());
+	auto memory = CreateCompatibleDC(screen);
+	dwt::Bitmap bitmap(CreateCompatibleBitmap(screen, bounds.right, bounds.bottom));
+	auto previous = SelectObject(memory, bitmap.handle());
+	SendMessage(rebar->handle(), WM_PRINT, reinterpret_cast<WPARAM>(memory), PRF_CLIENT | PRF_CHILDREN | PRF_ERASEBKGND);
+	const auto color = GetPixel(memory, child.left + 5, child.top + info.rcButton.bottom + 5);
+	SelectObject(memory, previous);
+	DeleteDC(memory);
+	ReleaseDC(rebar->handle(), screen);
+	check(color == background, "Combo band painted a surface-colored block below the closed dropdown");
+}
+
+void checkBandEdge(dwt::Rebar* rebar, COLORREF expected) {
+	RECT bounds {}, band {};
+	GetClientRect(rebar->handle(), &bounds);
+	check(rebar->sendMessage(RB_GETRECT, 0, reinterpret_cast<LPARAM>(&band)), "Cannot read toolbar band bounds");
+	auto screen = GetDC(rebar->handle());
+	auto memory = CreateCompatibleDC(screen);
+	dwt::Bitmap bitmap(CreateCompatibleBitmap(screen, bounds.right, bounds.bottom));
+	auto previous = SelectObject(memory, bitmap.handle());
+	SendMessage(rebar->handle(), WM_PRINTCLIENT, reinterpret_cast<WPARAM>(memory), PRF_CLIENT);
+	const auto color = GetPixel(memory, band.right - 2, band.bottom - 1);
+	SelectObject(memory, previous);
+	DeleteDC(memory);
+	ReleaseDC(rebar->handle(), screen);
+	check(color == expected, "Rebar band edge does not respect its border style");
+}
+
 }
 
 int dwtMain(dwt::Application& app) {
@@ -67,13 +103,28 @@ int dwtMain(dwt::Application& app) {
 		auto toolbar = dwt::WidgetCreator<dwt::ToolBar>::create(rebar, dwt::ToolBar::Seed());
 		toolbar->addButton("test", -1, L"Test", true, 0, [] { });
 		toolbar->setLayout({ "test" });
+		toolbar->sendMessage(TB_SETBUTTONSIZE, 0, MAKELPARAM(100, 64));
 		rebar->add(toolbar);
+		auto comboSeed = dwt::ComboBox::Seed();
+		comboSeed.style = (comboSeed.style & ~CBS_DROPDOWN) | CBS_DROPDOWNLIST;
+		auto combo = dwt::WidgetCreator<dwt::ComboBox>::create(rebar, comboSeed);
+		combo->addValue(L"Theme test");
+		combo->setSelected(0);
+		rebar->add(combo, RBBS_NOGRIPPER, L"Theme");
 		rebar->refresh();
 		check(GetWindowLongPtr(tree->handle(), GWL_STYLE) & WS_CLIPCHILDREN,
 			"Tree wrapper background can erase over the native tree and header");
 		settle(app);
 		checkPaint(tree->treeHandle(), app.getAppearance().getPalette().background, true);
 		checkPaint(rebar->handle(), app.getAppearance().getPalette().background, true);
+		checkComboBand(rebar, combo, app.getAppearance().getPalette().background);
+		checkBandEdge(rebar, app.getAppearance().getPalette().background);
+		rebar->addRemoveStyle(RBS_BANDBORDERS, true);
+		rebar->refresh();
+		checkBandEdge(rebar, app.getAppearance().getPalette().border);
+		rebar->addRemoveStyle(RBS_BANDBORDERS, false);
+		rebar->refresh();
+		checkBandEdge(rebar, app.getAppearance().getPalette().background);
 		// Exercise resizing, header layout, selection and repeated theme changes.
 		tree->addColumn(L"Pages", 160, dwt::Column::LEFT);
 		for(auto mode : { dwt::Appearance::Mode::Light, dwt::Appearance::Mode::Dark,
@@ -87,7 +138,10 @@ int dwtMain(dwt::Application& app) {
 				settle(app);
 				const bool dark = mode == dwt::Appearance::Mode::Dark;
 				checkPaint(tree->treeHandle(), dark ? app.getAppearance().getPalette().background : GetSysColor(COLOR_WINDOW), true);
-				if(dark) checkPaint(rebar->handle(), app.getAppearance().getPalette().background, true);
+				if(dark) {
+					checkPaint(rebar->handle(), app.getAppearance().getPalette().background, true);
+					checkComboBand(rebar, combo, app.getAppearance().getPalette().background);
+				}
 			}
 		}
 		const auto explicitBackground = RGB(43, 51, 67);

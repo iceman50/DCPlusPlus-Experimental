@@ -20,6 +20,7 @@
 
 #include "GeoIPUpdate.h"
 #include "PrivateSendNotifications.h"
+#include "ThemeManager.h"
 #include <atomic>
 
 #include <dcpp/forward.h>
@@ -130,6 +131,9 @@ private:
 	Menu* viewMenu;
 	TransferView* transfers;
 	ToolBarPtr toolbar;
+	ComboBoxPtr themeSelector = nullptr;
+	GridPtr themeBand = nullptr;
+	std::vector<ThemeManager::Theme> themePresets;
 	TabViewPtr tabs;
 
 	typedef unordered_map<string, unsigned> ViewIndexes;
@@ -165,6 +169,10 @@ private:
 	void initWindow();
 	void initMenu();
 	void initToolbar();
+	void initThemeSelector();
+	void reloadThemes();
+	void applyTheme(const ThemeManager::Theme& theme);
+	void refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont);
 	void initStatusBar();
 	void initTabs();
 	void initTransfers();

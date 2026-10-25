@@ -40,6 +40,8 @@ public:
 	static const std::vector<int>& fontSettings();
 	static const std::vector<int>& colorSettings();
 	static Theme capture();
+	static void apply(const Theme& theme, bool updateUsers = true);
+	static bool isCurrent(const Theme& theme);
 
 	static std::string getDirectory();
 	static std::vector<Theme> getThemes();

@@ -169,6 +169,47 @@ ThemeManager::Theme ThemeManager::capture() {
 	return theme;
 }
 
+void ThemeManager::apply(const Theme& theme, bool updateUsers) {
+	auto settings = SettingsManager::getInstance();
+	auto matches = UserMatchManager::getInstance()->getList();
+	theme.applyUserStyles(matches);
+	for(const auto& item : theme.fonts) {
+		const auto key = static_cast<SettingsManager::StrSetting>(item.first);
+		if(item.second.empty()) settings->unset(key);
+		else settings->set(key, item.second);
+	}
+	for(const auto& item : theme.colors) {
+		const auto key = static_cast<SettingsManager::IntSetting>(item.first);
+		if(item.second < 0) settings->unset(key);
+		else settings->set(key, item.second);
+	}
+	// Named palettes use DWT's custom renderer, including palettes with light colors.
+	settings->set(SettingsManager::THEME_MODE, SettingsManager::THEME_DARK);
+	UserMatchManager::getInstance()->setList(std::move(matches), updateUsers);
+}
+
+bool ThemeManager::isCurrent(const Theme& theme) {
+	if(SETTING(THEME_MODE) != SettingsManager::THEME_DARK) return false;
+	auto settings = SettingsManager::getInstance();
+	for(const auto& item : theme.fonts) {
+		const auto key = static_cast<SettingsManager::StrSetting>(item.first);
+		if(settings->get(key) != (item.second.empty() ? settings->getDefault(key) : item.second)) return false;
+	}
+	for(const auto& item : theme.colors) {
+		const auto key = static_cast<SettingsManager::IntSetting>(item.first);
+		if(settings->get(key) != (item.second < 0 ? settings->getDefault(key) : item.second)) return false;
+	}
+	const auto current = UserMatchManager::getInstance()->getList();
+	auto expected = current;
+	theme.applyUserStyles(expected);
+	for(size_t i = 0; i < current.size(); ++i) {
+		const auto& a = current[i].style;
+		const auto& b = expected[i].style;
+		if(a.font != b.font || a.textColor != b.textColor || a.bgColor != b.bgColor) return false;
+	}
+	return true;
+}
+
 std::string ThemeManager::getDirectory() {
 	return Util::getPath(Util::PATH_USER_CONFIG) + "Themes" PATH_SEPARATOR_STR;
 }

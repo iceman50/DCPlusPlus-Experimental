@@ -878,7 +878,8 @@ void TabView::handlePainting(PaintCanvas& target) {
 
 	auto bkMode(canvas->setBkMode(true));
 	if(isManualAppearance()) {
-		canvas->fill(rect, Brush(getAppearance().getPalette().surface));
+		// Empty strip space belongs to the surrounding chrome, not a tab face.
+		canvas->fill(rect, Brush(getAppearance().getPalette().background));
 	}
 
 	int sel = getSelected();

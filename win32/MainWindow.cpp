@@ -49,6 +49,8 @@
 #include <dwt/Application.h>
 #include <dwt/DWTException.h>
 #include <dwt/widgets/Grid.h>
+#include <dwt/widgets/ComboBox.h>
+#include <dwt/widgets/Label.h>
 #include <dwt/widgets/MessageBox.h>
 #include <dwt/widgets/Notification.h>
 #include <dwt/widgets/Rebar.h>
@@ -539,8 +541,72 @@ void MainWindow::initToolbar() {
 	toolbar->onHelp(&WinUtil::help);
 
 	rebar->add(toolbar);
+	initThemeSelector();
 
 	viewMenu->checkItem(viewIndexes["Toolbar"], true);
+}
+
+void MainWindow::initThemeSelector() {
+	// Keep the caption and dropdown in one child window. The rebar only lays
+	// out the band; it does not paint a separate native caption around the combo.
+	themeBand = dwt::WidgetCreator<dwt::Grid>::create(rebar, dwt::Grid::Seed(1, 2));
+	themeBand->setSpacing(themeBand->scale(3));
+	themeBand->row(0).mode = dwt::GridInfo::FILL;
+	themeBand->column(1) = dwt::GridInfo(200, dwt::GridInfo::STATIC);
+	themeBand->column(1).align = dwt::GridInfo::STRETCH;
+	auto label = themeBand->addChild(dwt::Label::Seed(T_("Theme")));
+	label->setFont(WinUtil::font);
+	themeSelector = themeBand->addChild(WinUtil::Seeds::comboBox);
+	themeSelector->setAccessibleName(T_("Theme"));
+	const auto updateSelectorColors = [combo = themeSelector] {
+		const auto& appearance = dwt::Application::instance().getAppearance();
+		if(appearance.isManual()) {
+			const auto& palette = appearance.getPalette();
+			combo->setColor(palette.text, palette.background);
+		} else {
+			combo->clearColor();
+		}
+		combo->redraw();
+	};
+	themeSelector->onCommand(updateSelectorColors, ID_UPDATECOLOR);
+	updateSelectorColors();
+	reloadThemes();
+	themeBand->row(0).size = themeSelector->getPreferredSize().y;
+	themeSelector->sendMessage(CB_SETMINVISIBLE, 12);
+	themeSelector->sendMessage(CB_SETDROPPEDWIDTH, themeSelector->getPreferredSize().x);
+	themeSelector->onSelectionChanged([this] {
+		const auto selected = themeSelector->getSelected();
+		if(selected < 0 || static_cast<size_t>(selected) >= themePresets.size()) return;
+		const auto theme = themePresets[selected];
+		// Let the native dropdown close before refreshing its colors and font.
+		callAsync([this, theme] { if(!closing()) applyTheme(theme); });
+	});
+	rebar->add(themeBand, RBBS_NOGRIPPER);
+	themeBand->layout();
+}
+
+void MainWindow::reloadThemes() {
+	if(!themeSelector) return;
+	themePresets = ThemeManager::getThemes();
+	themeSelector->clear();
+	int selected = static_cast<int>(themePresets.size());
+	for(size_t i = 0; i < themePresets.size(); ++i) {
+		themeSelector->addValue(themePresets[i].name);
+		if(selected == static_cast<int>(themePresets.size()) && ThemeManager::isCurrent(themePresets[i]))
+			selected = static_cast<int>(i);
+	}
+	themeSelector->addValue(T_("Custom / current settings"));
+	themeSelector->setSelected(selected);
+}
+
+void MainWindow::applyTheme(const ThemeManager::Theme& theme) {
+	if(ThemeManager::isCurrent(theme)) return;
+	const auto previousFont = SETTING(MAIN_FONT);
+	const auto previousUploadFont = SETTING(UPLOAD_FONT);
+	const auto previousDownloadFont = SETTING(DOWNLOAD_FONT);
+	ThemeManager::apply(theme);
+	refreshAppearance(previousFont, previousUploadFont, previousDownloadFont);
+	SettingsManager::getInstance()->save();
 }
 
 void MainWindow::initStatusBar() {
@@ -1393,9 +1459,7 @@ void MainWindow::handleSettings() {
 		}
 
 		ClientManager::getInstance()->infoUpdated();
-		HubFrame::refreshRichTextSettings();
 		HubFrame::refreshUserIconSizes();
-		PrivateFrame::refreshRichTextSettings();
 
 		if(SETTING(GET_USER_COUNTRY) != prevGeo) {
 			if(SETTING(GET_USER_COUNTRY))
@@ -1416,21 +1480,7 @@ void MainWindow::handleSettings() {
 		if(prevGeo != SETTING(GET_USER_COUNTRY) || prevGeoFormat != SETTING(COUNTRY_FORMAT))
 			refreshGeo();
 
-		if(SETTING(MAIN_FONT) != prevFont) {
-			auto prev = WinUtil::font;
-			WinUtil::initFont();
-			::EnumChildWindows(handle(), updateFont, reinterpret_cast<LPARAM>(prev->handle()));
-			mainMenu->setFont(WinUtil::font);
-			::DrawMenuBar(handle());
-		}
-		if(SETTING(UPLOAD_FONT) != prevUploadFont) {
-			WinUtil::updateUploadFont();
-		}
-		if(SETTING(DOWNLOAD_FONT) != prevDownloadFont) {
-			WinUtil::updateDownloadFont();
-		}
-
-		WinUtil::refreshTheme();
+		refreshAppearance(prevFont, prevUploadFont, prevDownloadFont);
 
 		if(SETTING(ALWAYS_TRAY) != prevTray)
 			notifier->setVisible(SETTING(ALWAYS_TRAY));
@@ -1453,6 +1503,44 @@ void MainWindow::handleSettings() {
 
 		refreshPluginMenu();
 	}
+	reloadThemes();
+}
+
+void MainWindow::refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont) {
+	if(SETTING(MAIN_FONT) != previousFont) {
+		auto previous = WinUtil::font;
+		WinUtil::initFont();
+		::EnumChildWindows(handle(), updateFont, reinterpret_cast<LPARAM>(previous->handle()));
+		mainMenu->setFont(WinUtil::font);
+		::DrawMenuBar(handle());
+	}
+	if(SETTING(UPLOAD_FONT) != previousUploadFont) WinUtil::updateUploadFont();
+	if(SETTING(DOWNLOAD_FONT) != previousDownloadFont) WinUtil::updateDownloadFont();
+	HubFrame::refreshRichTextSettings();
+	PrivateFrame::refreshRichTextSettings();
+	WinUtil::refreshTheme();
+	if(themeSelector) {
+		// A theme can change the main font; keep the band at the new control height.
+		themeBand->row(0).size = themeSelector->getPreferredSize().y;
+		themeBand->setSpacing(themeBand->scale(3));
+		const auto preferred = themeBand->getPreferredSize();
+		for(unsigned i = 0; i < rebar->size(); ++i) {
+			REBARBANDINFO info = { sizeof(info), RBBIM_CHILD | RBBIM_CHILDSIZE };
+			rebar->sendMessage(RB_GETBANDINFO, i, reinterpret_cast<LPARAM>(&info));
+			if(info.hwndChild != themeBand->handle()) continue;
+			info.fMask |= RBBIM_SIZE;
+			info.cx = preferred.x;
+			info.cxMinChild = preferred.x;
+			info.cyMinChild = preferred.y;
+			rebar->sendMessage(RB_SETBANDINFO, i, reinterpret_cast<LPARAM>(&info));
+			break;
+		}
+		themeBand->layout();
+	}
+	layout();
+	// Font changes can expose space formerly occupied by the taller combo.
+	// Queue one complete band repaint after all native child layout is finished.
+	::RedrawWindow(rebar->handle(), nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
 void MainWindow::showPortsError(const string& port) {
@@ -1791,6 +1879,11 @@ void MainWindow::switchMenuBar() {
 
 void MainWindow::switchToolbar() {
 	if(toolbar) {
+		rebar->remove(themeBand);
+		themeBand->close();
+		themeBand = nullptr;
+		themeSelector = nullptr;
+		themePresets.clear();
 		rebar->remove(toolbar);
 		toolbar->close();
 		toolbar = 0;
