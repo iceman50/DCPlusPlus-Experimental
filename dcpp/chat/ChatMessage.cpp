@@ -1,0 +1,284 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "stdinc.h"
+#include <dcpp/chat/ChatMessage.h>
+
+#include <dcpp/hub/Client.h>
+#include <dcpp/chat/EmoticonManager.h>
+#include <dcpp/text/format.h>
+#include <dcpp/search/Magnet.h>
+#include <dcpp/user/OnlineUser.h>
+#include <dcpp/plugins/PluginManager.h>
+#include <dcpp/chat/RichText.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/text/SimpleXML.h>
+#include <dcpp/chat/Tagger.h>
+#include <dcpp/util/Util.h>
+
+namespace dcpp {
+
+ChatMessage::ChatMessage(const string& text, OnlineUser* from,
+	const OnlineUser* to, const OnlineUser* replyTo,
+	bool thirdPerson, time_t messageTimestamp, bool richText) :
+from(from->getUser()),
+to(to ? to->getUser() : nullptr),
+replyTo(replyTo ? replyTo->getUser() : nullptr),
+timestamp(time(0)),
+thirdPerson(thirdPerson),
+messageTimestamp(messageTimestamp)
+{
+	/* format the message to plain text and HTML strings before handing them over to plugins for
+	further	processing. */
+
+	string tmp;
+	string xmlTmp;
+
+	auto addSpan = [&xmlTmp](string id, const string& content, const string& style, const Style* source = nullptr) -> string {
+		string ret = "<span id=\"" + move(id) + "\"";
+		if(source) {
+			if(!source->fontSource.empty()) ret += " themeFontStyle=\"" + SimpleXML::escape(source->fontSource, xmlTmp, true) + "\"";
+			if(!source->textSource.empty()) ret += " themeTextStyle=\"" + SimpleXML::escape(source->textSource, xmlTmp, true) + "\"";
+			if(!source->bgSource.empty()) ret += " themeBgStyle=\"" + SimpleXML::escape(source->bgSource, xmlTmp, true) + "\"";
+		}
+		if(!style.empty()) { ret += " style=\"" + SimpleXML::escape(style, xmlTmp, true) + "\""; }
+		ret += ">" + SimpleXML::escape(content, xmlTmp, false) + "</span>";
+		return ret;
+	};
+
+	// Self-authored messages use distinct semantic spans so presentation layers can color the
+	// timestamp, nickname and body independently without changing logs or plugin-facing text.
+	const bool ownMessage = from->getIdentity().isSelf();
+
+	htmlMessage += "<span id=\"message\" style=\"white-space: pre-wrap;\">";
+
+	// A hub-supplied ADC TS value is authoritative for display. Keep the local
+	// arrival time in timestamp for ordering and message metadata, but don't show
+	// both clocks for the same message.
+	if(SETTING(TIME_STAMPS) && !messageTimestamp) {
+		tmp = "[" + Util::getShortTimeString(timestamp) + "]";
+		htmlMessage += addSpan(ownMessage ? "ownTimestamp" : "timestamp", tmp, Util::emptyString) + " ";
+	}
+
+	if(messageTimestamp) {
+		tmp = "["; tmp += str(F_("Sent %1%") % Util::getShortTimeString(messageTimestamp)); tmp += "]";
+		message += tmp + " ";
+		htmlMessage += addSpan(ownMessage ? "ownMessageTimestamp" : "messageTimestamp", tmp, Util::emptyString) + " ";
+	}
+
+	nick = from->getIdentity().getNick();
+	tmp = nick;
+	// let's *not* obey the spec here and add a space after the star. :P
+	tmp = thirdPerson ? "* " + tmp + " " : "<" + tmp + ">";
+	message += tmp + " ";
+
+	auto style = from->getIdentity().getStyle();
+	string styleAttr;
+	if(!style.font.empty()) { styleAttr += "font: " + Util::cssFont(style.font) + ";dc-font: " + style.font + ";"; }
+	if(style.textColor != -1 && !ownMessage) { styleAttr += "color: #" + Util::cssColor(style.textColor) + ";"; }
+	if(style.bgColor != -1) { styleAttr += "background-color: #" + Util::cssColor(style.bgColor) + ";"; }
+	// The configured own-nickname color intentionally takes precedence over user-match text color.
+	htmlMessage += addSpan(ownMessage ? "ownNick" : "nick", tmp, styleAttr, &style) + " ";
+
+	// Check all '<' and '[' after newlines in plain messages as they're probably
+	// pastes. RTF0 whitespace and markers must reach the CommonMark parser
+	// byte-for-byte after ADC unescaping.
+	tmp = text;
+	if(!richText) {
+		size_t i = 0;
+		while((i = tmp.find('\n', i)) != string::npos) {
+			++i;
+			if(i < tmp.size()) {
+				if(tmp[i] == '[' || tmp[i] == '<') {
+					tmp.insert(i, "- ");
+					i += 2;
+				}
+			}
+		}
+	}
+
+	message += tmp;
+
+	/* RTF0 is parsed by the client into a trusted semantic vocabulary. Raw
+	HTML and unsafe link targets remain visible text and never reach the display
+	layer as markup. Protocol formatting also takes precedence over local
+	emoticon, mention, link and plugin tag decoration. */
+	if(richText) {
+		auto rich = RichText::parse(tmp,
+			static_cast<size_t>(std::max(1, SETTING(CHAT_LINK_MAX_LENGTH))));
+		if(rich.valid) {
+			htmlMessage += "<span id=\"" + string(ownMessage ? "ownText" : "text") + "\">" +
+				std::move(rich.html) + "</span></span>";
+			PluginManager::getInstance()->onChatDisplay(htmlMessage, from);
+			return;
+		}
+	}
+
+	/* format the message; this will involve adding custom tags. use the Tagger class to that end. */
+	Tagger tags(move(tmp));
+	format(tags, xmlTmp, from->getClient().getMyNick());
+
+	// let plugins play with the tag list
+	PluginManager::getInstance()->onChatTags(tags, from);
+
+	htmlMessage += "<span id=\"" + string(ownMessage ? "ownText" : "text") + "\">" + tags.merge(xmlTmp) + "</span></span>";
+
+	// forward to plugins
+	PluginManager::getInstance()->onChatDisplay(htmlMessage, from);
+}
+
+namespace { inline bool validSchemeChar(char c, bool first) {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+		(!first && c >= '0' && c <= '9') ||
+		(!first && (c == '+' || c == '.' || c == '-'));
+} }
+
+void ChatMessage::format(Tagger& tags, string& tmp) {
+	format(tags, tmp, SETTING(NICK));
+}
+
+void ChatMessage::format(Tagger& tags, string& tmp, const string& mentionNick) {
+	const auto& text = tags.getText();
+	const auto maxLinkLength = static_cast<size_t>(std::max(1, SETTING(CHAT_LINK_MAX_LENGTH)));
+
+	/* link formatting - optimize the lookup a bit by using the fact that every link identifier
+	(except www ones) contains a colon. */
+
+	auto addLinkStr = [&tmp, &tags, maxLinkLength](size_t begin, size_t end, const string& link) {
+		if(link.size() <= maxLinkLength) {
+			tags.addTag(begin, end, "a", "href=\"" + SimpleXML::escape(link, tmp, true) + "\"");
+		}
+	};
+
+	auto addLink = [&text, &addLinkStr, maxLinkLength](size_t begin, size_t end) {
+		if(end - begin <= maxLinkLength) {
+			addLinkStr(begin, end, text.substr(begin, end - begin));
+		}
+	};
+
+	static const string delimiters = " \t\r\n<>\"";
+
+	size_t i = 0, begin, end, n = text.size();
+	while((i = text.find(':', i)) != string::npos) {
+
+		// get the left bound; make sure it's a valid scheme according to RFC 3986, section 3.1
+		begin = i;
+		while(begin > 0 && validSchemeChar(text[begin - 1], false)) { --begin; }
+		while(begin < i && !validSchemeChar(text[begin], true)) { ++begin; }
+		if(begin == i) { ++i; continue; }
+
+		// get the right bound
+		if((end = text.find_first_of(delimiters, i + 1)) == string::npos) end = n;
+
+		if(i > 0 && (
+			(i + 4 < n && text[i + 1] == '/' && text[i + 2] == '/') || // "http://", etc
+			(i == begin + 6 && i + 1 <= n && !text.compare(begin, 6, "mailto"))))
+		{
+			addLink(begin, end);
+			i = end;
+
+		} else if(i == begin + 6 && i + 2 <= n && !text.compare(begin, 6, "magnet") && text[i + 1] == '?') {
+			string link = text.substr(begin, end - begin), hash, name, key;
+			if(link.size() > maxLinkLength) {
+				i = end;
+
+			} else if(Magnet::parseUri(link, hash, name, key)) {
+				string display = link;
+				RichText::Attachment attachment;
+				if(RichText::parseMagnetUri(link, maxLinkLength, attachment)) {
+					display += " [";
+					if(!attachment.name.empty()) display += attachment.name + " — ";
+					display += Util::formatBytes(attachment.size) + "]";
+				} else if(!name.empty()) {
+					display += " [" + name + "]";
+				}
+
+				if(display != link) {
+					tags.replaceText(begin, end, display);
+					const auto delta = static_cast<int>(display.size()) - static_cast<int>(link.size());
+					end += delta;
+					n += delta;
+				}
+
+				// Keep the URI itself visible and clickable; friendly metadata and size
+				// follow outside the anchor so copying the link remains unambiguous.
+				addLinkStr(begin, begin + link.size(), link);
+				i = end;
+
+			} else {
+				++i;
+			}
+
+		} else {
+			++i;
+		}
+	}
+
+	// check for www links.
+	i = 0;
+	while((i = text.find("www.", i)) != string::npos) {
+		if(i + 5 <= n && (i == 0 || delimiters.find(text[i - 1]) != string::npos)) {
+			if((end = text.find_first_of(delimiters, i + 4)) == string::npos) end = n;
+			if(i + 5 <= end) {
+				addLink(i, end);
+				i = end;
+				continue;
+			}
+		}
+		i += 5;
+	}
+
+	/* Keep recognition in the protocol-independent formatter. The semantic tag lets each UI render
+	the package icon without changing the logged/plain-text message. Rules and icon names are loaded
+	from the configured .dcemo package; boundary checks prevent matches inside URLs and words. */
+	if(SETTING(ENABLE_EMOTICONS)) {
+		auto isBoundary = [](char c) {
+			return std::isspace(static_cast<unsigned char>(c)) != 0 ||
+				c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' ||
+				c == ',' || c == '.' || c == '!' || c == '?';
+		};
+
+		for(const auto& emoticon: EmoticonManager::getRules()) {
+			const auto tokenLength = emoticon.text.size();
+			size_t pos = 0;
+			while((pos = text.find(emoticon.text, pos)) != string::npos) {
+				const size_t endPos = pos + tokenLength;
+				const bool left = pos == 0 || isBoundary(text[pos - 1]);
+				const bool right = endPos == text.size() || isBoundary(text[endPos]);
+				if(left && right) {
+					tags.addTag(pos, endPos, "emoticon", "name=\"" + SimpleXML::escape(emoticon.name, tmp, true) + "\"");
+				}
+				pos = endPos;
+			}
+		}
+	}
+
+	if(!mentionNick.empty()) {
+		size_t pos = 0;
+		while((pos = text.find(mentionNick, pos)) != string::npos) {
+			const auto endPos = pos + mentionNick.size();
+			const bool left = pos == 0 || !std::isalnum(static_cast<unsigned char>(text[pos - 1]));
+			const bool right = endPos == text.size() || !std::isalnum(static_cast<unsigned char>(text[endPos]));
+			if(left && right) {
+				tags.addTag(pos, endPos, "span", "id=\"mention\"");
+			}
+			pos = endPos;
+		}
+	}
+}
+
+} // namespace dcpp

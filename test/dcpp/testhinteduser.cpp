@@ -3,16 +3,16 @@
 #include <chrono>
 #include <filesystem>
 
-#include <dcpp/ClientManager.h>
-#include <dcpp/File.h>
-#include <dcpp/HintedUser.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/MCN.h>
-#include <dcpp/QueueManager.h>
-#include <dcpp/SearchManager.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/Text.h>
-#include <dcpp/TimerManager.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/system/File.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/transfer/MCN.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/text/Text.h>
+#include <dcpp/system/TimerManager.h>
 
 using namespace dcpp;
 

@@ -1,7 +1,7 @@
 #include "testbase.h"
 
-#include <dcpp/Text.h>
-#include <dcpp/Util.h>
+#include <dcpp/text/Text.h>
+#include <dcpp/util/Util.h>
 
 using namespace dcpp;
 

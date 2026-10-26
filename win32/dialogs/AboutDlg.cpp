@@ -1,0 +1,471 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "stdafx.h"
+
+#include <win32/dialogs/AboutDlg.h>
+
+#include <dcpp/text/format.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/text/SimpleXML.h>
+#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/system/Streams.h>
+#include <dcpp/version.h>
+#include <maxminddb.h>
+#include <bzlib.h>
+#include <zlib.h>
+#include <zstd.h>
+#include <psapi.h>
+#include <tlhelp32.h>
+#include <dwt/Application.h>
+#include <dwt/Appearance.h>
+#include <dwt/resources/ImageList.h>
+#include <dwt/Version.h>
+#include <miniupnpc/miniupnpc.h>
+#include <natpmp/natpmp.h>
+#include <openssl/crypto.h>
+#include <openssl/opensslv.h>
+
+#include <cstring>
+
+#include <dwt/widgets/Grid.h>
+#include <dwt/widgets/Label.h>
+#include <dwt/widgets/Link.h>
+
+#if defined(__GNUC__)
+#include <libdwarf.h>
+#endif
+
+#include <win32/resource.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/util/WinUtil.h>
+
+using dwt::Grid;
+using dwt::GridInfo;
+using dwt::Label;
+using dwt::Link;
+
+namespace {
+
+string getCompilerVersion() {
+#ifdef __MINGW64_VERSION_MAJOR
+	return string("MinGW-w64 GCC ") + __VERSION__;
+#elif defined(__GNUC__)
+	return string("GCC ") + __VERSION__;
+#elif defined(_MSC_VER)
+	return string("MSVC ") + Util::toString(_MSC_VER) + " (" + Util::toString(_MSC_FULL_VER) + ")";
+#else
+	return "Unknown";
+#endif
+}
+
+string getBuildArchitecture() {
+#ifdef _WIN64
+	return "x64";
+#elif defined(_WIN32)
+	return "x86";
+#else
+	return "Unknown";
+#endif
+}
+
+string getNativeArchitecture() {
+	SYSTEM_INFO si = {};
+	::GetNativeSystemInfo(&si);
+
+	switch(si.wProcessorArchitecture) {
+	case PROCESSOR_ARCHITECTURE_AMD64: return "x64";
+	case PROCESSOR_ARCHITECTURE_ARM64: return "ARM64";
+	case PROCESSOR_ARCHITECTURE_INTEL: return "x86";
+	case PROCESSOR_ARCHITECTURE_ARM: return "ARM";
+	default: return "Unknown";
+	}
+}
+
+string getWindowsVersion() {
+	OSVERSIONINFOEXW info = {};
+	info.dwOSVersionInfoSize = sizeof(info);
+
+	typedef LONG (WINAPI *RtlGetVersionFunc)(PRTL_OSVERSIONINFOW);
+	RtlGetVersionFunc rtlGetVersion = nullptr;
+	auto ntdll = ::GetModuleHandle(_T("ntdll.dll"));
+	auto proc = ntdll ? ::GetProcAddress(ntdll, "RtlGetVersion") : nullptr;
+	if(proc) {
+		static_assert(sizeof(rtlGetVersion) == sizeof(proc), "Unexpected function pointer size");
+		std::memcpy(&rtlGetVersion, &proc, sizeof(rtlGetVersion));
+	}
+
+	if(!rtlGetVersion || rtlGetVersion(reinterpret_cast<PRTL_OSVERSIONINFOW>(&info)) != 0) {
+		return "Unknown";
+	}
+
+	const bool workstation = info.wProductType == VER_NT_WORKSTATION;
+	string name;
+	if(info.dwMajorVersion == 10 && info.dwMinorVersion == 0) {
+		name = workstation ? (info.dwBuildNumber >= 22000 ? "Windows 11" : "Windows 10") : "Windows Server";
+	} else if(info.dwMajorVersion == 6 && info.dwMinorVersion == 3) {
+		name = workstation ? "Windows 8.1" : "Windows Server 2012 R2";
+	} else if(info.dwMajorVersion == 6 && info.dwMinorVersion == 2) {
+		name = workstation ? "Windows 8" : "Windows Server 2012";
+	} else if(info.dwMajorVersion == 6 && info.dwMinorVersion == 1) {
+		name = workstation ? "Windows 7" : "Windows Server 2008 R2";
+	} else {
+		name = workstation ? "Windows" : "Windows Server";
+	}
+
+	return str(F_("%1% %2%.%3%.%4%") % name % info.dwMajorVersion % info.dwMinorVersion % info.dwBuildNumber);
+}
+
+string getMemoryInfo() {
+	MEMORYSTATUSEX memory = {};
+	memory.dwLength = sizeof(memory);
+	if(!::GlobalMemoryStatusEx(&memory)) {
+		return "Unknown";
+	}
+
+	return str(F_("%1% total, %2% available") %
+		Util::formatBytes(static_cast<int64_t>(memory.ullTotalPhys)) %
+		Util::formatBytes(static_cast<int64_t>(memory.ullAvailPhys)));
+}
+
+string getCppStandard() {
+	return Util::toString(static_cast<long long>(__cplusplus));
+}
+
+string getLibintlVersion() {
+	return str(F_("%1%.%2%.%3%") %
+		((LIBINTL_VERSION >> 16) & 0xff) %
+		((LIBINTL_VERSION >> 8) & 0xff) %
+		(LIBINTL_VERSION & 0xff));
+}
+
+string getVersionString(const char* version) {
+	return (version && *version) ? version : "Bundled";
+}
+
+string getOpenSSLVersion() {
+	const auto runtime = getVersionString(OpenSSL_version(OPENSSL_VERSION));
+	if(runtime == OPENSSL_VERSION_TEXT) {
+		return runtime;
+	}
+	return runtime + " (headers: " OPENSSL_VERSION_TEXT ")";
+}
+
+void addInfoLine(string& info, const string& name, const string& value) {
+	info += name + ": " + value + "\r\n";
+}
+
+uint64_t fileTimeTicks(const FILETIME& time) {
+	return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+}
+
+void addProcessInfo(string& info) {
+	const auto process = ::GetCurrentProcess();
+	const auto processId = ::GetCurrentProcessId();
+	addInfoLine(info, "Process ID", std::to_string(processId));
+	tstring executable(32768, _T('\0'));
+	const auto pathLength = ::GetModuleFileName(nullptr, &executable[0], static_cast<DWORD>(executable.size()));
+	addInfoLine(info, "Executable", pathLength && pathLength < executable.size() ? Text::fromT(executable.substr(0, pathLength)) : "Unavailable");
+
+	FILETIME created {}, exited {}, kernel {}, user {}, now {};
+	string uptime = "Unavailable", cpu = "Unavailable";
+	if(::GetProcessTimes(process, &created, &exited, &kernel, &user)) {
+		::GetSystemTimeAsFileTime(&now);
+		const auto start = fileTimeTicks(created), end = fileTimeTicks(now);
+		if(end >= start) uptime = Util::formatSeconds((end - start) / 10000000);
+		cpu = str(F_("%1% kernel, %2% user (h:mm:ss)") %
+			Util::formatSeconds(fileTimeTicks(kernel) / 10000000) %
+			Util::formatSeconds(fileTimeTicks(user) / 10000000));
+	}
+	addInfoLine(info, "Uptime (h:mm:ss)", uptime);
+	addInfoLine(info, "CPU time", cpu);
+
+	string threads = "Unavailable";
+	const auto snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if(snapshot != INVALID_HANDLE_VALUE) {
+		PROCESSENTRY32 entry {};
+		entry.dwSize = sizeof(entry);
+		if(::Process32First(snapshot, &entry)) {
+			do {
+				if(entry.th32ProcessID == processId) {
+					threads = std::to_string(entry.cntThreads);
+					break;
+				}
+			} while(::Process32Next(snapshot, &entry));
+		}
+		::CloseHandle(snapshot);
+	}
+	addInfoLine(info, "Threads", threads);
+	DWORD handles = 0;
+	addInfoLine(info, "Handles", ::GetProcessHandleCount(process, &handles) ? std::to_string(handles) : "Unavailable");
+	const auto guiResources = [process](DWORD kind) {
+		::SetLastError(ERROR_SUCCESS);
+		const auto count = ::GetGuiResources(process, kind);
+		return count || ::GetLastError() == ERROR_SUCCESS ? std::to_string(count) : string("Unavailable");
+	};
+	addInfoLine(info, "GDI objects", guiResources(GR_GDIOBJECTS));
+	addInfoLine(info, "USER objects", guiResources(GR_USEROBJECTS));
+
+	PROCESS_MEMORY_COUNTERS_EX memory {};
+	memory.cb = sizeof(memory);
+	const bool haveMemory = !!::GetProcessMemoryInfo(process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory), sizeof(memory));
+	const auto memoryValue = [haveMemory](SIZE_T value) {
+		return haveMemory ? Util::formatBytes(static_cast<int64_t>(value)) : string("Unavailable");
+	};
+	addInfoLine(info, "Working set (resident memory)", memoryValue(memory.WorkingSetSize));
+	addInfoLine(info, "Peak working set", memoryValue(memory.PeakWorkingSetSize));
+	addInfoLine(info, "Private bytes (committed memory)", memoryValue(memory.PrivateUsage));
+}
+
+void addAppearanceInfo(string& info) {
+	const auto& appearance = dwt::Application::instance().getAppearance();
+	const auto mode = appearance.getMode();
+	addInfoLine(info, "Theme mode", mode == dwt::Appearance::Mode::System ? "System" :
+		mode == dwt::Appearance::Mode::Dark ? "Dark" : "Light");
+	addInfoLine(info, "Effective appearance", appearance.isHighContrast() ? "High contrast" :
+		appearance.isDark() ? "Dark" : "Light");
+	const auto configured = SETTING(ICON_PACK);
+	addInfoLine(info, "Configured icon pack", configured.empty() ? "Automatic" :
+		configured == IconManager::EMBEDDED_PACK ? "Embedded resources" : configured);
+	const auto icons = IconManager::getRuntimeInfo();
+	addInfoLine(info, "Active icon pack", !icons.initialized ? "Not initialized" :
+		!icons.packResolved ? "Not loaded yet" : icons.package.path.empty() ? "Embedded resources" : icons.package.name);
+	if(!icons.package.path.empty()) {
+		addInfoLine(info, "Icon pack version", icons.package.version);
+		addInfoLine(info, "Icon pack path", icons.package.path);
+		addInfoLine(info, "Icons declared in pack", std::to_string(icons.package.iconCount));
+	}
+	addInfoLine(info, "Cached icons (resource/size variants)", std::to_string(icons.cachedPackageIcons + icons.cachedEmbeddedIcons));
+	addInfoLine(info, "Cached icons from pack", std::to_string(icons.cachedPackageIcons));
+	addInfoLine(info, "Cached icons from embedded resources", std::to_string(icons.cachedEmbeddedIcons));
+	addInfoLine(info, "File image list entries", WinUtil::fileImages ? std::to_string(WinUtil::fileImages->size()) : "0");
+	addInfoLine(info, "User image list entries", WinUtil::userImages ? std::to_string(WinUtil::userImages->size()) : "0");
+}
+
+string getAboutInfo() {
+	string info;
+
+	info += "Application\r\n";
+	addInfoLine(info, "Full name", FULL_APPNAME);
+	addInfoLine(info, "Core identity", APPNAME);
+	addInfoLine(info, "Version", string(VERSIONSTRING) + " " + buildLabel);
+	addInfoLine(info, "Build type",
+#ifdef _DEBUG
+		"Debug"
+#else
+		"Release"
+#endif
+	);
+	addInfoLine(info, "Build architecture", getBuildArchitecture());
+	info += "\r\n";
+
+	info += "System\r\n";
+	addInfoLine(info, "Windows", getWindowsVersion());
+	addInfoLine(info, "Native architecture", getNativeArchitecture());
+	addInfoLine(info, "Physical memory", getMemoryInfo());
+	info += "\r\n";
+
+	info += "Process (snapshot; use Refresh to update)\r\n";
+	addProcessInfo(info);
+	info += "\r\nAppearance and icons\r\n";
+	addAppearanceInfo(info);
+	info += "\r\n";
+
+	info += "Toolchain\r\n";
+	addInfoLine(info, "Compiler", getCompilerVersion());
+	addInfoLine(info, "C++ standard", getCppStandard());
+	info += "\r\n";
+
+	info += "Libraries\r\n";
+	addInfoLine(info, "OpenSSL", getOpenSSLVersion());
+	addInfoLine(info, "SQLite", SQLiteDB::getLibraryVersion());
+	addInfoLine(info, "Zstandard (zstd)", string(ZSTD_versionString()) + " (headers: " ZSTD_VERSION_STRING "; bundled, static)");
+	addInfoLine(info, "zlib", string(zlibVersion()) + " (headers: " ZLIB_VERSION ")");
+	addInfoLine(info, "bzip2", BZ2_bzlibVersion());
+	addInfoLine(info, "DWT", DWT_VERSION_STRING);
+	addInfoLine(info, "MiniUPnPc", string(MINIUPNPC_VERSION) + " (API " + Util::toString(MINIUPNPC_API_VERSION) + ")");
+	addInfoLine(info, "libnatpmp", "Bundled");
+	addInfoLine(info, "libmaxminddb", getVersionString(MMDB_lib_version()));
+#if defined(__GNUC__)
+	addInfoLine(info, "libdwarf", DW_LIBDWARF_VERSION);
+#else
+	addInfoLine(info, "DbgHelp", "Windows");
+#endif
+	addInfoLine(info, "GNU gettext/libintl", getLibintlVersion());
+#ifdef HAVE_HTMLHELP_H
+	addInfoLine(info, "HTML Help", "Enabled");
+#else
+	addInfoLine(info, "HTML Help", "Disabled");
+#endif
+
+	return info;
+}
+
+} // namespace
+
+AboutDlg::AboutDlg(dwt::Widget* parent) :
+dwt::ModalDialog(parent),
+grid(0),
+version(0),
+runtimeInfo(nullptr),
+c(nullptr)
+{
+	onInitDialog([this] { return handleInitDialog(); });
+}
+
+AboutDlg::~AboutDlg() {
+}
+
+int AboutDlg::run() {
+	create(dwt::Point(520, 680));
+	return show();
+}
+
+bool AboutDlg::handleInitDialog() {
+	grid = addChild(Grid::Seed(7, 1));
+	grid->column(0).mode = GridInfo::FILL;
+	grid->row(1).mode = GridInfo::FILL;
+	grid->row(1).align = GridInfo::STRETCH;
+
+	// horizontally centered seeds
+	GroupBox::Seed gs;
+	gs.style |= BS_CENTER;
+	gs.padding.y = 2;
+	Label::Seed ls;
+	ls.style |= SS_CENTER;
+
+	{
+		auto cur = grid->addChild(gs)->addChild(Grid::Seed(4, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		cur->column(0).align = GridInfo::CENTER;
+
+		cur->addChild(Label::Seed(WinUtil::createIcon(IDI_DCPP, 48)));
+
+		ls.caption = _T(FULL_APPNAME) _T(" v") _T(VERSIONSTRING) _T(" ") + Text::toT(buildLabel) + _T("\n(c) Copyright 2026 iceman50\n");
+		ls.caption += T_("Based on DC++");
+		cur->addChild(ls);
+
+		cur->addChild(Link::Seed(_T("https://github.com/iceman50/DCPlusPlus-No-MDI"), true));
+
+		auto ts = WinUtil::Seeds::Dialog::textBox;
+		ts.style |= ES_READONLY;
+		ts.exStyle &= ~WS_EX_CLIENTEDGE;
+
+		gs.caption = T_("TTH");
+		ts.caption = WinUtil::tth;
+		cur->addChild(gs)->addChild(ts);
+	}
+
+	{
+		gs.caption = T_("Build and Runtime Information");
+		auto seed = WinUtil::Seeds::Dialog::textBox;
+		seed.style &= ~ES_AUTOHSCROLL;
+		seed.style |= ES_MULTILINE | WS_VSCROLL | ES_READONLY;
+		runtimeInfo = grid->addChild(gs)->addChild(seed);
+	}
+
+	{
+		auto actions = grid->addChild(Grid::Seed(1, 2));
+		actions->column(0).mode = GridInfo::FILL;
+		actions->column(1).mode = GridInfo::FILL;
+		actions->addChild(Button::Seed(T_("Refresh")))->onClicked([this] { runtimeInfo->setText(Text::toT(getAboutInfo())); });
+		actions->addChild(Button::Seed(T_("Copy information")))->onClicked([this] { WinUtil::setClipboard(runtimeInfo->getText()); });
+	}
+
+	{
+		gs.caption = T_("Totals");
+		auto cur = grid->addChild(gs)->addChild(Grid::Seed(2, 1));
+		cur->column(0).mode = GridInfo::FILL;
+
+		ls.caption = str(TF_("Upload: %1%, Download: %2%") % Text::toT(Util::formatBytes(SETTING(TOTAL_UPLOAD))) % Text::toT(Util::formatBytes(SETTING(TOTAL_DOWNLOAD))));
+		cur->addChild(ls);
+
+		ls.caption = (SETTING(TOTAL_DOWNLOAD) > 0)
+			? str(TF_("Ratio (up/down): %1$0.2f") % (((double)SETTING(TOTAL_UPLOAD)) / ((double)SETTING(TOTAL_DOWNLOAD))))
+			: T_("No transfers yet");
+		cur->addChild(ls);
+	}
+
+	gs.caption = T_("Latest stable version");
+	ls.caption = T_("Downloading...");
+	version = grid->addChild(gs)->addChild(ls);
+
+	auto buttons = WinUtil::addDlgButtons(grid,
+		[this] { endDialog(IDOK); },
+		[this] { endDialog(IDCANCEL); });
+	buttons.first->setFocus();
+	buttons.second->setVisible(false);
+
+	setText(T_("About DC++"));
+	setSmallIcon(WinUtil::createIcon(IDI_DCPP, 16));
+	setLargeIcon(WinUtil::createIcon(IDI_DCPP, 32));
+	runtimeInfo->setText(Text::toT(getAboutInfo()));
+
+	layout();
+	centerWindow();
+
+	HttpManager::getInstance()->addListener(this);
+	onDestroy([this] { HttpManager::getInstance()->removeListener(this); });
+	c = HttpManager::getInstance()->download("https://dcplusplus.sourceforge.io/version_exp.xml");
+
+	return false;
+}
+
+void AboutDlg::layout() {
+	const auto content = getContentRect();
+	grid->resize(dwt::Rectangle(content.left() + 3, content.top() + 3, content.width() - 6, content.height() - 6));
+}
+
+void AboutDlg::completeDownload(bool success, const string& result) {
+	tstring str;
+
+	if(success && !result.empty()) {
+		try {
+			SimpleXML xml;
+			xml.fromXML(result);
+			if(xml.findChild("DCUpdate")) {
+				xml.stepIn();
+				if(xml.findChild("Version")) {
+					const auto& ver = xml.getChildData();
+					if(!ver.empty()) {
+						str = Text::toT(ver);
+					}
+				}
+			}
+		} catch(const SimpleXMLException&) {
+			str = T_("Error processing version information");
+		}
+	}
+
+	version->setText(str.empty() ? Text::toT(result) : str);
+}
+
+void AboutDlg::on(HttpManagerListener::Failed, HttpConnection* c, const string& str) noexcept {
+	if(c != this->c) { return; }
+	c = nullptr;
+
+	callAsync([str, this] { completeDownload(false, str); });
+}
+
+void AboutDlg::on(HttpManagerListener::Complete, HttpConnection* c, OutputStream* stream) noexcept {
+	if(c != this->c) { return; }
+	c = nullptr;
+
+	auto str = static_cast<StringOutputStream*>(stream)->getString();
+	callAsync([str, this] { completeDownload(true, str); });
+}

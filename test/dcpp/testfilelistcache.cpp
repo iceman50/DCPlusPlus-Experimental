@@ -9,12 +9,12 @@
 
 #include "testbase.h"
 #include <filesystem>
-#include <dcpp/DirectoryListing.h>
-#include <dcpp/File.h>
-#include <dcpp/FilteredFile.h>
-#include <dcpp/ZstdUtils.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/User.h>
+#include <dcpp/filelist/DirectoryListing.h>
+#include <dcpp/system/File.h>
+#include <dcpp/system/FilteredFile.h>
+#include <dcpp/storage/ZstdUtils.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/user/User.h>
 #include <sqlite3.h>
 
 using namespace dcpp;

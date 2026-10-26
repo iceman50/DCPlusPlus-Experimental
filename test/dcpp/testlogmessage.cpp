@@ -1,8 +1,8 @@
 #include "testbase.h"
 
-#include <dcpp/LogManager.h>
-#include <dcpp/LogMessage.h>
-#include <dcpp/SettingsManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/logging/LogMessage.h>
+#include <dcpp/settings/SettingsManager.h>
 
 using namespace dcpp;
 

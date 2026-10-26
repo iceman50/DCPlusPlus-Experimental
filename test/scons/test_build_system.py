@@ -167,17 +167,17 @@ Default(env.Program('probe', ['main.cpp', library]))
                        '#include "version-rev-id.inc"\n#include "version-build.inc"\n'
                        'const char* revision() { return DCPP_REVISION; }\n'
                        'int build() { return DCPP_BUILD_NUMBER; }\n')
-            self.write(directory, "dcpp/unrelated.cpp", 'int unrelated() { return 1; }\n')
+            self.write(directory, "dcpp/nested/unrelated.cpp", 'int unrelated() { return 1; }\n')
             shutil.copyfile(ROOT / "dcpp/SConscript", directory / "dcpp/SConscript")
             self.write(directory, "revision.txt", "first")
             self.build(directory)
             core = directory / "build/release-mingw-x64/dcpp"
-            before = (core / "unrelated.o").stat().st_mtime_ns
+            before = (core / "nested/unrelated.o").stat().st_mtime_ns
             probe = directory / "probe.exe"
             self.assertEqual(subprocess.check_output([str(probe)], text=True), "first:1")
             self.write(directory, "revision.txt", "other")
             self.build(directory)
-            self.assertEqual(before, (core / "unrelated.o").stat().st_mtime_ns)
+            self.assertEqual(before, (core / "nested/unrelated.o").stat().st_mtime_ns)
             self.assertEqual(subprocess.check_output([str(probe)], text=True), "other:2")
             self.assertIn('"other"', (directory / "dcpp/version-rev-id.inc").read_text())
             self.assertEqual((directory / ".build-number").read_text().strip(), "2")

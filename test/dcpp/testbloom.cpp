@@ -1,8 +1,8 @@
 #include "testbase.h"
 
-#include <dcpp/HashBloom.h>
-#include <dcpp/HashValue.h>
-#include <dcpp/TigerHash.h>
+#include <dcpp/hash/HashBloom.h>
+#include <dcpp/hash/HashValue.h>
+#include <dcpp/hash/TigerHash.h>
 
 using namespace dcpp;
 

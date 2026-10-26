@@ -5,11 +5,11 @@
 
 #include "testbase.h"
 
-#include <dcpp/Download.h>
-#include <dcpp/File.h>
-#include <dcpp/QueueItem.h>
+#include <dcpp/transfer/Download.h>
+#include <dcpp/system/File.h>
+#include <dcpp/queue/QueueItem.h>
 #define private public
-#include <dcpp/UserConnection.h>
+#include <dcpp/connection/UserConnection.h>
 #undef private
 
 #include <chrono>

@@ -8,20 +8,20 @@
 #include <future>
 #include <thread>
 #define private public
-#include <dcpp/UserConnection.h>
-#include <dcpp/ConnectionManager.h>
-#include <dcpp/SSLSocket.h>
+#include <dcpp/connection/UserConnection.h>
+#include <dcpp/connection/ConnectionManager.h>
+#include <dcpp/net/SSLSocket.h>
 #undef private
-#include <dcpp/DirectTransferManager.h>
-#include <dcpp/CryptoManager.h>
-#include <dcpp/DownloadManager.h>
-#include <dcpp/UploadManager.h>
-#include <dcpp/ThrottleManager.h>
-#include <dcpp/ClientManager.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/File.h>
-#include <dcpp/SSLSocket.h>
-#include <dcpp/PluginManager.h>
+#include <dcpp/transfer/private/DirectTransferManager.h>
+#include <dcpp/net/CryptoManager.h>
+#include <dcpp/transfer/DownloadManager.h>
+#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/transfer/ThrottleManager.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/system/File.h>
+#include <dcpp/net/SSLSocket.h>
+#include <dcpp/plugins/PluginManager.h>
 // TLS, SUP/INF, the manager and storage are real. Only the token registration
 // normally done by hub rendezvous is injected; no external hub is contacted.
 

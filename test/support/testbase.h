@@ -3,7 +3,7 @@
 #include <dcpp/stdinc.h>
 
 #ifdef _WIN32
-#include <dcpp/w.h>
+#include <dcpp/system/w.h>
 #endif
 
 #include <dcpp/typedefs.h>

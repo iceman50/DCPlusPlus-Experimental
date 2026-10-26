@@ -7,14 +7,14 @@
 #include <thread>
 
 #define private public
-#include <dcpp/HashManager.h>
+#include <dcpp/hash/HashManager.h>
 #undef private
 
-#include <dcpp/File.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/SQLiteDB.h>
-#include <dcpp/Util.h>
+#include <dcpp/system/File.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/util/Util.h>
 
 using namespace dcpp;
 

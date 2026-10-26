@@ -1,9 +1,9 @@
 #include "testbase.h"
 
-#include <dcpp/Socket.h>
-#include <dcpp/Thread.h>
-#include <dcpp/TimerManager.h>
-#include <dcpp/Util.h>
+#include <dcpp/net/Socket.h>
+#include <dcpp/system/Thread.h>
+#include <dcpp/system/TimerManager.h>
+#include <dcpp/util/Util.h>
 
 #include <thread>
 

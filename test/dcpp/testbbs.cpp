@@ -1,7 +1,7 @@
 #include "testbase.h"
 
-#include <dcpp/AdcCommand.h>
-#include <dcpp/BBSManager.h>
+#include <dcpp/protocol/AdcCommand.h>
+#include <dcpp/bbs/BBSManager.h>
 
 using namespace dcpp;
 

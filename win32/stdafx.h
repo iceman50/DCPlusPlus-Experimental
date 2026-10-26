@@ -22,7 +22,7 @@
 #include "compiler.h"
 
 #include <dcpp/stdinc.h>
-#include <dcpp/w.h>
+#include <dcpp/system/w.h>
 
 namespace dcpp { }
 using namespace dcpp;
@@ -50,8 +50,8 @@ using namespace dcpp;
 #include <dwt/widgets/Tree.h>
 #include <dwt/widgets/Window.h>
 
-#include "RichTextBox.h"
-#include "ShellMenu.h"
+#include <win32/controls/RichTextBox.h>
+#include <win32/shell/ShellMenu.h>
 
 #endif
 

@@ -19,21 +19,21 @@
 
 #include <exception>
 
-#include "CrashLogger.h"
-#include "dwtTexts.h"
-#include "MainWindow.h"
-#include "PluginApiWin.h"
-#include "SingleInstance.h"
-#include "SplashWindow.h"
-#include "WinUtil.h"
+#include <win32/app/CrashLogger.h>
+#include <win32/util/dwtTexts.h>
+#include <win32/app/MainWindow.h>
+#include <win32/plugins/PluginApiWin.h>
+#include <win32/app/SingleInstance.h>
+#include <win32/app/SplashWindow.h>
+#include <win32/util/WinUtil.h>
 
-#include <dcpp/DCPlusPlus.h>
-#include <dcpp/MerkleTree.h>
-#include <dcpp/File.h>
-#include <dcpp/Text.h>
-#include <dcpp/Thread.h>
-#include <dcpp/MappingManager.h>
-#include <dcpp/ResourceManager.h>
+#include <dcpp/app/DCPlusPlus.h>
+#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/system/File.h>
+#include <dcpp/text/Text.h>
+#include <dcpp/system/Thread.h>
+#include <dcpp/connectivity/MappingManager.h>
+#include <dcpp/app/ResourceManager.h>
 #include <dcpp/version.h>
 
 #include <dwt/Application.h>

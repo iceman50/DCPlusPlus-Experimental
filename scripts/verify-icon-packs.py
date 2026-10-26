@@ -204,7 +204,7 @@ def main():
     parser.add_argument("--pack", choices=PACKS, action="append", help="Check only the selected pack(s)")
     args = parser.parse_args()
     expected = {p.name for p in (ROOT / "res").glob("*.ico")}
-    mapped = set(re.findall(r'"([A-Za-z]+\.ico)"', (ROOT / "win32/IconManager.cpp").read_text()))
+    mapped = set(re.findall(r'"([A-Za-z]+\.ico)"', (ROOT / "win32/appearance/IconManager.cpp").read_text()))
     require(mapped == expected, "Compiled icon mapping and source files differ")
     load = native_loader()
     total_frames = total_native = 0

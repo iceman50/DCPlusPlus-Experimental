@@ -2,18 +2,18 @@
 
 #include "stdafx.h"
 
-#include "AspectChat.h"
-#include "SingleInstance.h"
+#include <win32/frames/chat/AspectChat.h>
+#include <win32/app/SingleInstance.h>
 
-#include <dcpp/ClientManager.h>
-#include <dcpp/FavoriteManager.h>
-#include <dcpp/HashManager.h>
-#include <dcpp/HttpManager.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/QueueManager.h>
-#include <dcpp/ResourceManager.h>
-#include <dcpp/SearchManager.h>
-#include <dcpp/UploadManager.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/favorites/FavoriteManager.h>
+#include <dcpp/hash/HashManager.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/app/ResourceManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/transfer/UploadManager.h>
 #include <dwt/widgets/Window.h>
 #include <cstdio>
 #include <stdexcept>

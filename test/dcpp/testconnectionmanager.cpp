@@ -15,23 +15,23 @@
 // Exercise the real manager transitions without opening external connections.
 // This follows the private-access pattern used by the share/cache tests.
 #define private public
-#include <dcpp/ClientManager.h>
-#include <dcpp/ConnectionManager.h>
-#include <dcpp/NmdcHub.h>
-#include <dcpp/UserConnection.h>
-#include <dcpp/UploadManager.h>
-#include <dcpp/PluginManager.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/connection/ConnectionManager.h>
+#include <dcpp/hub/NmdcHub.h>
+#include <dcpp/connection/UserConnection.h>
+#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/plugins/PluginManager.h>
 #undef private
 
-#include <dcpp/ConnectivityManager.h>
-#include <dcpp/DownloadManager.h>
-#include <dcpp/FavoriteManager.h>
-#include <dcpp/HttpManager.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/QueueManager.h>
-#include <dcpp/SearchManager.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/UserMatchManager.h>
+#include <dcpp/connectivity/ConnectivityManager.h>
+#include <dcpp/transfer/DownloadManager.h>
+#include <dcpp/favorites/FavoriteManager.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/user/UserMatchManager.h>
 
 using namespace dcpp;
 

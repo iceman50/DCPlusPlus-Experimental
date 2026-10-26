@@ -9,12 +9,12 @@
 
 #include "testbase.h"
 
-#include <dcpp/AdcCommand.h>
-#include <dcpp/AdcHub.h>
-#include <dcpp/Client.h>
-#include <dcpp/CryptoManager.h>
-#include <dcpp/HubEntry.h>
-#include <dcpp/SearchManager.h>
+#include <dcpp/protocol/AdcCommand.h>
+#include <dcpp/hub/AdcHub.h>
+#include <dcpp/hub/Client.h>
+#include <dcpp/net/CryptoManager.h>
+#include <dcpp/hub/HubEntry.h>
+#include <dcpp/search/SearchManager.h>
 
 using namespace dcpp;
 

@@ -4,10 +4,10 @@
 
 #include "testbase.h"
 
-#include <dcpp/PrivateTransferStorage.h>
-#include <dcpp/File.h>
-#include <dcpp/Text.h>
-#include <dcpp/SettingsManager.h>
+#include <dcpp/transfer/private/PrivateTransferStorage.h>
+#include <dcpp/system/File.h>
+#include <dcpp/text/Text.h>
+#include <dcpp/settings/SettingsManager.h>
 #include <filesystem>
 
 using namespace dcpp;

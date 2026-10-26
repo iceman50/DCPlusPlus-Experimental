@@ -2,10 +2,10 @@
 
 #include "testbase.h"
 
-#include <dcpp/HttpConnection.h>
-#include <dcpp/HttpManager.h>
-#include <dcpp/Streams.h>
-#include <dcpp/TimerManager.h>
+#include <dcpp/net/HttpConnection.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/system/Streams.h>
+#include <dcpp/system/TimerManager.h>
 
 using namespace dcpp;
 

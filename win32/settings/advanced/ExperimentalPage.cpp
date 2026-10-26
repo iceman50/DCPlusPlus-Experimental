@@ -1,0 +1,686 @@
+/*
+ * Copyright (C) 2001-2026 iceman50
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+#include "stdafx.h"
+#include <dcpp/transfer/private/DirectTransferManager.h>
+#include <win32/settings/advanced/ExperimentalPage.h>
+#include <win32/services/GeoIPUpdate.h>
+
+#include <iterator>
+#include <limits>
+
+#include <dcpp/system/File.h>
+#include <dcpp/hash/HashManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/share/ShareManager.h>
+#include <dcpp/version.h>
+
+#include <dwt/util/StringUtils.h>
+#include <dwt/Appearance.h>
+#include <dwt/widgets/CheckBox.h>
+#include <dwt/widgets/ColorDialog.h>
+#include <dwt/widgets/Grid.h>
+#include <dwt/widgets/GroupBox.h>
+#include <dwt/widgets/Label.h>
+#include <dwt/widgets/LoadDialog.h>
+#include <dwt/widgets/MessageBox.h>
+#include <dwt/widgets/SaveDialog.h>
+#include <dwt/widgets/Spinner.h>
+#include <dwt/widgets/TabView.h>
+
+#include <win32/resource.h>
+#include <win32/settings/appearance/ThemePage.h>
+#include <win32/settings/SettingsDialog.h>
+#include <win32/util/WinUtil.h>
+
+using dwt::ColorDialog;
+using dwt::Grid;
+using dwt::GridInfo;
+using dwt::Label;
+using dwt::Spinner;
+
+namespace {
+
+constexpr int BYTES_PER_KIB = 1024;
+constexpr int MAX_KIB_SETTING = static_cast<int>(
+	(static_cast<int64_t>(std::numeric_limits<int>::max()) + BYTES_PER_KIB - 1) / BYTES_PER_KIB);
+
+const ColumnInfo tempColumns[] = {
+	{ N_("File"), 130, false },
+	{ N_("Size"), 75, true },
+	{ N_("Route"), 140, false },
+	{ N_("TTH"), 250, false },
+	{ N_("Path"), 220, false }
+};
+
+/** An opaque settings tab page that uses the same default background as its child grid. */
+class ExperimentalTabPage : public dwt::Container
+{
+public:
+	ExperimentalTabPage(dwt::Widget* parent, const tstring& title, size_t rows) :
+		dwt::Container(parent),
+		grid(nullptr)
+	{
+		dwt::Container::Seed seed;
+		seed.caption = title;
+		seed.style &= ~WS_VISIBLE;
+		seed.exStyle |= WS_EX_CONTROLPARENT;
+		create(seed);
+		setHelpId(IDH_EXPERIMENTALPAGE);
+
+		grid = addChild(Grid::Seed(rows, 1));
+		grid->setSpacing(10);
+		grid->column(0).mode = GridInfo::FILL;
+	}
+
+	GridPtr content() const { return grid; }
+
+	dwt::Point getPreferredSize() override {
+		return grid->getPreferredSize() + dwt::Point(14, 12);
+	}
+
+	void layout() override {
+		const auto size = getClientSize();
+		grid->resize(dwt::Rectangle(7, 4,
+			std::max<LONG>(0, size.x - 14), std::max<LONG>(0, size.y - 12)));
+	}
+
+private:
+	GridPtr grid;
+};
+
+/** TabView normally has no preferred size because it is used to fill application frames.
+ * Settings pages need one so that their shared ScrolledContainer remains a small-window fallback. */
+class ExperimentalTabView : public dwt::TabView
+{
+public:
+	typedef ExperimentalTabView* ObjectType;
+	typedef dwt::TabView::Seed Seed;
+
+	explicit ExperimentalTabView(dwt::Widget* parent) : dwt::TabView(parent) { }
+
+	ExperimentalTabPage* addPage(const tstring& title, size_t rows) {
+		auto page = new ExperimentalTabPage(this, title, rows);
+		pages.push_back(page);
+		add(page);
+		return page;
+	}
+
+	dwt::Point getPreferredSize() override {
+		dwt::Point contentSize;
+		for(auto page: pages) {
+			const auto size = page->getPreferredSize();
+			contentSize.x = std::max(contentSize.x, size.x);
+			contentSize.y = std::max(contentSize.y, size.y);
+		}
+
+		// Ensure that all single-line tab labels fit without scroll buttons at the preferred width.
+		LONG tabsRight = 0;
+		for(size_t i = 0; i < size(); ++i) {
+			RECT rect = { 0 };
+			if(TabCtrl_GetItemRect(handle(), static_cast<int>(i), &rect)) {
+				tabsRight = std::max(tabsRight, rect.right);
+			}
+		}
+		contentSize.x = std::max(contentSize.x, tabsRight);
+
+		RECT rect = { 0, 0, contentSize.x, contentSize.y };
+		TabCtrl_AdjustRect(handle(), TRUE, &rect);
+		return dwt::Point(rect.right - rect.left, rect.bottom - rect.top);
+	}
+
+private:
+	std::vector<ExperimentalTabPage*> pages;
+};
+
+}
+
+ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
+	PropPage(parent, 1, 1),
+	hubUserIconSize(nullptr),
+	tempShares(nullptr),
+	tempSummary(nullptr),
+	removeTemp(nullptr),
+	clearTemps(nullptr),
+	hashDbStatus(nullptr),
+	hashDbCallbackToken(std::make_shared<int>(0)),
+	hashDbMaintenanceRunning(false)
+{
+	setHelpId(IDH_EXPERIMENTALPAGE);
+	grid->row(0).mode = GridInfo::FILL;
+	grid->row(0).align = GridInfo::STRETCH;
+	grid->column(0).mode = GridInfo::FILL;
+
+	auto tabSeed = WinUtil::Seeds::tabs;
+	tabSeed.style &= ~(TCS_OWNERDRAWFIXED | TCS_MULTILINE | TCS_RAGGEDRIGHT | TCS_TOOLTIPS);
+	tabSeed.exStyle |= WS_EX_CONTROLPARENT;
+	tabSeed.widthConfig = 0;
+	tabSeed.closeable = false;
+	auto tabs = dwt::WidgetCreator<ExperimentalTabView>::create(grid, tabSeed);
+	tabs->setHelpId(IDH_EXPERIMENTALPAGE);
+	grid->setWidget(tabs, 0, 0);
+
+	auto chatGrid = tabs->addPage(T_("Chat and sharing"), 2)->content();
+	chatGrid->row(1).mode = GridInfo::FILL;
+	chatGrid->row(1).align = GridInfo::STRETCH;
+
+	{
+		auto group = chatGrid->addChild(GroupBox::Seed(T_("Rich text and temporary shares")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES);
+		auto cur = group->addChild(Grid::Seed(5, 1));
+		cur->column(0).mode = GridInfo::FILL;
+
+		auto checks = cur->addChild(Grid::Seed(3, 1));
+		checks->column(0).mode = GridInfo::FILL;
+		auto richText = checks->addChild(CheckBox::Seed(T_("Enable ADC RTF0 CommonMark chat")));
+		richText->setHelpId(IDH_SETTINGS_EXPERIMENTAL_ENABLE_RICH_TEXT);
+		items.emplace_back(richText, SettingsManager::ENABLE_RICH_TEXT, PropPage::T_BOOL);
+		auto temp = checks->addChild(CheckBox::Seed(T_("Enable temporary file sharing in chats")));
+		temp->setHelpId(IDH_SETTINGS_EXPERIMENTAL_ENABLE_TEMP_SHARES);
+		items.emplace_back(temp, SettingsManager::ENABLE_RTF_TEMP_SHARES, PropPage::T_BOOL);
+		auto inlineImages = checks->addChild(CheckBox::Seed(T_("Insert dropped image files as inline media")));
+		inlineImages->setHelpId(IDH_SETTINGS_EXPERIMENTAL_DROPPED_IMAGES_INLINE);
+		items.emplace_back(inlineImages, SettingsManager::RTF_DROPPED_IMAGES_INLINE, PropPage::T_BOOL);
+
+		addIntItem(cur, T_("Rich text message size limit"), SettingsManager::RICH_TEXT_MAX_SIZE,
+			IDH_SETTINGS_EXPERIMENTAL_RICH_TEXT_MAX_SIZE, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
+		addIntItem(cur, T_("Clickable chat link length limit"), SettingsManager::CHAT_LINK_MAX_LENGTH,
+			IDH_SETTINGS_EXPERIMENTAL_CHAT_LINK_MAX_LENGTH, T_("characters"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Maximum temporary shares"), SettingsManager::RTF_TEMP_SHARE_LIMIT,
+			IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_LIMIT, T_("files"), 1, 10000);
+		addIntItem(cur, T_("Automatically remove temporary shares after"), SettingsManager::RTF_TEMP_SHARE_EXPIRATION,
+			IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_EXPIRATION, T_("minutes (0 = never)"), 0, UD_MAXVAL);
+	}
+
+	{
+		auto group = chatGrid->addChild(GroupBox::Seed(T_("Active temporary shares")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES);
+		auto cur = group->addChild(Grid::Seed(3, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		cur->row(0).mode = GridInfo::FILL;
+		cur->row(0).size = cur->scale(110);
+		cur->row(0).align = GridInfo::STRETCH;
+		// The group box supplies the themed frame. A native sunken edge inside
+		// the composited settings page can retain stale pixels after tab/layout changes.
+		auto tableSeed = WinUtil::Seeds::Dialog::table;
+		tableSeed.exStyle &= ~WS_EX_CLIENTEDGE;
+		tempShares = cur->addChild(tableSeed);
+		tempShares->setHelpId(IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES);
+		WinUtil::makeColumns(tempShares, tempColumns, 5);
+		tempShares->onGetEmptyText([] { return T_("No temporary attachment shares are active"); });
+		tempShares->onSelectionChanged([this] { handleTempSelectionChanged(); });
+		tempShares->onContextMenu([this](dwt::ScreenCoordinate pt) { return handleTempContextMenu(pt); });
+
+		auto buttons = cur->addChild(Grid::Seed(1, 4));
+		buttons->column(3).mode = GridInfo::FILL;
+		removeTemp = buttons->addChild(Button::Seed(T_("&Remove selected")));
+		removeTemp->onClicked([this] { handleRemoveTemps(); });
+		clearTemps = buttons->addChild(Button::Seed(T_("&Clear all")));
+		clearTemps->onClicked([this] { handleClearTemps(); });
+		buttons->addChild(Button::Seed(T_("Re&fresh")))->onClicked([this] { fillTempShares(); });
+		tempSummary = cur->addChild(Label::Seed(tstring()));
+
+		// Preserve the group's preferred height while allowing the table to consume extra tab space.
+		chatGrid->row(1).size = group->getPreferredSize().y;
+		tempShares->onWindowPosChanged([this](const dwt::Rectangle&) { layoutTempShares(); });
+	}
+
+	auto transferGrid = tabs->addPage(T_("Transfers and hashing"), 3)->content();
+
+	{
+		auto page = tabs->addPage(T_("Private Send"), 1)->content();
+		auto group = page->addChild(GroupBox::Seed(T_("Private Send (experimental PFT1)")));
+		auto cur = group->addChild(Grid::Seed(6, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		auto enabled = cur->addChild(CheckBox::Seed(T_("Enable Private Send (requires TLS 1.2+)")));
+		items.emplace_back(enabled, SettingsManager::ENABLE_PRIVATE_SEND, PropPage::T_BOOL);
+		auto verification = cur->addChild(CheckBox::Seed(T_("Require manual contact verification (off for testing)")));
+		items.emplace_back(verification, SettingsManager::PFT_REQUIRE_VERIFICATION, PropPage::T_BOOL);
+		addIntItem(cur, T_("Offer expires after"), SettingsManager::PFT_OFFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"), 1, 1440);
+		addIntItem(cur, T_("Accepted transfer expires after"), SettingsManager::PFT_TRANSFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"),
+			1, 10080);
+		cur->addChild(Label::Seed(T_("Use Private Send in a private chat's menu. Testing mode skips contact verification on this client.")));
+		cur->addChild(Label::Seed(
+			T_("Disabling revokes transfers. Received files stay in a protected, unshared folder; files never open automatically.")));
+	}
+
+	{
+		auto group = transferGrid->addChild(GroupBox::Seed(T_("Compression and large file lists")));
+		auto cur = group->addChild(Grid::Seed(2, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		auto zstd = cur->addChild(CheckBox::Seed(T_("Prefer Zstandard over zlib when the peer supports both")));
+		items.emplace_back(zstd, SettingsManager::PREFER_ZSTD, PropPage::T_BOOL);
+		auto cache = cur->addChild(CheckBox::Seed(T_("Cache file lists on disk and load file entries on demand")));
+		items.emplace_back(cache, SettingsManager::FILELIST_CACHE, PropPage::T_BOOL);
+	}
+
+	{
+		auto group = transferGrid->addChild(GroupBox::Seed(T_("Multi-connection transfers (MCN)")));
+		auto cur = group->addChild(Grid::Seed(2, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Maximum regular download connections per user"), SettingsManager::MAX_MCN_DOWNLOADS,
+			IDH_SETTINGS_EXPERIMENTAL_MCN_DOWNLOADS, T_("connections"), 1, 100);
+		addIntItem(cur, T_("Maximum regular upload connections per user"), SettingsManager::MAX_MCN_UPLOADS,
+			IDH_SETTINGS_EXPERIMENTAL_MCN_UPLOADS, T_("connections"), 1, 100);
+	}
+
+	{
+		auto group = transferGrid->addChild(GroupBox::Seed(T_("Hashing and share database")));
+		auto cur = group->addChild(Grid::Seed(6, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Maximum hash speed"), SettingsManager::MAX_HASH_SPEED,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_SPEED, T_("MiB/s (0 = unlimited)"), 0, UD_MAXVAL);
+		addIntItem(cur, T_("Hashing worker threads"), SettingsManager::HASHING_THREADS,
+			IDH_SETTINGS_EXPERIMENTAL_HASHING_THREADS, T_("threads"), SettingsManager::HASHING_THREADS_MIN, SettingsManager::HASHING_THREADS_MAX);
+		addIntItem(cur, T_("Hash database write batch size"), SettingsManager::HASH_DB_WRITE_BATCH_SIZE,
+			IDH_SETTINGS_EXPERIMENTAL_HASH_BATCH_SIZE, T_("statements"), 1, UD_MAXVAL);
+
+		auto checks = cur->addChild(Grid::Seed(2, 1));
+		checks->column(0).mode = GridInfo::FILL;
+		auto verify = checks->addChild(CheckBox::Seed(T_("Verify hash database on startup")));
+		verify->setHelpId(IDH_SETTINGS_EXPERIMENTAL_HASH_VERIFY_STARTUP);
+		items.emplace_back(verify, SettingsManager::HASH_DB_VERIFY_STARTUP, PropPage::T_BOOL);
+		auto compact = checks->addChild(CheckBox::Seed(T_("Compact hash database after rebuild")));
+		compact->setHelpId(IDH_SETTINGS_EXPERIMENTAL_HASH_COMPACT_REBUILD);
+		items.emplace_back(compact, SettingsManager::HASH_DB_COMPACT_ON_REBUILD, PropPage::T_BOOL);
+
+		auto cache = cur->addChild(CheckBox::Seed(T_("Use cached share tree on startup")));
+		cache->setHelpId(IDH_SETTINGS_EXPERIMENTAL_SHARE_CACHE);
+		items.emplace_back(cache, SettingsManager::SHARE_CACHE, PropPage::T_BOOL);
+
+		auto buttons = cur->addChild(Grid::Seed(2, 4));
+		buttons->column(3).mode = GridInfo::FILL;
+		buttons->addChild(Button::Seed(T_("&Verify")))->onClicked([this] { handleVerifyHashDb(false); });
+		buttons->addChild(Button::Seed(T_("Full &check")))->onClicked([this] { handleVerifyHashDb(true); });
+		buttons->addChild(Button::Seed(T_("&Optimize")))->onClicked([this] { handleOptimizeHashDb(); });
+		buttons->addChild(Button::Seed(T_("&Compact")))->onClicked([this] { handleCompactHashDb(); });
+		hashDbStatus = buttons->addChild(Label::Seed(_T(" ")));
+		buttons->setWidget(hashDbStatus, 1, 0, 1, 4);
+	}
+
+	auto protocolGrid = tabs->addPage(T_("Protocol limits"), 2)->content();
+
+	{
+		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Direct private-message channels (CCPM)")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_BASE_DELAY);
+		auto cur = group->addChild(Grid::Seed(4, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Initial automatic reconnect delay"), SettingsManager::CCPM_RECONNECT_BASE_DELAY,
+			IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_BASE_DELAY, T_("seconds"),
+			SettingsManager::CCPM_RECONNECT_DELAY_MIN, SettingsManager::CCPM_RECONNECT_DELAY_MAX);
+		addIntItem(cur, T_("Maximum automatic reconnect delay"), SettingsManager::CCPM_RECONNECT_MAX_DELAY,
+			IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_MAX_DELAY, T_("seconds"),
+			SettingsManager::CCPM_RECONNECT_DELAY_MIN, SettingsManager::CCPM_RECONNECT_DELAY_MAX);
+		addIntItem(cur, T_("Stable connection reset time"), SettingsManager::CCPM_STABLE_CONNECTION_TIME,
+			IDH_SETTINGS_EXPERIMENTAL_CCPM_STABLE_CONNECTION_TIME, T_("seconds"),
+			SettingsManager::CCPM_STABLE_CONNECTION_TIME_MIN,
+			SettingsManager::CCPM_STABLE_CONNECTION_TIME_MAX);
+		addIntItem(cur, T_("Maximum automatic reconnect attempts"), SettingsManager::CCPM_MAX_AUTOMATIC_ATTEMPTS,
+			IDH_SETTINGS_EXPERIMENTAL_CCPM_MAX_AUTOMATIC_ATTEMPTS, T_("attempts"),
+			SettingsManager::CCPM_AUTOMATIC_ATTEMPTS_MIN, SettingsManager::CCPM_AUTOMATIC_ATTEMPTS_MAX);
+	}
+
+	{
+		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Protocol resource limits")));
+		auto cur = group->addChild(Grid::Seed(11, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Queued protocol data limit"), SettingsManager::MAX_QUEUED_PROTOCOL_DATA,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_QUEUED_PROTOCOL_DATA, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
+		addIntItem(cur, T_("Concurrent peer connection limit"), SettingsManager::MAX_CONCURRENT_CONNECTIONS,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_CONCURRENT_CONNECTIONS, T_("connections"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Incoming connection flood window"), SettingsManager::FLOOD_WINDOW,
+			IDH_SETTINGS_EXPERIMENTAL_FLOOD_WINDOW, T_("milliseconds"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Global UDP rate window"), SettingsManager::GLOBAL_WINDOW,
+			IDH_SETTINGS_EXPERIMENTAL_GLOBAL_WINDOW, T_("milliseconds"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Global UDP packet limit"), SettingsManager::GLOBAL_LIMIT,
+			IDH_SETTINGS_EXPERIMENTAL_GLOBAL_LIMIT, T_("packets per window"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Per-peer UDP packet limit"), SettingsManager::PEER_LIMIT,
+			IDH_SETTINGS_EXPERIMENTAL_PEER_LIMIT, T_("packets per window"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Per-peer UDP rate window"), SettingsManager::PEER_WINDOW,
+			IDH_SETTINGS_EXPERIMENTAL_PEER_WINDOW, T_("milliseconds"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Tracked UDP peer limit"), SettingsManager::MAX_TRACKED_PEERS,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_TRACKED_PEERS, T_("peers"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Encrypted UDP packet limit"), SettingsManager::MAX_SUDP_PACKET,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_PACKET, T_("bytes"), 32, UD_MAXVAL);
+		addIntItem(cur, T_("Stored encrypted UDP key limit"), SettingsManager::MAX_SUDP_KEYS,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_KEYS, T_("keys"), 1, UD_MAXVAL);
+		addIntItem(cur, T_("Generated partial file list limit"), SettingsManager::MAX_PARTIAL_LIST_BYTES,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
+	}
+
+	auto themeGrid = tabs->addPage(T_("Interface"), 4)->content();
+
+	{
+		auto group = themeGrid->addChild(GroupBox::Seed(T_("Hub user lists")));
+		auto cur = group->addChild(Grid::Seed(2, 2));
+		cur->column(0).mode = GridInfo::FILL;
+		cur->addChild(Label::Seed(T_("Default user icon size")));
+		hubUserIconSize = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+		hubUserIconSize->setAccessibleName(T_("Default hub user icon size"));
+		int selected = 0;
+		for(size_t i = 0; i < std::size(HubSettings::userIconSizes); ++i) {
+			hubUserIconSize->addValue(Text::toT(std::to_string(HubSettings::userIconSizes[i])) + _T(" px"));
+			if(SETTING(HUB_USER_ICON_SIZE) == HubSettings::userIconSizes[i]) selected = static_cast<int>(i);
+		}
+		hubUserIconSize->setSelected(selected);
+		auto note = cur->addChild(Label::Seed(T_("Individual favorite hubs can override this size. Sizes scale with display DPI.")));
+		cur->setWidget(note, 1, 0, 1, 2);
+	}
+
+	{
+		auto group = themeGrid->addChild(GroupBox::Seed(T_("System Log")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_MAX_SYSTEM_LOG_ITEMS);
+		auto cur = group->addChild(Grid::Seed(1, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Maximum System Log items"), SettingsManager::MAX_SYSTEM_LOG_ITEMS,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_SYSTEM_LOG_ITEMS, T_("messages"),
+			LogManager::MIN_HISTORY_ITEMS, LogManager::MAX_HISTORY_ITEMS);
+	}
+
+	{
+		auto group = themeGrid->addChild(GroupBox::Seed(T_("GeoLite2 Country testing")));
+		auto fields = group->addChild(Grid::Seed(4, 2));
+		fields->column(1).mode = GridInfo::FILL;
+		auto enabled = fields->addChild(CheckBox::Seed(T_("Download directly from MaxMind (testing override)")));
+		fields->setWidget(enabled, 0, 0, 1, 2);
+		items.emplace_back(enabled, SettingsManager::GEOIP_USE_MAXMIND, PropPage::T_BOOL);
+		fields->addChild(Label::Seed(T_("MaxMind account ID")));
+		items.emplace_back(fields->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::MAXMIND_ACCOUNT_ID, PropPage::T_STR);
+		fields->addChild(Label::Seed(T_("License key")));
+		maxmindKey = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		maxmindKey->setPassword();
+		maxmindKey->setText(Text::toT(GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY))));
+		auto note = fields->addChild(Label::Seed(T_("Overrides the hosted URL. Key protected for this Windows account.")));
+		fields->setWidget(note, 3, 0, 1, 2);
+	}
+
+	themeGrid->addChild(Button::Seed(T_("Edit themes, fonts and chat colors...")))->onClicked([this] {
+		static_cast<SettingsDialog*>(getRoot())->activatePage<ThemePage>();
+	});
+
+	PropPage::read(items);
+	readScaledIntItems();
+	fillTempShares();
+}
+
+ExperimentalPage::~ExperimentalPage() {
+	hashDbCallbackToken.reset();
+}
+
+void ExperimentalPage::layout() {
+	PropPage::layout();
+	layoutTempShares();
+}
+
+void ExperimentalPage::write() {
+	auto key = Text::fromT(maxmindKey->getText());
+	Util::trim(key);
+	if(key != GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY)))
+		SettingsManager::getInstance()->set(SettingsManager::MAXMIND_LICENSE_KEY, GeoIPUpdate::protectKey(key));
+	PropPage::write(items);
+	writeScaledIntItems();
+
+	auto settings = SettingsManager::getInstance();
+	const auto iconSizeIndex = hubUserIconSize->getSelected();
+	settings->set(SettingsManager::HUB_USER_ICON_SIZE,
+		iconSizeIndex >= 0 && static_cast<size_t>(iconSizeIndex) < std::size(HubSettings::userIconSizes) ? HubSettings::userIconSizes[iconSizeIndex] : 16);
+	auto clamp = [settings](SettingsManager::IntSetting setting, int minimum) {
+		if(settings->get(setting) < minimum) settings->set(setting, minimum);
+	};
+	auto clampRange = [settings](SettingsManager::IntSetting setting, int minimum, int maximum) {
+		settings->set(setting, std::clamp(settings->get(setting), minimum, maximum));
+	};
+	clamp(SettingsManager::MAX_MCN_DOWNLOADS, 1);
+	clamp(SettingsManager::MAX_MCN_UPLOADS, 1);
+	clamp(SettingsManager::MAX_HASH_SPEED, 0);
+	clampRange(SettingsManager::HASHING_THREADS, SettingsManager::HASHING_THREADS_MIN, SettingsManager::HASHING_THREADS_MAX);
+	clamp(SettingsManager::HASH_DB_WRITE_BATCH_SIZE, 1);
+	clamp(SettingsManager::RTF_TEMP_SHARE_LIMIT, 1);
+	clamp(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 0);
+	clampRange(SettingsManager::PFT_OFFER_MINUTES, 1, 1440);
+	clampRange(SettingsManager::PFT_TRANSFER_MINUTES, 1, 10080);
+	if(DirectTransferManager::available())
+		DirectTransferManager::getInstance()->configure();
+	clampRange(SettingsManager::CCPM_RECONNECT_BASE_DELAY,
+		SettingsManager::CCPM_RECONNECT_DELAY_MIN, SettingsManager::CCPM_RECONNECT_DELAY_MAX);
+	clampRange(SettingsManager::CCPM_RECONNECT_MAX_DELAY,
+		SettingsManager::CCPM_RECONNECT_DELAY_MIN, SettingsManager::CCPM_RECONNECT_DELAY_MAX);
+	clampRange(SettingsManager::CCPM_STABLE_CONNECTION_TIME,
+		SettingsManager::CCPM_STABLE_CONNECTION_TIME_MIN, SettingsManager::CCPM_STABLE_CONNECTION_TIME_MAX);
+	clampRange(SettingsManager::CCPM_MAX_AUTOMATIC_ATTEMPTS,
+		SettingsManager::CCPM_AUTOMATIC_ATTEMPTS_MIN, SettingsManager::CCPM_AUTOMATIC_ATTEMPTS_MAX);
+	if(settings->get(SettingsManager::CCPM_RECONNECT_MAX_DELAY) <
+		settings->get(SettingsManager::CCPM_RECONNECT_BASE_DELAY))
+	{
+		settings->set(SettingsManager::CCPM_RECONNECT_MAX_DELAY,
+			settings->get(SettingsManager::CCPM_RECONNECT_BASE_DELAY));
+	}
+	clamp(SettingsManager::MAX_QUEUED_PROTOCOL_DATA, 1024);
+	clamp(SettingsManager::MAX_CONCURRENT_CONNECTIONS, 1);
+	clamp(SettingsManager::FLOOD_WINDOW, 1);
+	clamp(SettingsManager::GLOBAL_WINDOW, 1);
+	clamp(SettingsManager::GLOBAL_LIMIT, 1);
+	clamp(SettingsManager::PEER_LIMIT, 1);
+	clamp(SettingsManager::PEER_WINDOW, 1);
+	clamp(SettingsManager::MAX_TRACKED_PEERS, 1);
+	clamp(SettingsManager::MAX_SUDP_PACKET, 32);
+	clamp(SettingsManager::MAX_SUDP_KEYS, 1);
+	clamp(SettingsManager::MAX_PARTIAL_LIST_BYTES, 1024);
+	clamp(SettingsManager::CHAT_LINK_MAX_LENGTH, 1);
+	clamp(SettingsManager::RICH_TEXT_MAX_SIZE, 1024);
+	const auto systemLogItems = settings->get(SettingsManager::MAX_SYSTEM_LOG_ITEMS);
+	if(systemLogItems < LogManager::MIN_HISTORY_ITEMS || systemLogItems > LogManager::MAX_HISTORY_ITEMS) {
+		settings->set(SettingsManager::MAX_SYSTEM_LOG_ITEMS, std::clamp(systemLogItems,
+			static_cast<int>(LogManager::MIN_HISTORY_ITEMS), static_cast<int>(LogManager::MAX_HISTORY_ITEMS)));
+	}
+}
+
+void ExperimentalPage::layoutTempShares() {
+	if(!tempShares) return;
+	const auto width = tempShares->getWindowSize().x;
+	tempShares->setColumnWidth(4, std::max<LONG>(180, width - 610));
+}
+
+void ExperimentalPage::addIntItem(GridPtr target, const tstring& text, int setting,
+	unsigned helpId, const tstring& unit, int minimum, int maximum, int multiplier)
+{
+	auto row = target->addChild(Grid::Seed(1, 4));
+	row->column(0).mode = GridInfo::FILL;
+	row->column(1).size = 72;
+	row->column(1).mode = GridInfo::STATIC;
+	row->addChild(Label::Seed(text))->setHelpId(helpId);
+	auto box = row->addChild(WinUtil::Seeds::Dialog::intTextBox);
+	box->setHelpId(helpId);
+	if(multiplier == 1) {
+		items.emplace_back(box, setting, PropPage::T_INT_WITH_SPIN);
+	} else {
+		scaledIntItems.push_back({ box, setting, multiplier });
+	}
+	auto spin = row->addChild(Spinner::Seed(minimum, maximum, box));
+	row->setWidget(spin);
+	spin->setHelpId(helpId);
+	row->addChild(Label::Seed(unit))->setHelpId(helpId);
+}
+
+void ExperimentalPage::readScaledIntItems() {
+	auto settings = SettingsManager::getInstance();
+	for(const auto& item: scaledIntItems) {
+		const auto storedValue = static_cast<int64_t>(settings->get(
+			static_cast<SettingsManager::IntSetting>(item.setting)));
+		// Round upward so opening and applying Settings can never reduce an existing byte limit.
+		const auto displayedValue = storedValue > 0 ?
+			(storedValue + item.multiplier - 1) / item.multiplier : 0;
+		item.box->setText(Text::toT(std::to_string(displayedValue)));
+	}
+}
+
+void ExperimentalPage::writeScaledIntItems() {
+	auto settings = SettingsManager::getInstance();
+	for(const auto& item: scaledIntItems) {
+		const auto setting = static_cast<SettingsManager::IntSetting>(item.setting);
+		const auto text = Text::fromT(item.box->getText());
+		if(text.empty()) {
+			settings->unset(setting);
+			continue;
+		}
+
+		const auto maximumStoredValue = static_cast<int64_t>(std::numeric_limits<int>::max());
+		const auto maximum = (maximumStoredValue + item.multiplier - 1) / item.multiplier;
+		const auto displayedValue = std::max<int64_t>(0, std::min(Util::toInt64(text), maximum));
+		settings->set(setting, static_cast<int>(std::min(displayedValue * item.multiplier, maximumStoredValue)));
+	}
+}
+
+void ExperimentalPage::fillTempShares() {
+	tempShares->clear();
+	tempShareRows.clear();
+	const auto shares = ShareManager::getInstance()->getTempShares();
+	for(const auto& share: shares) {
+		bool available = false;
+		try {
+			File file(share.realPath, File::READ, File::OPEN | File::SHARED);
+			available = file.getSize() == share.size && file.getLastModified() == share.timestamp;
+		} catch(...) {
+		}
+		auto name = Text::toT(Util::getFileName(share.realPath));
+		if(!available) name += T_(" (missing or changed)");
+		auto data = std::make_unique<TempShareRow>(TempShareRow {
+			share.realPath, share.hubUrl, share.tth.toBase32()
+		});
+		tempShares->insert({ name, Text::toT(Util::formatBytes(share.size)), Text::toT(share.hubUrl),
+			Text::toT(data->tth), Text::toT(share.realPath) }, reinterpret_cast<LPARAM>(data.get()));
+		tempShareRows.push_back(std::move(data));
+	}
+	tempSummary->setText(T_("Active temporary shares: ") + Text::toT(std::to_string(shares.size())));
+	handleTempSelectionChanged();
+}
+
+ExperimentalPage::TempShareRow* ExperimentalPage::getTempShareRow(int row) {
+	return reinterpret_cast<TempShareRow*>(tempShares->getData(row));
+}
+
+void ExperimentalPage::handleTempSelectionChanged() {
+	const auto any = tempShares->hasSelected();
+	removeTemp->setEnabled(any);
+	clearTemps->setEnabled(tempShares->size() != 0);
+}
+
+bool ExperimentalPage::handleTempContextMenu(dwt::ScreenCoordinate pt) {
+	if(pt.x() == -1 && pt.y() == -1) {
+		pt = tempShares->getContextMenuPos();
+	}
+
+	const auto selected = tempShares->countSelected();
+	auto menu = addChild(WinUtil::Seeds::menu);
+	menu->setTitle(selected == 1 ?
+		dwt::util::escapeMenu(tempShares->getText(tempShares->getSelected(), 0)) :
+		T_("Active temporary shares"), WinUtil::menuIcon(IDI_MAGNET));
+	menu->appendItem(T_("Copy magnet link to clipboard"), [this] { handleCopyTempMagnet(); },
+		WinUtil::menuIcon(IDI_MAGNET), selected == 1);
+	menu->appendItem(T_("&Remove"), [this] { handleRemoveTemps(); }, dwt::IconPtr(), selected != 0);
+	menu->open(pt);
+	return true;
+}
+
+void ExperimentalPage::handleCopyTempMagnet() {
+	const auto row = tempShares->getSelected();
+	if(row < 0) return;
+
+	try {
+		const auto data = getTempShareRow(row);
+		if(!data) return;
+		const TTHValue tth(data->tth);
+		const auto shares = ShareManager::getInstance()->getTempShares();
+		const auto share = std::find_if(shares.begin(), shares.end(), [&](const ShareManager::TempShareInfo& item) {
+			return item.tth == tth && Util::stricmp(item.realPath, data->path) == 0 &&
+				Util::stricmp(item.hubUrl, data->route) == 0;
+		});
+		if(share != shares.end()) {
+			WinUtil::copyMagnet(share->tth, Text::toT(Util::getFileName(share->realPath)), share->size);
+		}
+	} catch(...) {
+	}
+}
+
+void ExperimentalPage::handleRemoveTemps() {
+	for(int row = tempShares->getNext(-1, LVNI_SELECTED); row != -1;
+		row = tempShares->getNext(row, LVNI_SELECTED))
+	{
+		try {
+			const auto data = getTempShareRow(row);
+			if(data) {
+				ShareManager::getInstance()->removeTempShare(data->path,
+					TTHValue(data->tth), data->route);
+			}
+		} catch(...) {
+		}
+	}
+	fillTempShares();
+}
+
+void ExperimentalPage::handleClearTemps() {
+	if(dwt::MessageBox(this).show(T_("Remove all active temporary attachment shares and cancel pending preparations?"),
+		_T(APPNAME) _T(" ") _T(VERSIONSTRING), dwt::MessageBox::BOX_YESNO,
+		dwt::MessageBox::BOX_ICONQUESTION) != IDYES) return;
+	ShareManager::getInstance()->clearTempShares();
+	fillTempShares();
+}
+
+void ExperimentalPage::handleVerifyHashDb(bool fullCheck) {
+	if(hashDbMaintenanceRunning) return;
+	setHashDbMaintenanceRunning(true, fullCheck ?
+		T_("Checking the hash database...") : T_("Verifying the hash database..."));
+	HashManager::getInstance()->verifyHashStoreAsync(fullCheck,
+		hashDbCompletion(T_("Hash database check passed"),
+			T_("Hash database check failed; see the system log for details")));
+}
+
+void ExperimentalPage::handleOptimizeHashDb() {
+	if(hashDbMaintenanceRunning) return;
+	setHashDbMaintenanceRunning(true, T_("Optimizing the hash database..."));
+	HashManager::getInstance()->optimizeHashStoreAsync(hashDbCompletion(T_("Hash database optimized")));
+}
+
+void ExperimentalPage::handleCompactHashDb() {
+	if(hashDbMaintenanceRunning) return;
+	if(dwt::MessageBox(this).show(T_("Compact the hash database now?"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
+		dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) != IDYES) return;
+	setHashDbMaintenanceRunning(true, T_("Compacting the hash database..."));
+	HashManager::getInstance()->compactHashStoreAsync(hashDbCompletion(T_("Hash database compacted")));
+}
+
+void ExperimentalPage::setHashDbMaintenanceRunning(bool running, const tstring& status) {
+	// Do not disable the clicked button while it owns focus. SettingsDialog's IsDialogMessage
+	// loop can otherwise spin in WM_GETDLGCODE; the flag guards duplicate operations instead.
+	hashDbMaintenanceRunning = running;
+	hashDbStatus->setText(status.empty() ? _T(" ") : status);
+}
+
+function<void (bool, const string&)> ExperimentalPage::hashDbCompletion(
+	const tstring& successMessage, const tstring& failureMessage)
+{
+	const auto pageHandle = handle();
+	std::weak_ptr<int> callbackToken(hashDbCallbackToken);
+	return [pageHandle, callbackToken, successMessage, failureMessage](bool success, const string& error) {
+		dwt::Application::instance().callAsync([pageHandle, callbackToken, successMessage, failureMessage, success, error] {
+			if(callbackToken.expired() || !::IsWindow(pageHandle)) return;
+			auto page = dwt::hwnd_cast<ExperimentalPage*>(pageHandle);
+			if(!page) return;
+
+			page->setHashDbMaintenanceRunning(false);
+			const auto failed = !error.empty() || !success;
+			const auto message = !error.empty() ? Text::toT(error) :
+				(success ? successMessage : failureMessage);
+			dwt::MessageBox(page).show(message, _T(APPNAME) _T(" ") _T(VERSIONSTRING),
+				dwt::MessageBox::BOX_OK, !error.empty() ? dwt::MessageBox::BOX_ICONSTOP :
+					(failed ? dwt::MessageBox::BOX_ICONEXCLAMATION : dwt::MessageBox::BOX_ICONINFORMATION));
+		});
+	};
+}

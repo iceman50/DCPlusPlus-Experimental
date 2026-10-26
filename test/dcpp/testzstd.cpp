@@ -8,15 +8,15 @@
  */
 
 #include "testbase.h"
-#include <dcpp/FilteredFile.h>
-#include <dcpp/ZstdUtils.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/Download.h>
-#include <dcpp/QueueItem.h>
-#include <dcpp/File.h>
+#include <dcpp/system/FilteredFile.h>
+#include <dcpp/storage/ZstdUtils.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/transfer/Download.h>
+#include <dcpp/queue/QueueItem.h>
+#include <dcpp/system/File.h>
 #include <filesystem>
 #define private public
-#include <dcpp/UserConnection.h>
+#include <dcpp/connection/UserConnection.h>
 #undef private
 
 using namespace dcpp;

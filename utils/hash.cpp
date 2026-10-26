@@ -5,12 +5,12 @@
 #include <cmath>
 #include <iostream>
 
-#include <dcpp/File.h>
-#include <dcpp/FileReader.h>
-#include <dcpp/MerkleTree.h>
-#include <dcpp/TigerHash.h>
-#include <dcpp/TimerManager.h>
-#include <dcpp/Util.h>
+#include <dcpp/system/File.h>
+#include <dcpp/system/FileReader.h>
+#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/hash/TigerHash.h>
+#include <dcpp/system/TimerManager.h>
+#include <dcpp/util/Util.h>
 
 using namespace std;
 using namespace dcpp;

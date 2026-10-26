@@ -2,9 +2,9 @@
 
 #include <filesystem>
 
-#include <dcpp/DirectoryListing.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/User.h>
+#include <dcpp/filelist/DirectoryListing.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/user/User.h>
 
 using namespace dcpp;
 

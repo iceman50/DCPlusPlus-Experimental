@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 iceman50 */
 #include "testbase.h"
-#include <dcpp/CID.h>
-#include <dcpp/Text.h>
+#include <dcpp/user/CID.h>
+#include <dcpp/text/Text.h>
 #include <maxminddb.h>
 #include <openssl/crypto.h>
 #include <openssl/ssl.h>

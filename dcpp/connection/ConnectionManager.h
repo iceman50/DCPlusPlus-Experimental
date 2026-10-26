@@ -1,0 +1,272 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef DCPLUSPLUS_DCPP_CONNECTION_MANAGER_H
+#define DCPLUSPLUS_DCPP_CONNECTION_MANAGER_H
+
+#include <atomic>
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
+#include <dcpp/net/BufferedSocket.h>
+#include <dcpp/connection/ConnectionManagerListener.h>
+#include <dcpp/connection/ConnectionType.h>
+#include <dcpp/system/CriticalSection.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/transfer/MCN.h>
+#include <dcpp/base/Singleton.h>
+#include <dcpp/system/TimerManager.h>
+#include <dcpp/connection/UserConnectionListener.h>
+
+namespace dcpp {
+
+using std::unique_ptr;
+using std::unordered_map;
+using std::vector;
+
+class SocketException;
+
+class ConnectionQueueItem {
+public:
+	enum State {
+		CONNECTING,					// Recently sent request to connect
+		WAITING,					// Waiting to send request to connect
+		NO_DOWNLOAD_SLOTS,			// Not needed right now
+		ACTIVE						// In one up/downmanager
+	};
+
+	ConnectionQueueItem(const HintedUser& user, ConnectionType type, const string& token = Util::emptyString);
+
+	GETSET(string, token, Token);
+	// Peer-supplied ADC token, retained only for duplicate upload detection.
+	GETSET(string, protocolToken, ProtocolToken);
+	GETSET(uint64_t, lastAttempt, LastAttempt);
+	GETSET(int, errors, Errors); // Number of connection errors, or -1 after a protocol error
+	GETSET(State, state, State);
+	GETSET(ConnectionType, type, Type);
+	GETSET(MCNDownloadType, downloadType, DownloadType);
+	GETSET(bool, mcn, MCN);
+	GETSET(bool, running, Running);
+	GETSET(int, maxRemoteConnections, MaxRemoteConnections);
+
+	const HintedUser& getUser() const { return user; }
+
+	bool operator==(const ConnectionQueueItem& rhs) const;
+	bool operator==(const UserPtr& user) const;
+
+private:
+	HintedUser user;
+};
+
+class ExpectedMap {
+public:
+	void add(const string& aNick, const string& aMyNick, const string& aHubUrl) {
+		Lock l(cs);
+		auto range = expectedConnections.equal_range(aNick);
+		for(auto i = range.first; i != range.second; ++i) {
+			if(i->second.first == aMyNick && hubHintsEqual(i->second.second, aHubUrl)) {
+				return;
+			}
+		}
+		expectedConnections.emplace(aNick, make_pair(aMyNick, aHubUrl));
+	}
+
+	StringPair remove(const string& aNick) {
+		Lock l(cs);
+		auto range = expectedConnections.equal_range(aNick);
+		if(range.first == range.second)
+			return make_pair(Util::emptyString, Util::emptyString);
+
+		auto next = range.first;
+		++next;
+		if(next != range.second) {
+			expectedConnections.erase(range.first, range.second);
+			return make_pair(Util::emptyString, Util::emptyString);
+		}
+
+		StringPair tmp = range.first->second;
+		expectedConnections.erase(range.first);
+		return tmp;
+	}
+
+private:
+	/** Nick -> myNick, hubUrl for expected NMDC incoming connections */
+	typedef std::unordered_multimap<string, StringPair> ExpectMap;
+	ExpectMap expectedConnections;
+
+	CriticalSection cs;
+};
+
+class ConnectionManager :
+	public Singleton<ConnectionManager>,
+	public Speaker<ConnectionManagerListener>,
+	private TimerManagerListener,
+	private UserConnectionListener
+{
+public:
+	string makeToken() const;
+	void addToken(const string& token, const OnlineUser& user, ConnectionType type);
+
+	void nmdcExpect(const string& aNick, const string& aMyNick, const string& aHubUrl) {
+		expectedConnections.add(aNick, aMyNick, aHubUrl);
+	}
+
+	void nmdcConnect(const string& aServer, const string& aPort, const string& aMyNick, const string& hubUrl, const string& encoding);
+	void adcConnect(const OnlineUser& aUser, const string& aPort, const string& aToken, bool secure);
+	void adcConnect(const OnlineUser& aUser, const string& aPort, const string& localPort, BufferedSocket::NatRoles natRole, const string& aToken, bool secure);
+
+	void getDownloadConnection(const HintedUser& aUser, bool smallSlot = false);
+	void onDownloadStarted(const UserConnection& connection);
+	void onDownloadIdle(const UserConnection& connection);
+	void force(const UserPtr& aUser);
+
+	void disconnect(const UserPtr& user); // disconnect all transfers for the user
+	void disconnect(const UserPtr& user, ConnectionType type);
+	void disconnectUploads(const string& hubUrl);
+	void disconnectExtraMCNUpload(const UserPtr& user, const UserConnection* except = nullptr);
+	void disconnectAll(); // disconnect all transfers for all users
+
+	// Used when handing a parked CCPM connection to a newly registered
+	// listener. The check is serialized with PM queue removal so a successful
+	// result guarantees that any later Removed event can reach that listener.
+	bool isPMConnectionActive(const UserPtr& user, const string& token) const noexcept;
+
+	void shutdown();
+
+	/** Find a suitable port to listen on, and start doing it */
+	void listen();
+	void disconnect() noexcept;
+
+	const string& getPort() const;
+	const string& getSecurePort() const;
+
+private:
+
+	class Server : public Thread {
+	public:
+		Server(bool secure, const string& port_, const string& ipv4, const string& ipv6);
+		virtual ~Server() { die = true; join(); }
+
+		const string& getPort() const { return port; }
+
+	private:
+		virtual int run() noexcept;
+
+		Socket sock;
+		string port;
+		bool secure;
+		std::atomic_bool die;
+	};
+
+	friend class Server;
+
+	mutable CriticalSection cs;
+
+	/** All ConnectionQueueItems */
+	vector<ConnectionQueueItem> cqis[CONNECTION_TYPE_LAST],
+		&downloads; // shortcut
+
+	/** All active connections */
+	UserConnectionList userConnections;
+
+	StringList features;
+	StringList adcFeatures;
+
+	struct TokenInfo {
+		CID cid;
+		ConnectionType type;
+		string hubUrl;
+	};
+	using TokenMap = std::unordered_multimap<string, TokenInfo>;
+	TokenMap tokens;
+	// Callers hold cs. Protocol tokens are scoped to the peer that supplied them.
+	TokenMap::iterator findToken(const string& token, const CID& cid);
+	void eraseToken(const string& token, const CID& cid);
+	struct RemovedDownloadInfo {
+		CID cid;
+		uint64_t tick;
+	};
+	unordered_map<string, RemovedDownloadInfo> removedDownloadTokens;
+	uint64_t nextPMConnectionId = 0;
+
+	ExpectedMap expectedConnections;
+
+	struct IncomingFloodState {
+		uint64_t windowStart = 0;
+		size_t attempts = 0;
+	};
+	unordered_map<string, IncomingFloodState> incomingFlood;
+	unordered_set<string> hubsBlockingCC;
+
+	unique_ptr<Server> server;
+	unique_ptr<Server> secureServer;
+
+	std::atomic_bool shuttingDown;
+
+	friend class Singleton<ConnectionManager>;
+	ConnectionManager();
+
+	virtual ~ConnectionManager() { shutdown(); }
+
+	UserConnection* getConnection(bool aNmdc, bool secure) noexcept;
+	void putConnection(UserConnection* aConn);
+
+	void addDownloadConnection(UserConnection* uc);
+	void addNewConnection(UserConnection* uc, ConnectionType type);
+
+	ConnectionQueueItem& getCQI(const HintedUser& user, ConnectionType type, const string& token = Util::emptyString);
+	void putCQI(ConnectionQueueItem& cqi);
+
+	void accept(const Socket& sock, bool secure) noexcept;
+	bool allowIncomingConnection(const string& remoteIp, uint64_t now);
+
+	bool checkKeyprint(UserConnection* aSource);
+	pair<bool, ConnectionType> checkToken(UserConnection* uc);
+	bool checkDownload(const UserConnection* uc) const;
+	bool wasRemovedDownload(const string& token, const CID& cid) const;
+	bool allowNewMCN(const HintedUser& user, bool smallSlot) const;
+	StringList getDownloadRoutes(const HintedUser& user, MCNDownloadType type) const;
+	void removeExtraMCN(ConnectionQueueItem& current, unique_ptr<ConnectionQueueItem>& removedEvent);
+
+	void failed(UserConnection* aSource, const string& aError, bool protocolError);
+
+	bool checkHubCCBlock(const string& aServer, const string& aPort, const string& aHubUrl);
+
+	// UserConnectionListener
+	virtual void on(Connected, UserConnection*) noexcept;
+	virtual void on(Failed, UserConnection*, const string&) noexcept;
+	virtual void on(ProtocolError, UserConnection*, const string&) noexcept;
+	virtual void on(CLock, UserConnection*, const string&, const string&) noexcept;
+	virtual void on(Key, UserConnection*, const string&) noexcept;
+	virtual void on(Direction, UserConnection*, const string&, const string&) noexcept;
+	virtual void on(MyNick, UserConnection*, const string&) noexcept;
+	virtual void on(Supports, UserConnection*, const StringList&) noexcept;
+
+	virtual void on(AdcCommand::SUP, UserConnection*, const AdcCommand&) noexcept;
+	virtual void on(AdcCommand::INF, UserConnection*, const AdcCommand&) noexcept;
+	virtual void on(AdcCommand::STA, UserConnection*, const AdcCommand&) noexcept;
+
+	// TimerManagerListener
+	virtual void on(TimerManagerListener::Second, uint64_t aTick) noexcept;
+	virtual void on(TimerManagerListener::Minute, uint64_t aTick) noexcept;
+
+};
+
+} // namespace dcpp
+
+#endif // !defined(CONNECTION_MANAGER_H)

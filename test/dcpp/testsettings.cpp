@@ -9,13 +9,13 @@
 
 #include "testbase.h"
 
-#include <dcpp/ConnectivityManager.h>
-#include <dcpp/File.h>
-#include <dcpp/HubEntry.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/PrivateTransferProtocol.h>
-#include <dcpp/Util.h>
+#include <dcpp/connectivity/ConnectivityManager.h>
+#include <dcpp/system/File.h>
+#include <dcpp/hub/HubEntry.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/transfer/private/PrivateTransferProtocol.h>
+#include <dcpp/util/Util.h>
 
 using namespace dcpp;
 

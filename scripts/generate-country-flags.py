@@ -25,7 +25,7 @@ if not icons:
 begin = "// BEGIN GENERATED COUNTRY FLAGS (scripts/generate-country-flags.py)"
 end = "// END GENERATED COUNTRY FLAGS"
 paths = [root / "win32" / name for name in
-         ("resource.h", "DCPlusPlus.rc", "CountryFlags.cpp")]
+         ("resource.h", "DCPlusPlus.rc", "appearance/CountryFlags.cpp")]
 contents = [path.read_bytes().decode("utf-8") for path in paths]
 for path, text in zip(paths, contents):
     if text.count(begin) != 1 or text.count(end) != 1 or text.index(begin) >= text.index(end):

@@ -23,15 +23,15 @@
 #include <iomanip>
 #include <iostream>
 
-#include <dcpp/ClientManager.h>
-#include <dcpp/File.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/QueueManager.h>
-#include <dcpp/SearchManager.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/SimpleXML.h>
-#include <dcpp/Streams.h>
-#include <dcpp/TimerManager.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/system/File.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/text/SimpleXML.h>
+#include <dcpp/system/Streams.h>
+#include <dcpp/system/TimerManager.h>
 #include <dcpp/version.h>
 
 using namespace dcpp;

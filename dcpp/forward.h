@@ -22,7 +22,7 @@
  * This file contains forward declarations for the various DC++ classes
  */
 
-#include "Pointer.h"
+#include <dcpp/base/Pointer.h>
 
 namespace dcpp {
 

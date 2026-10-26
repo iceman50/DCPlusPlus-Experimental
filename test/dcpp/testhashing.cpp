@@ -20,10 +20,10 @@
 #include <stdexcept>
 #include <thread>
 
-#include <dcpp/File.h>
-#include <dcpp/FileReader.h>
-#include <dcpp/TigerTreeHasher.h>
-#include <dcpp/Util.h>
+#include <dcpp/system/File.h>
+#include <dcpp/system/FileReader.h>
+#include <dcpp/hash/TigerTreeHasher.h>
+#include <dcpp/util/Util.h>
 
 using namespace dcpp;
 

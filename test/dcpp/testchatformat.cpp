@@ -9,14 +9,14 @@
 
 #include "testbase.h"
 
-#include <dcpp/ChatMessage.h>
-#include <dcpp/EmoticonManager.h>
-#include <dcpp/File.h>
-#include <dcpp/RichText.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/SimpleXMLReader.h>
-#include <dcpp/Tagger.h>
-#include <dcpp/Util.h>
+#include <dcpp/chat/ChatMessage.h>
+#include <dcpp/chat/EmoticonManager.h>
+#include <dcpp/system/File.h>
+#include <dcpp/chat/RichText.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/text/SimpleXMLReader.h>
+#include <dcpp/chat/Tagger.h>
+#include <dcpp/util/Util.h>
 #include <dcpp/version.h>
 
 #include <array>

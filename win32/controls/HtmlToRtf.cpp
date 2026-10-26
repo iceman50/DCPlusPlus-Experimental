@@ -1,0 +1,663 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// inspired by Bjarke Viksoe's Simple HTML Viewer <https://www.viksoe.dk/code/simplehtmlviewer.htm>.
+
+#include "stdafx.h"
+#include <win32/controls/HtmlToRtf.h>
+
+#include <win32/appearance/Emoticons.h>
+#include <win32/resource.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cctype>
+#include <unordered_map>
+
+#include <dcpp/base/debug.h>
+#include <dcpp/system/File.h>
+#include <dcpp/chat/FontStyle.h>
+#include <dcpp/transfer/FinishedItem.h>
+#include <dcpp/transfer/FinishedManager.h>
+#include <dcpp/base/Flags.h>
+#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/chat/RichText.h>
+#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/share/ShareManager.h>
+#include <dcpp/text/SimpleXML.h>
+#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/text/Text.h>
+#include <dcpp/user/UserMatchManager.h>
+
+#include <dwt/util/GDI.h>
+#include <dwt/widgets/RichTextBox.h>
+
+namespace {
+	inline void trimInPlace(string& s) {
+		auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+		auto first = std::find_if_not(s.begin(), s.end(), isSpace);
+		auto last = std::find_if_not(s.rbegin(), s.rend(), isSpace).base();
+		if(first >= last) {
+			s.clear();
+			return;
+		}
+		s.assign(first, last);
+	}
+
+	inline string trimCopy(string s) {
+		trimInPlace(s);
+		return s;
+	}
+
+	tstring inlineMediaRtf(const string& uri, const string& hubUrl) {
+		RichText::Attachment attachment;
+		if(!RichText::parseMagnetUri(uri,
+			static_cast<size_t>(std::max(1, SETTING(CHAT_LINK_MAX_LENGTH))), attachment)) return tstring();
+
+		StringList paths;
+		try {
+			const TTHValue root(attachment.tth);
+			if(!hubUrl.empty()) {
+				if(ShareManager::getInstance()->validateChatAttachment(root, attachment.size, hubUrl)) {
+					auto shared = ShareManager::getInstance()->resolveFile("TTH/" + attachment.tth, hubUrl);
+					paths.push_back(std::move(shared.realPath));
+				}
+			} else if(ShareManager::getInstance()->isTTHShared(root)) {
+				const auto shared = ShareManager::getInstance()->toRealWithSize("TTH/" + attachment.tth);
+				if(shared.second == attachment.size) paths.push_back(shared.first);
+			}
+		} catch(const Exception&) {
+		}
+
+		const TTHValue tth(attachment.tth);
+		for(auto& target: QueueManager::getInstance()->getTargets(tth)) {
+			if(File::getSize(target) == attachment.size &&
+				std::find(paths.begin(), paths.end(), target) == paths.end()) paths.push_back(std::move(target));
+		}
+		{
+			auto lock = FinishedManager::getInstance()->lock();
+			for(const auto& item: FinishedManager::getInstance()->getMapByFile(false)) {
+				if(item.second->isFull() && item.second->getFileSize() == attachment.size &&
+					item.second->getTTH() == attachment.tth &&
+					std::find(paths.begin(), paths.end(), item.first) == paths.end()) paths.push_back(item.first);
+			}
+		}
+
+		for(const auto& path: paths) {
+			if(File::getSize(path) != attachment.size) continue;
+			auto image = Emoticons::fileRtf(path, 256);
+			if(!image.empty()) return image;
+		}
+		return tstring();
+	}
+}
+
+struct Parser : SimpleXMLReader::CallBack {
+	Parser(dwt::RichTextBox* box, string hubUrl, const ThemeManager::Theme* theme);
+	void startTag(const string& name, StringPairList& attribs, bool simple);
+	void data(const string& data);
+	void endTag(const string& name);
+	tstring finalize();
+
+private:
+	struct Context : Flags {
+		enum { Bold = 1 << 0, Italic = 1 << 1, Underlined = 1 << 2, Strike = 1 << 3 };
+		size_t font; // index in the "fonts" table
+		int fontSize;
+		size_t textColor; // index in the "colors" table
+		size_t bgColor; // index in the "colors" table
+		string link;
+		string semanticId;
+		bool timestampIconPending;
+
+		int alignment; // 0 = inherited, 1 = left, 2 = center, 3 = right
+		FontStyle effects;
+
+		Context(dwt::RichTextBox* box, Parser& parser);
+
+		tstring getBegin() const;
+		tstring getEnd() const;
+	};
+
+	size_t addFont(string&& font);
+	static int rtfFontSize(float px);
+	size_t addColor(COLORREF color);
+
+	void parseFont(Context& context, const string& s);
+	void parseColor(size_t& contextColor, const string& s);
+	void parseDecoration(const string& s);
+	void applyConfiguredStyle(Context& context, SettingsManager::StrSetting fontSetting,
+		SettingsManager::IntSetting textColorSetting, SettingsManager::IntSetting bgColorSetting);
+	bool applySemanticStyle(Context& context, const string& id);
+	bool defaultFont(SettingsManager::StrSetting setting) const;
+	Style userStyle(const string& styleId) const;
+	void ensureContrast(Context& context);
+	static tstring rtfEscape(const string& s);
+
+	tstring ret;
+
+	StringList fonts;
+	StringList colors;
+	std::unordered_map<string, size_t> fontIndexes;
+	std::unordered_map<COLORREF, size_t> colorIndexes;
+	vector<COLORREF> colorValues;
+
+	vector<Context> contexts;
+	size_t tableColumns = 0;
+	int tableWidthTwips = 0;
+	unsigned suppressDepth = 0;
+	vector<bool> emoticonSuppressions;
+	vector<bool> inlineMediaSuppressions;
+	string hubUrl;
+	const ThemeManager::Theme* theme;
+};
+
+tstring HtmlToRtf::convert(const string& html, dwt::RichTextBox* box, const string& hubUrl, const ThemeManager::Theme* theme) {
+	Parser parser(box, hubUrl, theme);
+	try { SimpleXMLReader(&parser).parse(html); }
+	catch(const SimpleXMLException& e) { return Text::toT(e.getError()); }
+	return parser.finalize();
+}
+
+Parser::Parser(dwt::RichTextBox* box, string aHubUrl, const ThemeManager::Theme* aTheme) : hubUrl(std::move(aHubUrl)), theme(aTheme) {
+	// create a default context with the Rich Edit control's current formatting.
+	contexts.emplace_back(box, *this);
+	const auto width = std::max(1L, box->getClientSize().x);
+	tableWidthTwips = std::clamp(static_cast<int>(width * 15.0 / dwt::util::dpiFactor()), 1440, 30000);
+}
+
+void Parser::startTag(const string& name_, StringPairList& attribs, bool simple) {
+	auto name = trimCopy(name_);
+	if(name == "rtfimage") {
+		auto image = inlineMediaRtf(getAttrib(attribs, "src", 0), hubUrl);
+		const bool rendered = !image.empty();
+		if(rendered) ret += std::move(image);
+		if(!simple) {
+			inlineMediaSuppressions.push_back(rendered);
+			if(rendered) ++suppressDepth;
+		}
+		return;
+	}
+
+	if(name == "resourceicon") {
+		const auto resourceId = Util::toInt(getAttrib(attribs, "id", 0));
+		if(resourceId > 0)
+			ret += Emoticons::resourceRtf(static_cast<unsigned>(resourceId), 16);
+		return;
+	}
+
+	if(name == "emoticon") {
+		const auto emoticon = getAttrib(attribs, "name", 0);
+		// The source shortcut remains inside the tag for non-rich consumers. Suppress that text after
+		// emitting exactly one packaged icon. A missing/invalid asset leaves the shortcut untouched.
+		const auto configuredSize = SETTING(EMOTICON_SIZE);
+		const auto imageSize = configuredSize == 20 || configuredSize == 24 || configuredSize == 28 ||
+			configuredSize == 32 ? configuredSize : 24;
+		const auto configuredDepth = SETTING(EMOTICON_BIT_DEPTH);
+		// Values written by builds that offered 4/8 bpp migrate to the new 16-bpp minimum.
+		const auto bitDepth = configuredDepth == 24 || configuredDepth == 32 ? configuredDepth : 16;
+		auto image = Emoticons::rtf(emoticon, imageSize, bitDepth);
+		const bool rendered = !image.empty();
+		if(rendered) ret += std::move(image);
+		if(!simple) {
+			emoticonSuppressions.push_back(rendered);
+			if(rendered) ++suppressDepth;
+		}
+		return;
+	}
+
+	if(name == "br") {
+		ret += _T("\\line\n");
+	}
+
+	if(simple) {
+		return;
+	}
+
+	contexts.push_back(contexts.back());
+	// The outer anchor owns the RTF field. Child formatting groups inherit its underline/color,
+	// but opening nested HYPERLINK fields makes RichEdit split punctuation at group boundaries.
+	contexts.back().link.clear();
+	const auto semanticId = getAttrib(attribs, "id", 0);
+	contexts.back().semanticId = semanticId;
+	contexts.back().timestampIconPending = semanticId == "messageTimestamp" ||
+		semanticId == "ownMessageTimestamp";
+	ScopedFunctor([this] { ret += contexts.back().getBegin(); });
+
+	const auto preserveConfiguredColor = applySemanticStyle(contexts.back(), semanticId);
+
+	if(semanticId == "rtfTable") {
+		tableColumns = std::clamp(static_cast<size_t>(std::max(1, Util::toInt(getAttrib(attribs, "columns", 0)))),
+			static_cast<size_t>(1), static_cast<size_t>(32));
+		if(!ret.empty()) ret += _T("\\par\n");
+	} else if(semanticId == "rtfTableRow") {
+		const auto columns = std::max<size_t>(1, tableColumns);
+		string row = "\\trowd\\trgaph60\\trleft0";
+		for(size_t i = 0; i < columns; ++i) {
+			row += "\\cellx" + std::to_string(tableWidthTwips * static_cast<int>(i + 1) /
+				static_cast<int>(columns));
+		}
+		ret += Text::toT(row + "\n");
+	} else if(semanticId == "rtfTableHeader" || semanticId == "rtfTableCell") {
+		ret += _T("\\pard\\intbl ");
+	}
+
+	if(name == "b") {
+		contexts.back().setFlag(Context::Bold);
+	} else if(name == "i") {
+		contexts.back().setFlag(Context::Italic);
+	} else if(name == "u") {
+		contexts.back().setFlag(Context::Underlined);
+	}
+
+	if(attribs.empty()) {
+		return;
+	}
+
+	if(name == "a") {
+		const auto link = getAttrib(attribs, "href", 0);
+		if(!link.empty()) {
+			auto& context = contexts.back();
+			context.link = link;
+			applyConfiguredStyle(context, SettingsManager::LINK_FONT,
+				SettingsManager::LINK_COLOR, SettingsManager::LINK_BG_COLOR);
+			if(defaultFont(SettingsManager::LINK_FONT)) context.setFlag(Context::Underlined);
+		}
+	}
+
+	const auto style = getAttrib(attribs, "style", 0);
+	const auto fontSource = getAttrib(attribs, "themeFontStyle", 0);
+	const auto textSource = getAttrib(attribs, "themeTextStyle", 0);
+	const auto bgSource = getAttrib(attribs, "themeBgStyle", 0);
+	bool incomingColors = false;
+	size_t begin = 0;
+	while(begin < style.size()) {
+		auto end = style.find(';', begin);
+		if(end == string::npos) end = style.size();
+		auto declaration = style.substr(begin, end - begin);
+		auto separator = declaration.find(':');
+		if(separator != string::npos) {
+			auto property = declaration.substr(0, separator);
+			auto value = declaration.substr(separator + 1);
+			trimInPlace(property);
+			trimInPlace(value);
+			if(property == "font" && fontSource.empty()) parseFont(contexts.back(), value);
+			else if(property == "dc-font" && fontSource.empty()) contexts.back().effects = FontStyle::decode(value);
+			else if(property == "color" && textSource.empty()) { parseColor(contexts.back().textColor, value); incomingColors = true; }
+			else if(property == "background-color" && bgSource.empty()) { parseColor(contexts.back().bgColor, value); incomingColors = true; }
+			else if(property == "text-decoration") parseDecoration(value);
+			else if(property == "font-weight" && (value == "bold" || Util::toInt(value) >= FW_BOLD)) contexts.back().setFlag(Context::Bold);
+			else if(property == "font-style" && value == "italic") contexts.back().setFlag(Context::Italic);
+			else if(property == "text-align") {
+				contexts.back().alignment = value == "right" ? 3 : value == "center" ? 2 : 1;
+			}
+		}
+		begin = end + 1;
+	}
+	if(!fontSource.empty()) {
+		const auto matched = userStyle(fontSource);
+		if(!matched.font.empty()) {
+			contexts.back().unsetFlag(Context::Underlined | Context::Strike);
+			parseFont(contexts.back(), Util::cssFont(matched.font));
+			contexts.back().effects = FontStyle::decode(matched.font);
+		}
+	}
+	if(!textSource.empty() && semanticId != "ownNick") {
+		const auto matched = userStyle(textSource);
+		if(matched.textColor >= 0) contexts.back().textColor = addColor(matched.textColor);
+	}
+	if(!bgSource.empty()) {
+		const auto matched = userStyle(bgSource);
+		if(matched.bgColor >= 0) contexts.back().bgColor = addColor(matched.bgColor);
+	}
+	// Preserve theme colors inherited by nested markup; adjust only incoming color overrides.
+	if(incomingColors && !preserveConfiguredColor && name != "a")
+		ensureContrast(contexts.back());
+}
+
+Style Parser::userStyle(const string& styleId) const {
+	if(theme) {
+		const auto found = theme->liveUserStyles.find(styleId);
+		if(found != theme->liveUserStyles.end()) return found->second;
+	} else if(auto manager = UserMatchManager::getInstance()) {
+		return manager->getStyle(styleId);
+	}
+	return Style();
+}
+
+tstring Parser::rtfEscape(const string& data) {
+	return dwt::RichTextBox::rtfEscape(Text::toT(Text::toDOS(data)));
+}
+
+void Parser::data(const string& data) {
+	if(suppressDepth != 0 || data.empty()) return;
+
+	auto& context = contexts.back();
+	if(context.timestampIconPending) {
+		context.timestampIconPending = false;
+		auto begin = data.begin();
+		if(data.front() == '[') {
+			ret += rtfEscape("[");
+			++begin;
+		}
+		auto icon = Emoticons::resourceRtf(IDI_OK, 16);
+		if(!icon.empty()) ret += std::move(icon) + _T(" ");
+		ret += rtfEscape(string(begin, data.end()));
+		return;
+	}
+	ret += rtfEscape(data);
+}
+
+void Parser::endTag(const string& name) {
+	const auto trimmedName = trimCopy(name);
+	if(trimmedName == "rtfimage") {
+		if(!inlineMediaSuppressions.empty()) {
+			if(inlineMediaSuppressions.back() && suppressDepth) --suppressDepth;
+			inlineMediaSuppressions.pop_back();
+		}
+		return;
+	}
+	if(trimmedName == "emoticon") {
+		if(!emoticonSuppressions.empty()) {
+			if(emoticonSuppressions.back() && suppressDepth) --suppressDepth;
+			emoticonSuppressions.pop_back();
+		}
+		return;
+	}
+	if(contexts.size() <= 1) return;
+	const auto semanticId = contexts.back().semanticId;
+	ret += contexts.back().getEnd();
+	contexts.pop_back();
+	if(semanticId == "rtfTableHeader" || semanticId == "rtfTableCell") {
+		ret += _T("\\cell\n");
+	} else if(semanticId == "rtfTableRow") {
+		ret += _T("\\row\n");
+	} else if(semanticId == "rtfTable") {
+		ret += _T("\\pard\\par\n");
+		tableColumns = 0;
+	}
+}
+
+tstring Parser::finalize() {
+	return Text::toT("{{\\fonttbl" + Util::toString(Util::emptyString, fonts) +
+		"}{\\colortbl" + Util::toString(Util::emptyString, colors) + "}") + ret + _T("}");
+}
+
+Parser::Context::Context(dwt::RichTextBox* box, Parser& parser) {
+	// create a default context with the Rich Edit control's current formatting.
+	auto lf = box->getFont()->getLogFont();
+	font = parser.addFont("\\fnil\\fcharset" + std::to_string(lf.lfCharSet) + " " + Text::fromT(dwt::RichTextBox::rtfEscape(lf.lfFaceName)));
+	fontSize = rtfFontSize(static_cast<float>(std::abs(lf.lfHeight)) / dwt::util::dpiFactor());
+	if(lf.lfWeight >= FW_BOLD) { setFlag(Bold); }
+	if(lf.lfItalic) { setFlag(Italic); }
+	effects.underline = lf.lfUnderline ? 1 : 0;
+	effects.strike = lf.lfStrikeOut ? 1 : 0;
+	if(parser.theme) effects = FontStyle::decode(parser.theme->fonts.at(SettingsManager::MAIN_FONT));
+	else effects = FontStyle::decode(SETTING(MAIN_FONT));
+
+	textColor = parser.addColor(box->getTextColor());
+	bgColor = parser.addColor(box->getBgColor());
+	timestampIconPending = false;
+	alignment = 0;
+}
+
+tstring Parser::Context::getBegin() const {
+	string ret = "{";
+
+	if(!link.empty()) {
+		/* Wine doesn't support chat links so display them as plain text.
+		 * See <https://bugs.winehq.org/show_bug.cgi?id=34824>. */
+		if(SETTING(CLICKABLE_CHAT_LINKS)) {
+			//RFC 3986 allows {}\ etc... in URIs so links also need escaping for proper display and to avoid formatting issues
+			ret += "\\field{\\*\\fldinst HYPERLINK \"" + Text::fromT(rtfEscape(link)) + "\"}{\\fldrslt";
+		} else {
+			ret += "{";
+		}
+	}
+
+	ret += "\\f" + std::to_string(font) + "\\fs" + std::to_string(fontSize) +
+		"\\cf" + std::to_string(textColor) + "\\highlight" + std::to_string(bgColor);
+	if(alignment == 1) { ret += "\\ql"; }
+	else if(alignment == 2) { ret += "\\qc"; }
+	else if(alignment == 3) { ret += "\\qr"; }
+	ret += effects.rtf();
+	ret += isSet(Bold) ? "\\b" : "\\b0";
+	ret += isSet(Italic) ? "\\i" : "\\i0";
+	if(isSet(Underlined)) { ret += "\\ul"; }
+	if(isSet(Strike)) { ret += "\\strike"; }
+
+	ret += " ";
+
+	if(!link.empty()) {
+		// add an invisible space; otherwise link formatting may get lost...
+		ret += "{\\v  }";
+
+		// Throw the link before its label when in the Wine workaround...
+		if(!SETTING(CLICKABLE_CHAT_LINKS)) { ret += "<" + Text::fromT(rtfEscape(link)) + "> "; }
+	}
+
+	return Text::toT(ret);
+}
+
+tstring Parser::Context::getEnd() const {
+	return link.empty() ? _T("}") : _T("}}");
+}
+
+size_t Parser::addFont(string&& font) {
+	if(auto existing = fontIndexes.find(font); existing != fontIndexes.end()) return existing->second;
+	auto ret = fonts.size();
+	fontIndexes.emplace(font, ret);
+	fonts.push_back("{\\f" + std::to_string(ret) + std::move(font) + ";}");
+	return ret;
+}
+
+int Parser::rtfFontSize(float px) {
+	// the px value must not take DPI settings into account; the Rich Edit control handles that.
+	if(!std::isfinite(px)) px = 16.0f;
+	px = std::clamp(px, 1.0f, 256.0f);
+	return static_cast<int>(std::floor(px
+		* 72.0 / 96.0 // px -> font points
+		* 2.0)); // RTF font sizes are expressed in half-points
+}
+
+size_t Parser::addColor(COLORREF color) {
+	if(auto existing = colorIndexes.find(color); existing != colorIndexes.end()) return existing->second;
+	const auto value = "\\red" + std::to_string(GetRValue(color)) +
+		"\\green" + std::to_string(GetGValue(color)) +
+		"\\blue" + std::to_string(GetBValue(color)) + ";";
+	auto ret = colors.size();
+	colorIndexes.emplace(color, ret);
+	colors.push_back(value);
+	colorValues.push_back(color);
+	return ret;
+}
+
+void Parser::applyConfiguredStyle(Context& context, SettingsManager::StrSetting fontSetting,
+	SettingsManager::IntSetting textColorSetting, SettingsManager::IntSetting bgColorSetting)
+{
+	auto settings = SettingsManager::getInstance();
+	const auto& font = theme ? theme->fonts.at(fontSetting) : settings->get(fontSetting);
+	if(!font.empty()) {
+		context.unsetFlag(Context::Underlined | Context::Strike);
+		parseFont(context, Util::cssFont(font));
+		context.effects = FontStyle::decode(font);
+	}
+	context.textColor = addColor(theme ? theme->colors.at(textColorSetting) : settings->get(textColorSetting));
+	context.bgColor = addColor(theme ? theme->colors.at(bgColorSetting) : settings->get(bgColorSetting));
+}
+
+bool Parser::defaultFont(SettingsManager::StrSetting setting) const {
+	return theme ? theme->fonts.at(setting).empty() : SettingsManager::getInstance()->get(setting).empty();
+}
+
+bool Parser::applySemanticStyle(Context& context, const string& id) {
+	if(id == "timestamp" || id == "messageTimestamp") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_TIMESTAMP_FONT,
+			SettingsManager::CHAT_TIMESTAMP_COLOR, SettingsManager::CHAT_TIMESTAMP_BG_COLOR);
+	} else if(id == "ownTimestamp" || id == "ownMessageTimestamp") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_OWN_TIMESTAMP_FONT,
+			SettingsManager::CHAT_OWN_TIMESTAMP_COLOR, SettingsManager::CHAT_OWN_TIMESTAMP_BG_COLOR);
+	} else if(id == "nick") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_NICK_FONT,
+			SettingsManager::CHAT_NICK_COLOR, SettingsManager::CHAT_NICK_BG_COLOR);
+		if(defaultFont(SettingsManager::CHAT_NICK_FONT)) context.setFlag(Context::Bold);
+	} else if(id == "ownNick") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_OWN_NICK_FONT,
+			SettingsManager::CHAT_OWN_NICK_COLOR, SettingsManager::CHAT_OWN_NICK_BG_COLOR);
+		if(defaultFont(SettingsManager::CHAT_OWN_NICK_FONT)) context.setFlag(Context::Bold);
+	} else if(id == "text") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_TEXT_FONT,
+			SettingsManager::CHAT_TEXT_COLOR, SettingsManager::CHAT_TEXT_BG_COLOR);
+	} else if(id == "ownText") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_OWN_TEXT_FONT,
+			SettingsManager::CHAT_OWN_TEXT_COLOR, SettingsManager::CHAT_OWN_TEXT_BG_COLOR);
+	} else if(id == "systemMessage") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_SYSTEM_FONT,
+			SettingsManager::CHAT_SYSTEM_COLOR, SettingsManager::CHAT_SYSTEM_BG_COLOR);
+		if(defaultFont(SettingsManager::CHAT_SYSTEM_FONT)) context.setFlag(Context::Italic);
+	} else if(id == "mention") {
+		applyConfiguredStyle(context, SettingsManager::CHAT_MENTION_FONT,
+			SettingsManager::CHAT_MENTION_COLOR, SettingsManager::CHAT_MENTION_BG_COLOR);
+		if(defaultFont(SettingsManager::CHAT_MENTION_FONT)) context.setFlag(Context::Bold);
+	} else if(id == "log") {
+		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
+			SettingsManager::LOG_COLOR, SettingsManager::LOG_BG_COLOR);
+	} else if(id == "systemLogVerbose") {
+		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
+			SettingsManager::SYSTEM_LOG_VERBOSE_COLOR, SettingsManager::LOG_BG_COLOR);
+	} else if(id == "systemLogInfo") {
+		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
+			SettingsManager::SYSTEM_LOG_INFO_COLOR, SettingsManager::LOG_BG_COLOR);
+	} else if(id == "systemLogWarning") {
+		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
+			SettingsManager::SYSTEM_LOG_WARNING_COLOR, SettingsManager::LOG_BG_COLOR);
+	} else if(id == "systemLogError") {
+		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
+			SettingsManager::SYSTEM_LOG_ERROR_COLOR, SettingsManager::LOG_BG_COLOR);
+	} else if(id == "systemLogArea") {
+		applyConfiguredStyle(context, SettingsManager::LOG_FONT,
+			SettingsManager::SYSTEM_LOG_AREA_COLOR, SettingsManager::LOG_BG_COLOR);
+		context.setFlag(Context::Bold);
+	} else if(id == "rtfStrike") {
+		context.setFlag(Context::Strike);
+	} else if(id == "rtfCode") {
+		context.font = addFont("\\fmodern Consolas");
+	} else if(id == "rtfQuote") {
+		context.setFlag(Context::Italic);
+	} else if(id == "rtfTableHeader") {
+		context.setFlag(Context::Bold);
+	} else if(id.compare(0, 10, "rtfHeading") == 0 && id.size() == 11 &&
+		id[10] >= '1' && id[10] <= '6')
+	{
+		context.setFlag(Context::Bold);
+		const int percentages[] = { 0, 160, 145, 130, 120, 110, 100 };
+		context.fontSize = std::max(1, context.fontSize * percentages[id[10] - '0'] / 100);
+	}
+	// A theme is authoritative, including deliberately subtle colors and highlights.
+	return id == "timestamp" || id == "messageTimestamp" || id == "ownTimestamp" || id == "ownMessageTimestamp" ||
+		id == "nick" || id == "ownNick" || id == "text" || id == "ownText" || id == "systemMessage" ||
+		id == "mention" || id == "log" || id.compare(0, 9, "systemLog") == 0;
+}
+
+void Parser::ensureContrast(Context& context) {
+	if(context.textColor >= colorValues.size() || context.bgColor >= colorValues.size()) return;
+	const auto luminance = [](COLORREF color) {
+		return (0.2126 * GetRValue(color) + 0.7152 * GetGValue(color) + 0.0722 * GetBValue(color)) / 255.0;
+	};
+	const auto background = luminance(colorValues[context.bgColor]);
+	const auto foreground = luminance(colorValues[context.textColor]);
+	const auto high = std::max(background, foreground);
+	const auto low = std::min(background, foreground);
+	if((high + 0.05) / (low + 0.05) < 3.0) {
+		const auto blackContrast = (background + 0.05) / 0.05;
+		const auto whiteContrast = 1.05 / (background + 0.05);
+		context.textColor = addColor(blackContrast >= whiteContrast ? RGB(0, 0, 0) : RGB(255, 255, 255));
+	}
+}
+
+void Parser::parseFont(Context& context, const string& s) {
+	// this contains multiple params separated by spaces.
+	StringTokenizer<string> tok(s, ' ');
+	auto& l = tok.getTokens();
+
+	// remove empty strings.
+	l.erase(std::remove_if(l.begin(), l.end(), [](const string& s) { return s.empty(); }), l.end());
+
+	if(l.size() < 2) // the last 2 params (font size & font family) are compulsory.
+		return;
+
+	// the last param (font family) may contain spaces; merge if that is the case.
+	while(*(l.back().end() - 1) == '\'' && (l.back().size() <= 1 || *l.back().begin() != '\'')) {
+		*(l.end() - 2) += ' ' + std::move(l.back());
+		l.erase(l.end() - 1);
+		if(l.size() < 2)
+			return;
+	}
+
+	// parse the last param (font family).
+	/// @todo handle multiple fonts separated by commas...
+	auto& family = l.back();
+	family.erase(std::remove(family.begin(), family.end(), '\''), family.end());
+	if(family.empty())
+		return;
+	context.font = addFont("\\fnil " + Text::fromT(rtfEscape(family)));
+	context.unsetFlag(Context::Bold | Context::Italic);
+
+	// parse the second to last param (font size).
+	/// @todo handle more than px sizes
+	auto& size = *(l.end() - 2);
+	if(size.size() > 2 && *(size.end() - 2) == 'p' && *(size.end() - 1) == 'x') { // 16px
+		context.fontSize = rtfFontSize(Util::toFloat(size.substr(0, size.size() - 2)));
+	}
+
+	// parse the optional third to last param (font weight).
+	if(l.size() > 2 && Util::toInt(*(l.end() - 3)) >= FW_BOLD) {
+		context.setFlag(Context::Bold);
+	}
+
+	// parse the optional first param (font style).
+	if(l.size() > 2 && l[0] == "italic") {
+		context.setFlag(Context::Italic);
+	}
+}
+
+void Parser::parseDecoration(const string& s) {
+	if(s == "underline") {
+		contexts.back().setFlag(Context::Underlined);
+	}
+}
+
+void Parser::parseColor(size_t& contextColor, const string& s) {
+	auto sharp = s.find('#');
+	if(sharp != string::npos && s.size() > sharp + 6) {
+		try {
+#if defined(__MINGW32__) && defined(_GLIBCXX_HAVE_BROKEN_VSWPRINTF)
+			/// @todo use stol on MinGW when it's available
+			unsigned int color = 0;
+			auto colStr = s.substr(sharp + 1, 6);
+			sscanf(colStr.c_str(), "%X", &color);
+#else
+			size_t pos = 0;
+			auto color = std::stol(s.substr(sharp + 1, 6), &pos, 16);
+#endif
+			contextColor = addColor(RGB((color & 0xFF0000) >> 16, (color & 0xFF00) >> 8, color & 0xFF));
+		} catch(const std::exception& e) { dcdebug("color parsing exception: %s with str: %s\n", e.what(), s.c_str()); }
+	}
+}

@@ -1,0 +1,76 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef DCPLUSPLUS_WIN32_SYSTEM_FRAME_H
+#define DCPLUSPLUS_WIN32_SYSTEM_FRAME_H
+
+#include <dcpp/logging/LogManagerListener.h>
+
+#include <atomic>
+#include <deque>
+#include <memory>
+#include <mutex>
+
+#include <win32/frames/base/StaticFrame.h>
+
+class SystemFrame : public StaticFrame<SystemFrame>,
+	private LogManagerListener,
+	private SettingsManagerListener
+{
+	typedef StaticFrame<SystemFrame> BaseType;
+public:
+	enum Status {
+		STATUS_STATUS,
+		STATUS_LAST
+	};
+
+	static const string id;
+	const string& getId() const;
+
+private:
+	friend class StaticFrame<SystemFrame>;
+	friend class MDIChildFrame<SystemFrame>;
+
+	RichTextBoxPtr log;
+	std::deque<LogMessagePtr> messages;
+	std::mutex pendingMessagesMutex;
+	std::deque<LogMessagePtr> pendingMessages;
+	bool logFlushScheduled;
+	std::shared_ptr<std::atomic_bool> logAlive;
+
+	SystemFrame(TabViewPtr parent);
+	virtual ~SystemFrame();
+
+	void layout();
+	bool preClosing();
+
+	void addLines(const std::deque<LogMessagePtr>& batch, bool remember = true);
+	void flushLog();
+	void refreshLog();
+	void openFile(const string& path) const;
+
+	bool handleContextMenu(const dwt::ScreenCoordinate& pt);
+	bool handleDoubleClick(const dwt::MouseEvent& mouseEvent);
+
+	// LogManagerListener
+	virtual void on(Message, const LogMessagePtr& message) noexcept;
+
+	// SettingsManagerListener
+	virtual void on(SettingsManagerListener::Save, SimpleXML&) noexcept;
+};
+
+#endif

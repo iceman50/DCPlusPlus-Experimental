@@ -17,12 +17,12 @@
 
 #include "testbase.h"
 
-#include <dcpp/DirectoryListing.h>
-#include <dcpp/FastAlloc.h>
-#include <dcpp/OnlineUser.h>
-#include <dcpp/QueueItem.h>
-#include <dcpp/SearchResult.h>
-#include <dcpp/User.h>
+#include <dcpp/filelist/DirectoryListing.h>
+#include <dcpp/base/FastAlloc.h>
+#include <dcpp/user/OnlineUser.h>
+#include <dcpp/queue/QueueItem.h>
+#include <dcpp/search/SearchResult.h>
+#include <dcpp/user/User.h>
 
 #include <algorithm>
 #include <array>

@@ -1,6 +1,6 @@
 // Copyright (C) 2026 iceman50
 
-#include "resource.h"
+#include <win32/resource.h>
 
 #if defined x86
 1 24 "res/DCPlusPlus.manifest.x86"

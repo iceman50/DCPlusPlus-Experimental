@@ -9,12 +9,12 @@
 
 #include "testbase.h"
 
-#include <dcpp/Archive.h>
-#include <dcpp/File.h>
-#include <dcpp/FileReader.h>
-#include <dcpp/SQLiteDB.h>
-#include <dcpp/Text.h>
-#include <dcpp/Util.h>
+#include <dcpp/storage/Archive.h>
+#include <dcpp/system/File.h>
+#include <dcpp/system/FileReader.h>
+#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/text/Text.h>
+#include <dcpp/util/Util.h>
 
 #include <chrono>
 

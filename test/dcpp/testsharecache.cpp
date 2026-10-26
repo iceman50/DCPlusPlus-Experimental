@@ -16,26 +16,26 @@
 #include <future>
 
 #define private public
-#include <dcpp/BBSManager.h>
-#include <dcpp/SearchManager.h>
-#include <dcpp/ShareManager.h>
+#include <dcpp/bbs/BBSManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/share/ShareManager.h>
 #undef private
 
-#include <dcpp/ClientManager.h>
-#include <dcpp/FavoriteManager.h>
-#include <dcpp/File.h>
-#include <dcpp/HashManager.h>
-#include <dcpp/HttpManager.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/QueueManager.h>
-#include <dcpp/SearchResult.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/SQLiteDB.h>
-#include <dcpp/Streams.h>
-#include <dcpp/TimerManager.h>
-#include <dcpp/UploadManager.h>
-#include <dcpp/Util.h>
-#include <dcpp/PrivateTransferStorage.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/favorites/FavoriteManager.h>
+#include <dcpp/system/File.h>
+#include <dcpp/hash/HashManager.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/search/SearchResult.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/system/Streams.h>
+#include <dcpp/system/TimerManager.h>
+#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/util/Util.h>
+#include <dcpp/transfer/private/PrivateTransferStorage.h>
 
 using namespace dcpp;
 

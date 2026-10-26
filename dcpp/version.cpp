@@ -16,7 +16,7 @@
  */
 
 #include "stdinc.h"
-#include "version.h"
+#include <dcpp/version.h>
 
 #include "version-rev-id.inc" // should #define DCPP_REVISION
 #include "version-build.inc" // generated local build counter

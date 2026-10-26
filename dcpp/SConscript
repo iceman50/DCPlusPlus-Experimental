@@ -3,7 +3,7 @@
 Import("dev source_path")
 
 env, target, sources = dev.prepare_build(
-    source_path, "dcpp", in_bin=False, precompiled_header="stdinc"
+    source_path, "dcpp", in_bin=False, precompiled_header="stdinc", recursive=True
 )
 
 dev.add_boost(env)
@@ -11,11 +11,11 @@ dev.add_dcpp(env)
 dev.add_intl(env)
 dev.add_openssl(env)
 
-env.Append(CPPPATH=["#/md4c"])
+env.Append(CPPPATH=["#/dcpp", "#/md4c"])
 
 env.Append(CPPDEFINES=["BUILDING_DCPP=1"])
 
-headers = dev.get_sources(source_path, "*.h")
+headers = dev.get_sources(source_path, "*.h", recursive=True)
 dev.i18n(source_path, env, [sources, headers], "libdcpp")
 
 if not env["msvcproj"]:
@@ -46,7 +46,9 @@ if not env["msvcproj"]:
     env.Depends(version_object, build_number)
     sources = [s for s in sources if env.File(s) != env.File(version_source)] + version_object
 
-ret = dev.build_lib(env, target, sources, dev.cpp_lib)
+ret = dev.build_lib(env, target, sources,
+    lambda env: ([env.File(h).srcnode() for h in headers], [env.File(s).srcnode() for s in sources]),
+    msvcproj_name="dcpp")
 
 if ret:
     for node in ret:

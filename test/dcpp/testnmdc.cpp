@@ -1,6 +1,6 @@
 #include "testbase.h"
 
-#include <dcpp/NmdcHub.h>
+#include <dcpp/hub/NmdcHub.h>
 
 using namespace dcpp;
 

@@ -18,7 +18,7 @@
 #ifndef DCPLUSPLUS_DCPP_TYPEDEFS_H_
 #define DCPLUSPLUS_DCPP_TYPEDEFS_H_
 
-#include "forward.h"
+#include <dcpp/forward.h>
 
 #include <cstdint>
 

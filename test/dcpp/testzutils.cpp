@@ -6,11 +6,11 @@
 
 #include "testbase.h"
 
-#include <dcpp/File.h>
-#include <dcpp/FilteredFile.h>
-#include <dcpp/HashValue.h>
-#include <dcpp/TigerHash.h>
-#include <dcpp/ZUtils.h>
+#include <dcpp/system/File.h>
+#include <dcpp/system/FilteredFile.h>
+#include <dcpp/hash/HashValue.h>
+#include <dcpp/hash/TigerHash.h>
+#include <dcpp/storage/ZUtils.h>
 
 using namespace dcpp;
 

@@ -1,8 +1,8 @@
 #include "testbase.h"
 
-#include <dcpp/SimpleXMLReader.h>
-#include <dcpp/SimpleXML.h>
-#include <dcpp/Text.h>
+#include <dcpp/text/SimpleXMLReader.h>
+#include <dcpp/text/SimpleXML.h>
+#include <dcpp/text/Text.h>
 #include <unordered_map>
 
 using namespace dcpp;
@@ -108,7 +108,7 @@ TEST(testxml, test_cdata)
     ASSERT_EQ(collector.endTags["root"], 1);
 }
 
-#include <dcpp/File.h>
+#include <dcpp/system/File.h>
 
 TEST(testxml, test_file)
 {

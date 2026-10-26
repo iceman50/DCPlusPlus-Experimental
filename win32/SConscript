@@ -3,7 +3,7 @@
 Import("dev source_path")
 
 env, target, sources = dev.prepare_build(
-    source_path, "DCPlusPlus", precompiled_header="stdafx"
+    source_path, "DCPlusPlus", precompiled_header="stdafx", recursive=True
 )
 
 dev.add_boost(env)
@@ -11,6 +11,8 @@ dev.add_crashlog(env)
 dev.add_dcpp(env)
 dev.add_intl(env)
 dev.add_openssl(env)
+
+env.Append(CPPPATH=["#/win32"])
 
 if dev.is_win32():
     env.Append(CPPPATH=["#/dwt/include"])
@@ -51,13 +53,16 @@ if dev.is_win32():
     env.Depends(res, dev.get_sources("res/flags/", "*.ico"))
     prog_sources.append(res)
 
-headers = dev.get_sources(source_path, "*.h")
+headers = dev.get_sources(source_path, "*.h", recursive=True)
 dev.i18n(source_path, env, [sources, headers,
     File("#/dwt/src/util/win32/ThemedFileDialog.cpp"),
     File("#/dwt/src/util/win32/FileDialog.cpp")], "dcpp-win32")
 
 if env["msvcproj"]:
-    ret = dev.build_lib(env, target, sources, dev.cpp_lib)
+    project_sources = dev.get_sources(source_path, "*.cpp", recursive=True)
+    ret = dev.build_lib(env, target, sources,
+        lambda env: ([env.File(h).srcnode() for h in headers], [env.File(s).srcnode() for s in project_sources]),
+        msvcproj_name="win32")
 else:
     if "gcc" in env["TOOLS"]:
         linked = dev.build_program(env,

@@ -4,7 +4,7 @@
 
 #include "testbase.h"
 
-#include <dcpp/PrivateTransferProtocol.h>
+#include <dcpp/transfer/private/PrivateTransferProtocol.h>
 #include <thread>
 #include <atomic>
 #include <future>

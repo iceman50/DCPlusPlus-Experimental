@@ -6,7 +6,7 @@
 #include <mutex>
 #include <thread>
 
-#include <dcpp/Speaker.h>
+#include <dcpp/base/Speaker.h>
 
 using namespace dcpp;
 using namespace std::chrono_literals;

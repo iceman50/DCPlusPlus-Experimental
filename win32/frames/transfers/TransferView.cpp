@@ -1,0 +1,1441 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "stdafx.h"
+#include <win32/frames/transfers/TransferView.h>
+#include <win32/appearance/CountryFlags.h>
+
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/connection/ConnectionManager.h>
+#include <dcpp/transfer/Download.h>
+#include <dcpp/transfer/DownloadManager.h>
+#include <dcpp/geo/GeoManager.h>
+#include <dcpp/net/HttpConnection.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/transfer/Upload.h>
+#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/connection/UserConnection.h>
+
+#include <dwt/resources/Pen.h>
+#include <dwt/util/StringUtils.h>
+#include <dwt/widgets/TableTree.h>
+
+#include <win32/controls/HoldRedraw.h>
+#include <win32/resource.h>
+#include <win32/shell/ShellMenu.h>
+#include <win32/controls/TypedTable.h>
+#include <win32/util/WinUtil.h>
+
+using dwt::util::escapeMenu;
+
+static const ColumnInfo columns[] = {
+	{ N_("File"), 200, false },
+	{ N_("Path"), 300, false },
+	{ N_("Status"), 350, false },
+	{ N_("User"), 125, false },
+	{ N_("Hub"), 100, false },
+	{ N_("Time left"), 100, true },
+	{ N_("Speed"), 100, true },
+	{ N_("Transferred (Ratio)"), 80, true },
+	{ N_("Size"), 80, true },
+	{ N_("Cipher"), 100, false },
+	{ N_("IP"), 100, false },
+	{ N_("Country"), 100, false }
+};
+
+TransferView::TransferView(dwt::Widget* parent, TabViewPtr mdi_) :
+	dwt::Container(parent),
+	transfers(0),
+	mdi(mdi_),
+	downloadIcon(WinUtil::createIcon(IDI_DOWNLOAD, 16)),
+	uploadIcon(WinUtil::createIcon(IDI_UPLOAD, 16)),
+	updateList(false),
+	resortList(false),
+	resortMask(0)
+{
+	create();
+	setHelpId(IDH_TRANSFERS);
+
+	transfers = addChild(WidgetTransfers::Seed(WinUtil::Seeds::table));
+
+	transfers->setSmallImageList(WinUtil::fileImages);
+	transfers->setImageColumns({ COLUMN_IP });
+
+	WinUtil::makeColumns(transfers, columns, COLUMN_LAST, SETTING(TRANSFERS_ORDER), SETTING(TRANSFERS_WIDTHS));
+	WinUtil::setTableSort(transfers, COLUMN_LAST, SettingsManager::TRANSFERS_SORT, COLUMN_STATUS);
+
+	WinUtil::setColor(transfers);
+
+	transfers->onCustomDraw([this](NMLVCUSTOMDRAW& data) { return handleCustomDraw(data); });
+	transfers->onKeyDown([this](int c) { return handleKeyDown(c); });
+	transfers->onDblClicked([this] { handleDblClicked(); });
+	transfers->onContextMenu([this](const dwt::ScreenCoordinate& sc) { return handleContextMenu(sc); });
+
+	onDestroy([this] { handleDestroy(); });
+	noEraseBackground();
+
+	layout();
+
+	setTimer([this] { return handleTimer(); }, 500);
+
+	ConnectionManager::getInstance()->addListener(this);
+	DownloadManager::getInstance()->addListener(this);
+	UploadManager::getInstance()->addListener(this);
+	QueueManager::getInstance()->addListener(this);
+	HttpManager::getInstance()->addListener(this);
+}
+
+TransferView::~TransferView() {
+}
+
+void TransferView::prepareClose() {
+	QueueManager::getInstance()->removeListener(this);
+	ConnectionManager::getInstance()->removeListener(this);
+	DownloadManager::getInstance()->removeListener(this);
+	UploadManager::getInstance()->removeListener(this);
+	HttpManager::getInstance()->removeListener(this);
+}
+
+TransferView::ItemInfo::ItemInfo() :
+	speed(0),
+	actual(0),
+	transferred(0),
+	size(0)
+{
+}
+
+const tstring& TransferView::ItemInfo::getText(int col) const {
+	return columns[col];
+}
+
+int TransferView::ItemInfo::getImage(int col) const {
+	return col == COLUMN_IP && SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::fileFlagOffset) : -1;
+}
+
+int TransferView::ItemInfo::compareItems(const ItemInfo* a, const ItemInfo* b, int col) {
+	if(const_cast<ItemInfo*>(a)->transfer().type != const_cast<ItemInfo*>(b)->transfer().type) {
+		// sort downloads first, then uploads, then PMs.
+		return const_cast<ItemInfo*>(a)->transfer().type < const_cast<ItemInfo*>(b)->transfer().type ? -1 : 1;
+	}
+
+	auto ca = dynamic_cast<const ConnectionInfo*>(a), cb = dynamic_cast<const ConnectionInfo*>(b);
+	if(ca && cb && ca->status != cb->status) {
+		// sort running conns first.
+		return ca->status == STATUS_RUNNING ? -1 : 1;
+	}
+
+	switch(col) {
+	case COLUMN_STATUS:
+		{
+			return !a->transferred && !b->transferred ? compare(a->size, b->size) :
+				!b->transferred ? -1 :
+				!a->transferred ? 1 :
+				compare(a->size / a->transferred, b->size / b->transferred);
+		}
+	case COLUMN_TIMELEFT: return compare(a->timeleft, b->timeleft);
+	case COLUMN_SPEED: return compare(a->speed, b->speed);
+	case COLUMN_TRANSFERRED: return compare(a->transferred, b->transferred);
+	case COLUMN_SIZE: return compare(a->size, b->size);
+	default: return compare(a->getText(col), b->getText(col));
+	}
+}
+
+TransferView::ConnectionInfo::ConnectionInfo(const HintedUser& u, const string& token_, TransferInfo& parent) :
+	ItemInfo(),
+	UserInfoBase(u),
+	transferFailed(false),
+	status(STATUS_WAITING),
+	token(token_),
+	parent(parent)
+{
+	columns[COLUMN_FILE] = parent.getText(COLUMN_FILE);
+	columns[COLUMN_PATH] = parent.getText(COLUMN_PATH);
+	columns[COLUMN_USER] = WinUtil::getNicks(u);
+	columns[COLUMN_HUB] = WinUtil::getHubNames(u).first;
+	columns[COLUMN_STATUS] = T_("Idle");
+}
+
+bool TransferView::ConnectionInfo::operator==(const ConnectionInfo& other) const {
+	return other.parent.type == parent.type && other.token == token;
+}
+
+int TransferView::ConnectionInfo::getImage(int col) const {
+	return col == COLUMN_FILE ? WinUtil::TRANSFER_ICON_USER : ItemInfo::getImage(col);
+}
+
+void TransferView::ConnectionInfo::update(const UpdateInfo& ui) {
+	if(ui.updateMask & UpdateInfo::MASK_PATH) {
+		parent.path = ui.path;
+		parent.updatePath();
+		columns[COLUMN_FILE] = parent.getText(COLUMN_FILE);
+		columns[COLUMN_PATH] = parent.getText(COLUMN_PATH);
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_STATUS) {
+		status = ui.status;
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_STATUS_STRING) {
+		// No slots etc from transfermanager better than disconnected from connectionmanager
+		if(!transferFailed)
+			columns[COLUMN_STATUS] = ui.statusString;
+		transferFailed = ui.transferFailed;
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_TRANSFERRED) {
+		if(parent.type == CONNECTION_TYPE_DOWNLOAD && ui.transferred > transferred) {
+			parent.transferred += ui.transferred - transferred;
+		}
+
+		actual = ui.actual;
+		transferred = ui.transferred;
+		size = ui.size;
+
+		if(transferred > 0) {
+			columns[COLUMN_TRANSFERRED] = str(TF_("%1% (%2$0.2f)")
+				% Text::toT(Util::formatBytes(transferred))
+				% (static_cast<double>(actual) / static_cast<double>(transferred)));
+		} else {
+			columns[COLUMN_TRANSFERRED].clear();
+		}
+
+		if(size > 0) {
+			columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
+		} else {
+			columns[COLUMN_SIZE].clear();
+		}
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_SPEED) {
+		speed = std::max(ui.speed, 0LL); // sometimes the speed is negative; avoid problems.
+	}
+
+	if((ui.updateMask & UpdateInfo::MASK_STATUS) || (ui.updateMask & UpdateInfo::MASK_SPEED)) {
+		if(status == STATUS_RUNNING && speed > 0) {
+			columns[COLUMN_SPEED] = str(TF_("%1%/s") % Text::toT(Util::formatBytes(speed)));
+		} else {
+			columns[COLUMN_SPEED].clear();
+		}
+	}
+
+	if((ui.updateMask & UpdateInfo::MASK_STATUS) || (ui.updateMask & UpdateInfo::MASK_TRANSFERRED) || (ui.updateMask & UpdateInfo::MASK_SPEED)) {
+		if(status == STATUS_RUNNING && size > 0 && speed > 0) {
+			timeleft = static_cast<double>(size - transferred) / speed;
+			columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+		} else {
+			timeleft = 0;
+			columns[COLUMN_TIMELEFT].clear();
+		}
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_CIPHER) {
+		columns[COLUMN_CIPHER] = ui.cipher;
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_IP) {
+		columns[COLUMN_IP] = ui.ip;
+	}
+	
+	if(ui.updateMask & UpdateInfo::MASK_COUNTRY) {
+		columns[COLUMN_COUNTRY] = ui.country;
+		countryCode = ui.countryCode;
+	}
+}
+
+TransferView::TransferInfo& TransferView::ConnectionInfo::transfer() {
+	return parent;
+}
+
+double TransferView::ConnectionInfo::barPos() const {
+	return status == STATUS_RUNNING && size > 0 && transferred >= 0 ?
+		static_cast<double>(transferred) / static_cast<double>(size) : -1;
+}
+
+void TransferView::ConnectionInfo::force() {
+	ConnectionManager::getInstance()->force(user);
+}
+
+void TransferView::ConnectionInfo::disconnect() {
+	ConnectionManager::getInstance()->disconnect(user, parent.type);
+}
+
+void TransferView::ConnectionInfo::removeFileFromQueue() {
+	QueueManager::getInstance()->remove(transfer().path);
+}
+
+void TransferView::ConnectionInfo::setPriority(QueueItem::Priority p) {
+	QueueManager::getInstance()->setPriority(transfer().path, p);
+}
+
+TransferView::TransferInfo::TransferInfo(const TTHValue& tth, ConnectionType type, const string& path, const string& tempPath) :
+	ItemInfo(),
+	tth(tth),
+	type(type),
+	path(path),
+	tempPath(tempPath)
+{
+}
+
+bool TransferView::TransferInfo::operator==(const TransferInfo& other) const {
+	return other.type == type && other.path == path;
+}
+
+int TransferView::TransferInfo::getImage(int col) const {
+	if(col != COLUMN_FILE)
+		return ItemInfo::getImage(col);
+
+	return type == CONNECTION_TYPE_PM ? WinUtil::TRANSFER_ICON_PM : static_cast<int>(WinUtil::getFileIcon(path));
+}
+
+void TransferView::TransferInfo::update() {
+	timeleft = 0;
+	speed = 0;
+	if(type != CONNECTION_TYPE_DOWNLOAD) { transferred = 0; }
+
+	if(conns.empty()) {
+		// this should never happen, but let's play safe.
+		for(auto& col: columns) {
+			col.clear();
+		}
+		return;
+	}
+
+	size_t running = 0;
+	set<string> hubs;
+	for(auto& conn: conns) {
+		if(type != CONNECTION_TYPE_DOWNLOAD) {
+			timeleft += conn.timeleft;
+			transferred += conn.transferred;
+		}
+		if(conn.status == STATUS_RUNNING) {
+			++running;
+			speed += conn.speed;
+		}
+		hubs.insert(conn.getUser().hint);
+	}
+
+	if(size == -1) {
+		// this can happen with file lists... get the size of the first connection.
+		size = conns.front().size;
+	}
+
+	if(type == CONNECTION_TYPE_DOWNLOAD && size > 0 && speed > 0) {
+		timeleft = std::max(static_cast<double>(size - transferred), 0.0) / speed;
+	}
+
+	auto users = conns.size();
+
+	if(users == 1) {
+		auto& conn = conns.front();
+		columns[COLUMN_STATUS] = conn.getText(COLUMN_STATUS);
+		columns[COLUMN_USER] = conn.getText(COLUMN_USER);
+		columns[COLUMN_HUB] = conn.getText(COLUMN_HUB);
+		columns[COLUMN_CIPHER] = conn.getText(COLUMN_CIPHER);
+		columns[COLUMN_IP] = conn.getText(COLUMN_IP);
+		columns[COLUMN_COUNTRY] = conn.getText(COLUMN_COUNTRY);
+		countryCode = conn.countryCode;
+
+	} else {
+		if(type == CONNECTION_TYPE_PM) {
+			columns[COLUMN_STATUS] = str(TF_("%1% direct encrypted private message channels") % users);
+		} else if(running > 0) {
+			tstring userStr = Text::toT(std::to_string(running) + "/" + std::to_string(users));
+			columns[COLUMN_STATUS] = type == CONNECTION_TYPE_DOWNLOAD ?
+				str(TF_("Downloading from %1% users") % userStr) :
+				str(TF_("Uploading to %1% users") % userStr);
+		} else {
+			columns[COLUMN_STATUS] = T_("Idle");
+		}
+		columns[COLUMN_USER] = str(TF_("%1% users") % users);
+		if(hubs.size() == 1) {
+			columns[COLUMN_HUB] = conns.front().getText(COLUMN_HUB);
+		} else {
+			columns[COLUMN_HUB] = str(TF_("%1% hubs") % hubs.size());
+		}
+		columns[COLUMN_CIPHER].clear();
+		columns[COLUMN_IP].clear();
+		columns[COLUMN_COUNTRY].clear();
+		countryCode.clear();
+	}
+
+	if(type == CONNECTION_TYPE_PM) {
+		// CCPM channels don't transfer files, so byte and time totals are meaningless.
+		columns[COLUMN_TIMELEFT].clear();
+		columns[COLUMN_SPEED].clear();
+		columns[COLUMN_TRANSFERRED].clear();
+		columns[COLUMN_SIZE].clear();
+	} else {
+		columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+		columns[COLUMN_SPEED] = str(TF_("%1%/s") % Text::toT(Util::formatBytes(speed)));
+		columns[COLUMN_TRANSFERRED] = Text::toT(Util::formatBytes(transferred));
+		columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
+	}
+}
+
+void TransferView::TransferInfo::updatePath() {
+	columns[COLUMN_FILE] = Text::toT(Util::getFileName(path));
+	columns[COLUMN_PATH] = Text::toT(Util::getFilePath(path));
+}
+
+TransferView::TransferInfo& TransferView::TransferInfo::transfer() {
+	return *this;
+}
+
+double TransferView::TransferInfo::barPos() const {
+	if(type == CONNECTION_TYPE_DOWNLOAD) {
+		// "transferred" is computed from previous download events so the ratio might exceed 100%...
+		return size > 0 && transferred >= 0 ?
+			std::min(static_cast<double>(transferred) / static_cast<double>(size), 1.0) : -1;
+	}
+
+	// Multiple users may upload different ranges of the same file. Summing the
+	// per-connection positions and requested sizes yields a stable aggregate bar;
+	// dividing by the parent file size would misrepresent partial ranges.
+	double completedBytes = 0;
+	double totalBytes = 0;
+	bool running = false;
+	for(const auto& conn: conns) {
+		running = running || conn.status == STATUS_RUNNING;
+		if(conn.size > 0 && conn.transferred >= 0) {
+			completedBytes += static_cast<double>(std::min(conn.transferred, conn.size));
+			totalBytes += static_cast<double>(conn.size);
+		}
+	}
+	return running && totalBytes > 0 ? std::min(completedBytes / totalBytes, 1.0) : -1;
+}
+
+void TransferView::TransferInfo::force() {
+	for(auto& conn: conns) {
+		conn.force();
+	}
+}
+
+void TransferView::TransferInfo::disconnect() {
+	for(auto& conn: conns) {
+		conn.disconnect();
+	}
+}
+
+void TransferView::TransferInfo::removeFileFromQueue() {
+	for(auto& conn: conns) {
+		conn.removeFileFromQueue();
+	}
+}
+
+void TransferView::TransferInfo::setPriority(QueueItem::Priority p) {
+	for(auto& conn: conns) {
+		conn.setPriority(p);
+	}
+}
+
+TransferView::HttpInfo::HttpInfo(const string& url) :
+	TransferInfo(TTHValue(), CONNECTION_TYPE_DOWNLOAD, url, Util::emptyString),
+	status(STATUS_WAITING)
+{
+	columns[COLUMN_PATH] = Text::toT(url);
+	auto slash = columns[COLUMN_PATH].rfind('/');
+	columns[COLUMN_FILE] = slash != tstring::npos ? columns[COLUMN_PATH].substr(slash + 1) : columns[COLUMN_PATH];
+}
+
+void TransferView::HttpInfo::update(const UpdateInfo& ui) {
+	if(ui.updateMask & UpdateInfo::MASK_STATUS) {
+		status = ui.status;
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_STATUS_STRING) {
+		columns[COLUMN_STATUS] = ui.statusString;
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_TRANSFERRED) {
+		transferred = ui.transferred;
+		size = ui.size;
+
+		if(transferred > 0) {
+			columns[COLUMN_TRANSFERRED] = Text::toT(Util::formatBytes(transferred));
+		} else {
+			columns[COLUMN_TRANSFERRED].clear();
+		}
+
+		if(size > 0) {
+			columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
+		} else {
+			columns[COLUMN_SIZE].clear();
+		}
+	}
+
+	if(ui.updateMask & UpdateInfo::MASK_SPEED) {
+		speed = ui.speed;
+		columns[COLUMN_SPEED] = str(TF_("%1%/s") % Text::toT(Util::formatBytes(speed)));
+	}
+
+	if((ui.updateMask & UpdateInfo::MASK_STATUS) || (ui.updateMask & UpdateInfo::MASK_TRANSFERRED) || (ui.updateMask & UpdateInfo::MASK_SPEED)) {
+		if(status == STATUS_RUNNING && size > 0 && speed > 0) {
+			timeleft = static_cast<double>(size - transferred) / speed;
+			columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+		} else {
+			timeleft = 0;
+			columns[COLUMN_TIMELEFT].clear();
+		}
+	}
+}
+
+void TransferView::HttpInfo::disconnect() {
+	HttpManager::getInstance()->disconnect(path);
+}
+
+void TransferView::handleDestroy() {
+	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_ORDER, WinUtil::toString(transfers->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_WIDTHS, WinUtil::toString(transfers->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_SORT, WinUtil::getTableSort(transfers));
+}
+
+bool TransferView::handleContextMenu(dwt::ScreenCoordinate pt) {
+	auto sel = transfers->getSelection();
+	if(!sel.empty()) {
+		if(pt.x() == -1 && pt.y() == -1) {
+			pt = transfers->getContextMenuPos();
+		}
+
+		auto selData = (sel.size() == 1) ? transfers->getSelectedData() : nullptr;
+		auto transfer = dynamic_cast<TransferInfo*>(selData);
+
+		auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
+
+		tstring title;
+		dwt::IconPtr icon;
+		if(selData) {
+			title = escapeMenu(selData->getText(transfer ? COLUMN_FILE : COLUMN_USER));
+			if(title.empty()) {
+				title = escapeMenu(selData->getText(COLUMN_USER));
+				icon = WinUtil::fileImages->getIcon(WinUtil::TRANSFER_ICON_USER);
+			} else {
+				icon = WinUtil::fileImages->getIcon(selData->getImage(COLUMN_FILE));
+			}
+		} else {
+			title = str(TF_("%1% items") % sel.size());
+		}
+		menu->setTitle(title, icon);
+
+		appendUserItems(mdi, menu.get(), false);
+
+		set<TransferInfo*> files;
+		auto onlyHttp = true;
+		auto onlyDownloads = true;
+		for(auto i: sel) {
+			auto& transfer = transfers->getData(i)->transfer();
+			if(!dynamic_cast<HttpInfo*>(&transfer)) {
+				onlyHttp = false;
+				if(!transfer.getText(COLUMN_FILE).empty()) {
+					files.insert(&transfer);
+				}
+			}
+			if (transfer.type != CONNECTION_TYPE_DOWNLOAD) {
+				onlyDownloads = false;
+			}
+		}
+
+		if(files.size() == 1) {
+			menu->appendSeparator();
+			transfer = *files.begin();
+			WinUtil::addHashItems(menu.get(), transfer->tth, transfer->getText(COLUMN_FILE), transfer->size);
+		} else if(!files.empty()) {
+			menu->appendSeparator();
+			for(auto transfer: files) {
+				auto file = transfer->getText(COLUMN_FILE);
+				WinUtil::addHashItems(
+					menu->appendPopup(file, WinUtil::fileImages->getIcon(transfer->getImage(COLUMN_FILE))),
+					transfer->tth, file, transfer->size);
+			}
+		}
+
+		StringList paths;
+		for(auto transfer: files) {
+			if(File::getSize(transfer->path) != -1) {
+				paths.push_back(transfer->path);
+			} else if(!transfer->tempPath.empty() && File::getSize(transfer->tempPath) != -1) {
+				paths.push_back(transfer->tempPath);
+			}
+		}
+		menu->appendShellMenu(paths);
+
+		if(!onlyHttp) {
+			menu->appendSeparator();
+
+			auto sub = menu->appendPopup(T_("Set priority"), dwt::IconPtr(), onlyDownloads);
+			sub->appendItem(T_("Paused"), [this] { handlePriority(QueueItem::PAUSED); }, dwt::IconPtr(), onlyDownloads);
+			sub->appendItem(T_("Lowest"), [this] { handlePriority(QueueItem::LOWEST); }, dwt::IconPtr(), onlyDownloads);
+			sub->appendItem(T_("Low"), [this] { handlePriority(QueueItem::LOW); }, dwt::IconPtr(), onlyDownloads);
+			sub->appendItem(T_("Normal"), [this] { handlePriority(QueueItem::NORMAL); }, dwt::IconPtr(), onlyDownloads);
+			sub->appendItem(T_("High"), [this] { handlePriority(QueueItem::HIGH); }, dwt::IconPtr(), onlyDownloads);
+			sub->appendItem(T_("Highest"), [this] { handlePriority(QueueItem::HIGHEST); }, dwt::IconPtr(), onlyDownloads);
+			menu->appendSeparator();
+
+			menu->appendItem(T_("&Force attempt"), [this] { handleForce(); }, dwt::IconPtr(), onlyDownloads);
+			menu->appendSeparator();
+
+			menu->appendItem(T_("&Remove file from queue"), [this] { handleRemoveFileFromQueue(); }, dwt::IconPtr(), onlyDownloads);
+			menu->appendSeparator();
+		}
+		
+		menu->appendItem(T_("&Disconnect"), [this] { handleDisconnect(); });
+
+		WinUtil::addCopyMenu(menu.get(), transfers);
+
+		set<string> hubs;
+		for(auto& i: selectedUsersImpl()) {
+			hubs.insert(i->getUser().hint);
+		}
+		prepareMenu(menu.get(), UserCommand::CONTEXT_USER, StringList(hubs.begin(), hubs.end()));
+
+		menu->open(pt);
+		return true;
+	}
+	return false;
+}
+
+void TransferView::handlePriority(QueueItem::Priority p) {
+	transfers->forEachSelectedT([this, &p](ItemInfo* ii) { ii->setPriority(p); });
+}
+
+void TransferView::handleForce() {
+	transfers->forEachSelected(&ItemInfo::force);
+}
+
+void TransferView::handleDisconnect() {
+	transfers->forEachSelected(&ItemInfo::disconnect);
+}
+
+void TransferView::handleRemoveFileFromQueue()
+{
+	transfers->forEachSelected(&ItemInfo::removeFileFromQueue);
+}
+
+bool TransferView::handleKeyDown(int c) {
+	if(c == VK_DELETE) {
+		handleDisconnect();
+		return true;
+	}
+	return false;
+}
+
+void TransferView::handleDblClicked() {
+	auto users = selectedUsersImpl();
+	if(users.size() == 1) {
+		users[0]->pm(mdi);
+	}
+}
+
+namespace { void drawProgress(HDC hdc, const dwt::Rectangle& rcItem, int item, int column,
+	const dwt::IconPtr& icon, const tstring& text, double pos, bool download)
+{
+	// draw something nice...
+	COLORREF barBase = download ? SETTING(DOWNLOAD_BG_COLOR) : SETTING(UPLOAD_BG_COLOR);
+	COLORREF bgBase = WinUtil::bgColor;
+	int mod = (HLS_L(RGB2HLS(bgBase)) >= 128) ? -30 : 30;
+
+	// Dark, medium and light shades
+	COLORREF barPal[3] { HLS_TRANSFORM(barBase, -40, 50), barBase, HLS_TRANSFORM(barBase, 40, -30) };
+
+	// Two shades of the background color
+	COLORREF bgPal[2] { HLS_TRANSFORM(bgBase, mod, 0), HLS_TRANSFORM(bgBase, mod/2, 0) };
+
+	dwt::FreeCanvas canvas { hdc };
+
+	dwt::Rectangle rc = rcItem;
+
+	// draw background
+
+	{
+		dwt::Brush brush { ::CreateSolidBrush(bgPal[1]) };
+		auto selectBg(canvas.select(brush));
+
+		dwt::Pen pen { bgPal[0] };
+		auto selectPen(canvas.select(pen));
+
+		// TODO Don't draw where the finished part will be drawn
+		canvas.rectangle(rc.left(), rc.top() - 1, rc.right(), rc.bottom());
+	}
+
+	rc.pos.x += 1;
+	rc.size.x -= 2;
+	rc.size.y -= 1;
+
+	{
+		// draw the icon then shift the rect.
+		const long iconSize = 16;
+		const long iconTextSpace = 2;
+
+		dwt::Rectangle iconRect { rc.left(), rc.top() + std::max(rc.height() - iconSize, 0L) / 2, iconSize, iconSize };
+
+		canvas.drawIcon(icon, iconRect);
+
+		rc.pos.x += iconSize + iconTextSpace;
+		rc.size.x -= iconSize + iconTextSpace;
+	}
+
+	dwt::Rectangle textRect;
+
+	if(pos >= 0) {
+		// the transfer is ongoing; paint a background to represent that.
+
+		dwt::Brush brush { ::CreateSolidBrush(barPal[1]) };
+		auto selectBg(canvas.select(brush));
+
+		{
+			dwt::Pen pen { barPal[0] };
+			auto selectPen(canvas.select(pen));
+
+			// "Finished" part
+			rc.size.x *= pos;
+
+			canvas.rectangle(rc);
+		}
+
+		textRect = rc;
+
+		// draw progressbar highlight
+		if(rc.width() > 2) {
+			dwt::Pen pen { barPal[2], dwt::Pen::Solid, 1 };
+			auto selectPen(canvas.select(pen));
+
+			rc.pos.y += 2;
+			canvas.moveTo(rc.left() + 1, rc.top());
+			canvas.lineTo(rc.right() - 2, rc.top());
+		}
+
+	} else {
+		textRect = rc;
+	}
+
+	// draw status text
+
+	auto bkMode(canvas.setBkMode(true));
+	auto& font = download ? WinUtil::downloadFont : WinUtil::uploadFont;
+	if(!font.get()) {
+		font = WinUtil::font;
+	}
+	auto selectFont(canvas.select(*font));
+
+	textRect.pos.x += 6;
+	textRect.size.x -= 6;
+
+	long left = textRect.left();
+
+	TEXTMETRIC tm;
+	canvas.getTextMetrics(tm);
+	long top = textRect.top() + (textRect.bottom() - textRect.top() - tm.tmHeight) / 2;
+
+	canvas.setTextColor(download ? SETTING(DOWNLOAD_TEXT_COLOR) : SETTING(UPLOAD_TEXT_COLOR));
+	/// @todo ExtTextOut to dwt
+	::RECT r = textRect;
+	::ExtTextOut(hdc, left, top, ETO_CLIPPED, &r, text.c_str(), static_cast<UINT>(text.size()), NULL);
+
+	r.left = r.right;
+	r.right = rcItem.right();
+
+	canvas.setTextColor(WinUtil::textColor);
+	::ExtTextOut(hdc, left, top, ETO_CLIPPED, &r, text.c_str(), static_cast<UINT>(text.size()), NULL);
+} }
+
+LRESULT TransferView::handleCustomDraw(NMLVCUSTOMDRAW& data) {
+	switch(data.nmcd.dwDrawStage) {
+	case CDDS_PREPAINT:
+		return CDRF_NOTIFYITEMDRAW;
+
+	case CDDS_ITEMPREPAINT:
+		return CDRF_NOTIFYSUBITEMDRAW;
+
+	case CDDS_SUBITEM | CDDS_ITEMPREPAINT:
+	{
+		// Let's draw a box if needed...
+		auto col = data.iSubItem;
+		if(col == COLUMN_STATUS) {
+			auto& info = *reinterpret_cast<ItemInfo*>(data.nmcd.lItemlParam);
+			auto type = info.transfer().type;
+			if(type == CONNECTION_TYPE_DOWNLOAD || type == CONNECTION_TYPE_UPLOAD) {
+				auto item = static_cast<int>(data.nmcd.dwItemSpec);
+				drawProgress(data.nmcd.hdc, transfers->getRect(item, col, LVIR_BOUNDS), item, col,
+					type == CONNECTION_TYPE_DOWNLOAD ? downloadIcon : uploadIcon, info.getText(col),
+					info.barPos(), type == CONNECTION_TYPE_DOWNLOAD);
+				return CDRF_SKIPDEFAULT;
+			}
+		}
+	}
+		// Fall through
+	default:
+		return CDRF_DODEFAULT;
+	}
+}
+
+bool TransferView::handleTimer() {
+	if(updateList) {
+		updateList = false;
+		callAsync([this] { execTasks(); });
+	}
+	return true;
+}
+
+void TransferView::runUserCommand(const UserCommand& uc) {
+	if(!WinUtil::getUCParams(this, uc, ucLineParams))
+		return;
+
+	set<CID> users;
+
+	for(auto& i: selectedUsersImpl()) {
+		if(!i->getUser().user->isOnline()) { continue; }
+
+		if(uc.once()) {
+			if(users.find(i->getUser().user->getCID()) != users.end())
+				continue;
+			users.insert(i->getUser().user->getCID());
+		}
+
+		auto tmp = ucLineParams;
+		ClientManager::getInstance()->userCommand(i->getUser(), uc, tmp, true);
+	}
+}
+
+void TransferView::layout() {
+	transfers->resize(dwt::Rectangle(getClientSize()));
+}
+
+void TransferView::addConn(const UpdateInfo& ui) {
+	TransferInfo* transfer = nullptr;
+	auto conn = findConn(ui.token, ui.type);
+
+	if(ui.updateMask & UpdateInfo::MASK_PATH) {
+		// adding a connection we know the transfer of.
+		dcassert(!ui.path.empty()); // transfers are indexed by path; it can't be empty.
+		transfer = findTransfer(ui.path, ui.type);
+		if(conn && &conn->parent != transfer) {
+			removeConn(*conn);
+			conn = nullptr;
+		}
+		if(!transfer) {
+			transferItems.emplace_back(ui.tth, ui.type, ui.path, ui.tempPath);
+			transfer = &transferItems.back();
+			transfers->insert(transfer);
+			if(ui.type == CONNECTION_TYPE_DOWNLOAD) {
+				QueueManager::getInstance()->getSizeInfo(transfer->size, transfer->transferred, ui.path);
+			} else if(ui.type == CONNECTION_TYPE_UPLOAD) {
+				transfer->size = File::getSize(ui.path);
+			}
+		}
+
+	} else {
+		// this connection has just been created; we don't know what file it is for yet.
+		if(conn) {
+			// Connection and transfer events are posted from different worker threads.
+			// Refresh waiting/retrying rows, but don't let a delayed Added event
+			// replace an already running transfer with a blank connection row.
+			if(conn->status != STATUS_RUNNING) {
+				updateConn(ui);
+			}
+			return;
+		}
+
+		// CCPM connections never become file transfers. Keep them under one stable
+		// parent so TableTree can collapse many channels into a single row. Other
+		// pathless connections must remain separate until a transfer event binds
+		// their token to a concrete path.
+		if(ui.type == CONNECTION_TYPE_PM) {
+			transfer = findTransfer(Util::emptyString, ui.type);
+		}
+		if(!transfer) {
+			auto path = ui.type == CONNECTION_TYPE_PM ?
+				Util::emptyString : ui.user.user->getCID().toBase32();
+			transferItems.emplace_back(TTHValue(), ui.type, std::move(path), Util::emptyString);
+			transfer = &transferItems.back();
+			transfers->insert(transfer);
+		}
+	}
+
+	if(!conn) {
+		transfer->conns.emplace_back(ui.user, ui.token, *transfer);
+		conn = &transfer->conns.back();
+		connections[ui.type][ui.token] = conn;
+
+		// only show the child connection item when there are multiple children.
+		auto connCount = transfer->conns.size();
+		if(connCount > 1) {
+			if(connCount == 2) {
+				// add the previous child.
+				transfers->insertChild(reinterpret_cast<LPARAM>(transfer), reinterpret_cast<LPARAM>(&transfer->conns.front()));
+			}
+			transfers->insertChild(reinterpret_cast<LPARAM>(transfer), reinterpret_cast<LPARAM>(conn));
+		}
+	}
+
+	conn->update(ui);
+	transfer->update();
+	markDirty(*conn);
+	markDirty(*transfer);
+}
+
+void TransferView::updateConn(const UpdateInfo& ui) {
+	auto conn = findConn(ui.token, ui.type);
+	if(conn) {
+		conn->update(ui);
+		conn->parent.update();
+		markDirty(*conn);
+		markDirty(conn->parent);
+	}
+}
+
+void TransferView::removeConn(const UpdateInfo& ui) {
+	auto conn = findConn(ui.token, ui.type);
+	if(conn) {
+		removeConn(*conn);
+	}
+}
+
+TransferView::ConnectionInfo* TransferView::findConn(const string& token, ConnectionType type) {
+	if(token.empty() || type < 0 || type >= CONNECTION_TYPE_LAST) { return nullptr; }
+	auto i = connections[type].find(token);
+	return i != connections[type].end() ? i->second : nullptr;
+}
+
+TransferView::TransferInfo* TransferView::findTransfer(const string& path, ConnectionType type) {
+	for(auto& transfer: transferItems) {
+		if(transfer.type == type && transfer.path == path) {
+			return &transfer;
+		}
+	}
+	return nullptr;
+}
+
+void TransferView::removeConn(ConnectionInfo& conn) {
+	auto& transfer = conn.parent;
+	auto connPos = std::find_if(transfer.conns.begin(), transfer.conns.end(),
+		[&conn](const ConnectionInfo& item) { return &item == &conn; });
+	dcassert(connPos != transfer.conns.end());
+	if(connPos == transfer.conns.end()) {
+		return;
+	}
+
+	transfers->eraseChild(reinterpret_cast<LPARAM>(&conn));
+	connections[transfer.type].erase(conn.token);
+	forgetDirty(conn);
+
+	// Erase the exact node. list::remove(conn) would keep comparing against
+	// conn after erasing the node that owns that reference.
+	transfer.conns.erase(connPos);
+
+	if(transfer.conns.empty()) {
+		removeTransfer(transfer);
+
+	} else {
+		if(transfer.conns.size() == 1) {
+			// ungroup
+			transfers->eraseChild(reinterpret_cast<LPARAM>(&transfer.conns.front()));
+		}
+
+		transfer.update();
+		markDirty(transfer);
+	}
+}
+
+void TransferView::removeTransfer(TransferInfo& transfer) {
+	auto transferPos = std::find_if(transferItems.begin(), transferItems.end(),
+		[&transfer](const TransferInfo& item) { return &item == &transfer; });
+	dcassert(transferPos != transferItems.end());
+	if(transferPos == transferItems.end()) {
+		return;
+	}
+
+	forgetDirty(transfer);
+	for(auto& conn: transfer.conns) {
+		forgetDirty(conn);
+	}
+	transfers->erase(&transfer);
+	transferItems.erase(transferPos);
+}
+
+void TransferView::addHttpConn(const UpdateInfo& ui) {
+	auto item = findHttpItem(ui.path);
+	if(item) {
+		removeHttpItem(*item);
+	}
+
+	httpItems.emplace_back(ui.path);
+	item = &httpItems.back();
+	item->update(ui);
+
+	transfers->insert(item);
+	markDirty(*item);
+}
+
+void TransferView::updateHttpConn(const UpdateInfo& ui) {
+	auto item = findHttpItem(ui.path);
+	if(item) {
+		item->update(ui);
+		markDirty(*item);
+	}
+}
+
+void TransferView::removeHttpConn(const UpdateInfo& ui) {
+	auto item = findHttpItem(ui.path);
+	if(item) {
+		removeHttpItem(*item);
+	}
+}
+
+TransferView::HttpInfo* TransferView::findHttpItem(const string& url) {
+	for(auto& item: httpItems) {
+		if(item.path == url) {
+			return &item;
+		}
+	}
+	return nullptr;
+}
+
+void TransferView::removeHttpItem(HttpInfo& item) {
+	auto itemPos = find_if(httpItems.begin(), httpItems.end(),
+		[&item](const HttpInfo& current) { return &current == &item; });
+	if(itemPos == httpItems.end()) {
+		return;
+	}
+
+	forgetDirty(item);
+	transfers->erase(&item);
+	httpItems.erase(itemPos);
+}
+
+TransferView::UserInfoList TransferView::selectedUsersImpl() const {
+	// AspectUserInfo::usersFromTable won't do because not every item represents a user.
+	UserInfoList users;
+	transfers->forEachSelectedT([&users](ItemInfo* ii) {
+		auto conn = dynamic_cast<ConnectionInfo*>(ii);
+		if(conn) {
+			users.push_back(conn);
+		} else {
+			auto transfer = dynamic_cast<TransferInfo*>(ii);
+			if(transfer && transfer->conns.size() == 1) {
+				users.push_back(&transfer->conns.front());
+			}
+		}
+	});
+	return users;
+}
+
+void TransferView::markDirty(ItemInfo& item) {
+	dirtyItems.insert(&item);
+}
+
+void TransferView::forgetDirty(ItemInfo& item) {
+	dirtyItems.erase(&item);
+}
+
+void TransferView::redrawDirtyItems() {
+	if(dirtyItems.empty()) {
+		return;
+	}
+
+	const auto itemCount = static_cast<int>(transfers->size());
+	if(itemCount <= 0) {
+		dirtyItems.clear();
+		return;
+	}
+
+	const auto firstVisible = std::max(0, std::min(transfers->getTopIndex(), itemCount - 1));
+	const auto visibleCount = std::max(transfers->getCountPerPage(), 1);
+	const auto lastVisible = firstVisible + std::min(visibleCount, itemCount - 1 - firstVisible);
+	int firstDirty = -1;
+	int lastDirty = -1;
+
+	for(auto row = firstVisible; row <= lastVisible; ++row) {
+		if(dirtyItems.find(transfers->getData(row)) != dirtyItems.end()) {
+			if(firstDirty == -1) {
+				firstDirty = row;
+			}
+			lastDirty = row;
+		} else if(firstDirty != -1) {
+			transfers->redraw(firstDirty, lastDirty);
+			firstDirty = -1;
+			lastDirty = -1;
+		}
+	}
+
+	if(firstDirty != -1) {
+		transfers->redraw(firstDirty, lastDirty);
+	}
+	dirtyItems.clear();
+}
+
+void TransferView::execTasks() {
+	updateList = false;
+	const bool redrawAll = resortList || needsResort(resortMask);
+
+	{
+		HoldRedraw hold { transfers };
+
+		for(auto& task: tasks) {
+			task.first(*task.second);
+		}
+		tasks.clear();
+
+		if(redrawAll) {
+			transfers->resort();
+		}
+	}
+
+	// Sorting and structural changes can move every row. Ordinary callback-backed
+	// updates only require the affected visible parent and connection rows.
+	if(redrawAll) {
+		dirtyItems.clear();
+		transfers->Control::redraw(false);
+	} else {
+		redrawDirtyItems();
+	}
+
+	resortList = false;
+	resortMask = 0;
+}
+
+bool TransferView::needsResort(uint32_t updateMask) const {
+	auto column = transfers->getSortColumn();
+	if(column == -1) {
+		return false;
+	}
+
+	if(updateMask & UpdateInfo::MASK_STATUS) {
+		return true;
+	}
+
+	switch(column) {
+	case COLUMN_FILE:
+	case COLUMN_PATH:
+		return updateMask & UpdateInfo::MASK_PATH;
+	case COLUMN_STATUS:
+		return updateMask & (UpdateInfo::MASK_STATUS_STRING | UpdateInfo::MASK_TRANSFERRED);
+	case COLUMN_TIMELEFT:
+		return updateMask & (UpdateInfo::MASK_TRANSFERRED | UpdateInfo::MASK_SPEED);
+	case COLUMN_SPEED:
+		return updateMask & UpdateInfo::MASK_SPEED;
+	case COLUMN_TRANSFERRED:
+	case COLUMN_SIZE:
+		return updateMask & UpdateInfo::MASK_TRANSFERRED;
+	case COLUMN_CIPHER:
+		return updateMask & UpdateInfo::MASK_CIPHER;
+	case COLUMN_IP:
+		return updateMask & UpdateInfo::MASK_IP;
+	case COLUMN_COUNTRY:
+		return updateMask & UpdateInfo::MASK_COUNTRY;
+	default:
+		return false;
+	}
+}
+
+void TransferView::on(ConnectionManagerListener::Added, ConnectionQueueItem* aCqi) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return; // Private Send owns its separate, non-public queue view.
+	auto ui = new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken());
+	ui->setStatus(STATUS_WAITING);
+	ui->setStatusString(aCqi->getType() == CONNECTION_TYPE_PM ? T_("Direct encrypted private message channel") :
+		T_("Connecting"));
+
+	addedConn(ui);
+}
+
+void TransferView::on(ConnectionManagerListener::Removed, ConnectionQueueItem* aCqi) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return;
+	removedConn(new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken()));
+}
+
+void TransferView::on(ConnectionManagerListener::Failed, ConnectionQueueItem* aCqi, const string& aReason) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return;
+	auto ui = new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken());
+	ui->setStatus(STATUS_WAITING);
+	ui->setStatusString(aCqi->getUser().user->isSet(User::OLD_CLIENT) ?
+		T_("Remote client does not fully support TTH - cannot download") :
+		Text::toT(aReason));
+
+	updatedConn(ui);
+}
+
+void TransferView::on(ConnectionManagerListener::StatusChanged, ConnectionQueueItem* aCqi) noexcept {
+	if(aCqi->getType() == CONNECTION_TYPE_PRIVATE)
+		return;
+	auto ui = new UpdateInfo(aCqi->getUser(), aCqi->getType(), aCqi->getToken());
+	const bool connecting = aCqi->getState() == ConnectionQueueItem::CONNECTING;
+	if(aCqi->getType() == CONNECTION_TYPE_DOWNLOAD &&
+		aCqi->getState() == ConnectionQueueItem::ACTIVE && !aCqi->getRunning())
+	{
+		// A successfully negotiated connection may be retained as an internal idler
+		// even when no file is assigned. It has no active transfer to display.
+		removedConn(ui);
+		return;
+	}
+
+	ui->setStatus(STATUS_WAITING);
+	ui->setStatusString(connecting ? T_("Connecting") : T_("Waiting to retry"));
+
+	if(connecting && aCqi->getType() == CONNECTION_TYPE_DOWNLOAD) {
+		// An idle connection may have been removed from the view. Recreate its
+		// row on retry, or update the existing row while preserving its identity.
+		addedConn(ui);
+	} else {
+		updatedConn(ui);
+	}
+}
+
+namespace {
+
+tstring getTransferFlags(const Transfer* transfer) {
+	StringList flags;
+	transfer->appendFlags(flags);
+
+	tstring ret;
+	for(const auto& flag: flags) {
+		ret += Text::toT('[' + flag + ']');
+	}
+	if(!ret.empty()) {
+		ret += _T(' ');
+	}
+	return ret;
+}
+
+tstring getFile(Transfer* t) {
+	if(t->getType() == Transfer::TYPE_TREE) {
+		return T_("TTH");
+	}
+	if(t->getType() == Transfer::TYPE_FULL_LIST || t->getType() == Transfer::TYPE_PARTIAL_LIST) {
+		return T_("file list");
+	}
+	return Text::toT(str(F_("(%1%)") % (Util::formatBytes(t->getStartPos()) + " - " +
+		Util::formatBytes(t->getStartPos() + t->getSize()))));
+}
+
+}
+
+void TransferView::on(DownloadManagerListener::Complete, Download* d) noexcept {
+	onTransferComplete(d, true);
+}
+
+void TransferView::on(DownloadManagerListener::Failed, Download* d, const string& aReason) noexcept {
+	onFailed(d, aReason);
+}
+
+void TransferView::on(DownloadManagerListener::Starting, Download* d) noexcept {
+	auto ui = new UpdateInfo(d->getHintedUser(), CONNECTION_TYPE_DOWNLOAD, d->getUserConnection().getToken());
+	starting(ui, d);
+
+	tstring statusString = getTransferFlags(d);
+	statusString += str(TF_("Downloading %1%") % getFile(d));
+	ui->setStatusString(move(statusString));
+
+	// Rebind the token to the concrete transfer even if Requesting and connection
+	// notifications reached the UI out of order.
+	addedConn(ui);
+}
+
+void TransferView::on(DownloadManagerListener::Tick, const DownloadList& dl) noexcept  {
+	vector<UpdateInfo> updates;
+	updates.reserve(dl.size());
+	for(auto i: dl) {
+		updates.emplace_back(i->getHintedUser(), CONNECTION_TYPE_DOWNLOAD, i->getUserConnection().getToken());
+		auto& ui = updates.back();
+		ui.setTransferred(i->getPos(), i->getActual(), i->getSize());
+		ui.setSpeed(i->getAverageSpeed());
+	}
+	updatedConns(move(updates));
+}
+
+void TransferView::on(DownloadManagerListener::Requesting, Download* d) noexcept {
+	auto ui = new UpdateInfo(d->getHintedUser(), CONNECTION_TYPE_DOWNLOAD, d->getUserConnection().getToken());
+	starting(ui, d);
+	ui->setTempPath(d->getTempTarget());
+	ui->setStatusString(str(TF_("Requesting %1%") % getFile(d)));
+
+	addedConn(ui);
+}
+
+void TransferView::on(UploadManagerListener::Complete, Upload* u) noexcept {
+	onTransferComplete(u, false);
+}
+
+void TransferView::on(UploadManagerListener::Starting, Upload* u) noexcept {
+	auto ui = new UpdateInfo(u->getHintedUser(), CONNECTION_TYPE_UPLOAD, u->getUserConnection().getToken());
+	starting(ui, u);
+
+	tstring statusString = getTransferFlags(u);
+	statusString += str(TF_("Uploading %1%") % getFile(u));
+	ui->setStatusString(move(statusString));
+
+	addedConn(ui);
+}
+
+void TransferView::on(UploadManagerListener::Tick, const UploadList& ul) noexcept {
+	vector<UpdateInfo> updates;
+	updates.reserve(ul.size());
+	for(auto i: ul) {
+		updates.emplace_back(i->getHintedUser(), CONNECTION_TYPE_UPLOAD, i->getUserConnection().getToken());
+		auto& ui = updates.back();
+		ui.setTransferred(i->getPos(), i->getActual(), i->getSize());
+		ui.setSpeed(i->getAverageSpeed());
+	}
+	updatedConns(move(updates));
+}
+
+void TransferView::on(QueueManagerListener::CRCFailed, Download* d, const string& aReason) noexcept {
+	onFailed(d, aReason);
+}
+
+void TransferView::on(HttpManagerListener::Added, HttpConnection* c) noexcept {
+	auto ui = makeHttpUI(c);
+
+	ui->setStatus(STATUS_RUNNING);
+
+	tstring statusString = T_("Downloading");
+	ui->setStatusString(move(statusString));
+
+	ui->setTransferred(c->getDone(), c->getDone(), c->getSize());
+
+	addedConn(ui);
+}
+
+void TransferView::on(HttpManagerListener::Updated, HttpConnection* c, const uint8_t* data, size_t len) noexcept {
+	auto ui = makeHttpUI(c);
+	ui->setTransferred(c->getDone(), c->getDone(), c->getSize());
+	ui->setSpeed(c->getSpeed());
+
+	updatedConn(ui);
+}
+
+void TransferView::on(HttpManagerListener::Failed, HttpConnection* c, const string& str) noexcept {
+	auto ui = makeHttpUI(c);
+	ui->setStatus(STATUS_WAITING);
+	ui->setStatusString(Text::toT(str));
+	ui->setTransferred(c->getDone(), c->getDone(), c->getSize());
+
+	updatedConn(ui);
+}
+
+void TransferView::on(HttpManagerListener::Complete, HttpConnection* c, OutputStream*) noexcept {
+	auto ui = makeHttpUI(c);
+
+	ui->setStatus(STATUS_WAITING);
+
+	tstring statusString = T_("Download finished");
+	ui->setStatusString(move(statusString));
+
+	ui->setTransferred(c->getDone(), c->getDone(), c->getSize());
+
+	updatedConn(ui);
+}
+
+void TransferView::on(HttpManagerListener::Removed, HttpConnection* c) noexcept {
+	removedConn(makeHttpUI(c));
+}
+
+void TransferView::addedConn(UpdateInfo* ui) {
+	callAsync([this, ui] {
+		tasks.emplace_back([=](const UpdateInfo& ui) { ui.isHttp() ? addHttpConn(ui) : addConn(ui); }, unique_ptr<UpdateInfo>(ui));
+		updateList = true;
+		resortList = true;
+	});
+}
+
+void TransferView::updatedConn(UpdateInfo* ui) {
+	callAsync([this, ui] {
+		resortMask |= ui->updateMask;
+		tasks.emplace_back([=](const UpdateInfo& ui) { ui.isHttp() ? updateHttpConn(ui) : updateConn(ui); }, unique_ptr<UpdateInfo>(ui));
+		updateList = true;
+	});
+}
+
+void TransferView::updatedConns(vector<UpdateInfo>&& updates) {
+	if(updates.empty()) {
+		return;
+	}
+
+	callAsync([this, updates = move(updates)]() mutable {
+		tasks.reserve(tasks.size() + updates.size());
+		for(auto& ui: updates) {
+			resortMask |= ui.updateMask;
+			tasks.emplace_back([=](const UpdateInfo& ui) { updateConn(ui); },
+				unique_ptr<UpdateInfo>(new UpdateInfo(move(ui))));
+		}
+		updateList = true;
+	});
+}
+
+void TransferView::removedConn(UpdateInfo* ui) {
+	callAsync([this, ui] {
+		tasks.emplace_back([=](const UpdateInfo& ui) { ui.isHttp() ? removeHttpConn(ui) : removeConn(ui); }, unique_ptr<UpdateInfo>(ui));
+		updateList = true;
+		resortList = true;
+	});
+}
+
+void TransferView::starting(UpdateInfo* ui, Transfer* t) {
+	ui->setTTH(t->getTTH());
+	ui->setFile(t->getPath());
+	ui->setStatus(STATUS_RUNNING);
+	ui->setTransferred(t->getPos(), t->getActual(), t->getSize());
+	const UserConnection& uc = t->getUserConnection();
+	ui->setCipher(Text::toT(uc.getCipherName()));
+	ui->setIP(Text::toT(uc.getRemoteIp()));
+	const auto location = GeoManager::getInstance()->lookup(uc.getRemoteIp());
+	ui->setCountry(Text::toT(location.format(SETTING(COUNTRY_FORMAT))), location.code);
+}
+
+void TransferView::onTransferComplete(Transfer* t, bool download) {
+	auto ui = new UpdateInfo(t->getHintedUser(), download ? CONNECTION_TYPE_DOWNLOAD : CONNECTION_TYPE_UPLOAD,
+		t->getUserConnection().getToken());
+	ui->setFile(t->getPath());
+	ui->setStatus(STATUS_WAITING);
+	ui->setStatusString(T_("Idle"));
+	ui->setTransferred(t->getPos(), t->getActual(), t->getSize());
+
+	updatedConn(ui);
+}
+
+void TransferView::onFailed(Download* d, const string& aReason) {
+	auto ui = new UpdateInfo(d->getHintedUser(), CONNECTION_TYPE_DOWNLOAD,
+		d->getUserConnection().getToken(), true);
+	ui->setFile(d->getPath());
+	ui->setStatus(STATUS_WAITING);
+	ui->setStatusString(Text::toT(aReason));
+
+	updatedConn(ui);
+}
+
+TransferView::UpdateInfo* TransferView::makeHttpUI(HttpConnection* c) {
+	auto ui = new UpdateInfo(CONNECTION_TYPE_DOWNLOAD);
+	ui->setHttp();
+	ui->setFile(c->getUrl());
+	return ui;
+}
+
+void TransferView::refreshCountries() {
+	for(auto& transfer : transferItems) {
+		for(auto& conn : transfer.conns) {
+			const auto location = GeoManager::getInstance()->lookup(Text::fromT(conn.columns[COLUMN_IP]));
+			conn.countryCode = location.code;
+			conn.columns[COLUMN_COUNTRY] = Text::toT(location.format(SETTING(COUNTRY_FORMAT)));
+		}
+		transfer.update();
+	}
+	transfers->resort();
+	transfers->redrawWindow();
+}

@@ -1,7 +1,7 @@
 #include "testbase.h"
 
-#include <dcpp/Exception.h>
-#include <dcpp/HBRIValidation.h>
+#include <dcpp/base/Exception.h>
+#include <dcpp/connectivity/HBRIValidation.h>
 
 using namespace dcpp;
 

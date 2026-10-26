@@ -8,19 +8,19 @@
 #include <sstream>
 
 #define private public
-#include <dcpp/HashManager.h>
+#include <dcpp/hash/HashManager.h>
 #undef private
 
-#include <dcpp/ClientManager.h>
-#include <dcpp/LogManager.h>
-#include <dcpp/QueueManager.h>
-#include <dcpp/SearchManager.h>
-#include <dcpp/ScopedFunctor.h>
-#include <dcpp/SettingsManager.h>
-#include <dcpp/ShareManager.h>
-#include <dcpp/SQLiteDB.h>
-#include <dcpp/TimerManager.h>
-#include <dcpp/Util.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/logging/LogManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/share/ShareManager.h>
+#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/system/TimerManager.h>
+#include <dcpp/util/Util.h>
 
 using namespace dcpp;
 
