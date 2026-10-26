@@ -48,7 +48,7 @@ if dev.is_win32():
         Return()
     res = env.RES(dev.get_sources(source_path, "*.rc"))
     env.Depends(res, ["resource.h", "#/res/DCPlusPlus.manifest." + env["arch"]])
-    env.Depends(res, ["CountryFlags.rc.inc", dev.get_sources("res/flags/", "*.ico")])
+    env.Depends(res, dev.get_sources("res/flags/", "*.ico"))
     prog_sources.append(res)
 
 headers = dev.get_sources(source_path, "*.h")

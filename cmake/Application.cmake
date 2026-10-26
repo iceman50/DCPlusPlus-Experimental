@@ -82,7 +82,7 @@ file(CONFIGURE OUTPUT "${generated}/DCPlusPlus.rc"
 file(GLOB_RECURSE resource_assets CONFIGURE_DEPENDS "${DCPP_ROOT}/res/*.ico" "${DCPP_ROOT}/res/*.bmp" "${DCPP_ROOT}/res/*.png")
 set_source_files_properties("${generated}/DCPlusPlus.rc" PROPERTIES
     COMPILE_DEFINITIONS "${DCPP_ARCH}"
-    OBJECT_DEPENDS "${generated}/help/cshelp.h;${DCPP_ROOT}/res/DCPlusPlus.manifest.${DCPP_ARCH};${DCPP_ROOT}/win32/CountryFlags.rc.inc;${resource_assets}")
+    OBJECT_DEPENDS "${generated}/help/cshelp.h;${DCPP_ROOT}/res/DCPlusPlus.manifest.${DCPP_ARCH};${resource_assets}")
 add_executable(DCPlusPlus WIN32 "${DCPP_ROOT}/win32/main.cpp" "${generated}/DCPlusPlus.rc")
 target_link_libraries(DCPlusPlus PRIVATE win32_objects)
 add_dependencies(DCPlusPlus cmake_help_ids)

@@ -87,7 +87,7 @@ endif()
 if("win32" IN_LIST DCPP_TEST_COMPONENTS)
     set_source_files_properties("${generated}/DCPlusPlus.rc" PROPERTIES
         COMPILE_DEFINITIONS "${DCPP_ARCH}"
-        OBJECT_DEPENDS "${generated}/help/cshelp.h;${DCPP_ROOT}/res/DCPlusPlus.manifest.${DCPP_ARCH};${DCPP_ROOT}/win32/CountryFlags.rc.inc;${resource_assets}")
+        OBJECT_DEPENDS "${generated}/help/cshelp.h;${DCPP_ROOT}/res/DCPlusPlus.manifest.${DCPP_ARCH};${resource_assets}")
     file(GLOB integrations CONFIGURE_DEPENDS "win32/*Test.cpp")
     foreach(source IN LISTS integrations)
         get_filename_component(name "${source}" NAME_WE)

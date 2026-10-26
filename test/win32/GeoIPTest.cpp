@@ -3,6 +3,7 @@
 #include "stdafx.h"
 
 #include "CountryFlags.h"
+#include "resource.h"
 #include "GeoIPUpdate.h"
 #include "SingleInstance.h"
 #include "TypedTable.h"
@@ -319,8 +320,8 @@ int dwtMain(dwt::Application& app) {
 		check(GeoIPUpdate::protectKey("").empty(), "Clearing a key did not clear storage");
 		SettingsManager::getInstance()->set(SettingsManager::ICON_PACK, Text::fromT(cwd) + "\\test\\dcpp\\data\\geoip\\flag-override.dcico");
 		IconManager::reload();
-		check(IconManager::load(2000 + CountryFlags::index("GB", 0), 16) != nullptr, "Flag package override failed");
-		check(IconManager::load(2000 + CountryFlags::index("JP", 0), 16) != nullptr, "Broken flag override did not fall back");
+		check(IconManager::load(IDI_FLAG_GB, 16) != nullptr, "Flag package override failed");
+		check(IconManager::load(IDI_FLAG_JP, 16) != nullptr, "Broken flag override did not fall back");
 		const auto packState = IconManager::getRuntimeInfo();
 		check(packState.cachedPackageIcons == 1 && packState.cachedEmbeddedIcons == 1,
 			"Flag package selection/fallback did not use the expected sources");

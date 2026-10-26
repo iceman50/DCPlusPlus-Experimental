@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include "IconManager.h"
+#include "CountryFlags.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -92,11 +93,6 @@ constexpr IconDefinition ICONS[] = {
 	{ IDI_INCREMENT, "Increment.ico" }, { IDI_DECREMENT, "Decrement.ico" },
 	{ IDI_REMOVEQUEUE, "RemoveQueue.ico" }, { IDI_DCPP_WARNING, "Warning.ico" }
 };
-
-constexpr IconDefinition FLAGS[] = {
-#include "CountryFlagIcons.inc"
-};
-constexpr size_t MAX_CACHED_ICONS = (std::size(ICONS) + std::size(FLAGS)) * 8;
 
 struct State {
 	struct CachedIcon {
@@ -299,7 +295,8 @@ dwt::IconPtr IconManager::load(unsigned resourceId, long size) {
 	}
 	const bool fromPackage = !!icon;
 	if(!icon) icon = new dwt::Icon(resourceId, dwt::Point(size, size));
-	if(current.cache.size() < MAX_CACHED_ICONS) current.cache.emplace(key, State::CachedIcon { icon, fromPackage });
+	if(current.cache.size() < (std::size(ICONS) + CountryFlags::count()) * 8)
+		current.cache.emplace(key, State::CachedIcon { icon, fromPackage });
 	return icon;
 }
 
@@ -321,11 +318,7 @@ const char* IconManager::getFileName(unsigned resourceId) noexcept {
 	for(const auto& icon: ICONS) {
 		if(icon.id == resourceId) return icon.fileName;
 	}
-	for(const auto& icon : FLAGS) {
-		if(icon.id == resourceId)
-			return icon.fileName;
-	}
-	return nullptr;
+	return CountryFlags::fileName(resourceId);
 }
 
 IconManager::Package IconManager::inspectPackage(const string& path) {
