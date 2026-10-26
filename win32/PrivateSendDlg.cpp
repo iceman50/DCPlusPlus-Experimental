@@ -219,7 +219,8 @@ void PrivateSendDlg::primaryAction() {
 	if(row.incoming && row.state == State::Offered) {
 		auto target = Text::toT(dcpp::pft::defaultDownloadPath(row.name));
 		if(dwt::SaveDialog(this).setTitle(str(TF_("Accept private file (%1%) - Save As") % Text::toT(Util::formatBytes(row.size))))
-			.addFilter(T_("All files"), _T("*.*")).open(target, OFN_PATHMUSTEXIST | OFN_DONTADDTORECENT))
+			.setAllowOverwrite(false).addFilter(T_("All files"), _T("*.*"))
+			.open(target, OFN_PATHMUSTEXIST | OFN_DONTADDTORECENT))
 			DirectTransferManager::getInstance()->accept(id, Text::fromT(target));
 	} else if(row.incoming && row.state == State::Paused) {
 		DirectTransferManager::getInstance()->resume(id);

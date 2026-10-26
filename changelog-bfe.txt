@@ -1,4 +1,6 @@
 == 10-25-2026 - 0.8842 !!!Experimental!!! ==
+* Center text and carets vertically in DWT's themed save-dialog fields and correct dark button text padding so captions remain centered (iceman50)
+* Make DWT automatically render standard Save dialogs with the active dark palette, including scrollbars, background folder scanning, navigation, new folders, file-type filters and overwrite prompts; keep Private Send's no-overwrite policy in the caller and move picker tests into test/dwt (iceman50)
 * Open absolute save destinations in their parent folder with only the basename in the filename box (iceman50)
 * Track generated revision and build-number changes by content through compilation and linking so rapid builds cannot retain stale version metadata (iceman50)
 * Default Private Send to the configured download directory and let recipients choose a filename and folder when accepting; support saving across local drives while retaining verification, share exclusion and protection against overwriting existing files (iceman50)

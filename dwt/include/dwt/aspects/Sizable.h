@@ -85,14 +85,14 @@ public:
 		// this is greatly inspired by MFC (wincore.cpp - CWnd::CenterWindow). 
 
 		/// @todo this only works for top-level windows (ie dialogs); for child windows, coords will need conversion.
-		auto root = W().getParent()->getRoot();
+		auto root = W().getParent() ? W().getParent()->getRoot() : nullptr;
 		auto size = W().getWindowSize();
-		auto rect = root->getWindowRect();
+		auto rect = root ? root->getWindowRect() : W().getDesktopSize();
 		rect.pos.x = (rect.left() + rect.right() - size.x) / 2;
 		rect.pos.y = (rect.top() + rect.bottom() - size.y) / 2;
 		rect.size = size;
 
-		resize(rect.ensureVisibility(root));
+		resize(rect.ensureVisibility(root ? root : &W()));
 	}
 
 	bool isIconic();

@@ -27,6 +27,7 @@
 
 #include "../../WindowsHeaders.h"
 #include "../../tstring.h"
+#include "../../resources/Font.h"
 
 #include <functional>
 #include <utility>
@@ -104,6 +105,14 @@ private:
 };
 
 typedef ComPtr<IShellItem> ShellItemPtr;
+
+/** Optional application font/localization. Rendering and dark-mode selection
+ * remain owned by DWT; unconfigured applications use system fonts and English. */
+struct FileDialogDefaults {
+	FontPtr font;
+	std::function<tstring (const char*)> translate;
+};
+void setFileDialogDefaults(const FileDialogDefaults& defaults);
 
 struct FileDialogControlItem {
 	FileDialogControlItem(DWORD id_, const tstring& label_) :
@@ -199,6 +208,7 @@ struct FileDialogOptions {
 	bool pickFolders = false;
 	bool allowMultiple = false;
 	bool forceFilesystem = true;
+	bool allowOverwrite = true;
 	DWORD legacyFlags = 0;
 	FILEOPENDIALOGOPTIONS options = 0;
 	unsigned activeFilter = 0;

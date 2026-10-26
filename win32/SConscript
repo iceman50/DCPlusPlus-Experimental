@@ -52,7 +52,9 @@ if dev.is_win32():
     prog_sources.append(res)
 
 headers = dev.get_sources(source_path, "*.h")
-dev.i18n(source_path, env, [sources, headers], "dcpp-win32")
+dev.i18n(source_path, env, [sources, headers,
+    File("#/dwt/src/util/win32/ThemedFileDialog.cpp"),
+    File("#/dwt/src/util/win32/FileDialog.cpp")], "dcpp-win32")
 
 if env["msvcproj"]:
     ret = dev.build_lib(env, target, sources, dev.cpp_lib)

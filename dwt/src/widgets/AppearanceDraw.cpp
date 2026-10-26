@@ -463,13 +463,15 @@ LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette
 	}
 	drawSurface(canvas, bounds, background, border);
 
-	auto margin = button.getTextMargin();
-	Rectangle textRect(bounds.left() + std::max<long>(button.scale(5), margin.left()),
-		bounds.top() + std::max<long>(2, margin.top()),
-		std::max(0L, bounds.width() - std::max<long>(button.scale(10),
-			margin.left() + margin.width())),
-		std::max(0L, bounds.height() - std::max<long>(4,
-			margin.top() + margin.height())));
+	// BCM_GETTEXTMARGIN returns four inset distances, not a bounding box.
+	const auto margin = button.getTextMargin();
+	const auto left = std::max<long>(button.scale(5), margin.left());
+	const auto right = std::max<long>(button.scale(5), margin.right());
+	const auto top = std::max<long>(2, margin.top());
+	const auto bottom = std::max<long>(2, margin.bottom());
+	Rectangle textRect(bounds.left() + left, bounds.top() + top,
+		std::max(0L, bounds.width() - left - right),
+		std::max(0L, bounds.height() - top - bottom));
 	if(splitButton) {
 		BUTTON_SPLITINFO info = { BCSIF_SIZE };
 		button.sendMessage(BCM_GETSPLITINFO, 0,

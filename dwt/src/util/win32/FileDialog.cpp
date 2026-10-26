@@ -26,6 +26,7 @@
 #include <dwt/DWTException.h>
 #include <dwt/util/win32/NativeDialogAppearance.h>
 #include <dwt/util/win32/Path.h>
+#include "ThemedFileDialog.h"
 
 #include <sstream>
 
@@ -196,6 +197,7 @@ void configureDialog(const FileDialogOptions& options, IFileDialog* dialog) {
 		throwDialogError("IFileDialog::GetOptions", result);
 	}
 	dialogOptions |= options.options | mapLegacyFlags(options.legacyFlags);
+	if(options.save && !options.allowOverwrite) dialogOptions &= ~FOS_OVERWRITEPROMPT;
 	if(options.forceFilesystem) {
 		dialogOptions |= FOS_FORCEFILESYSTEM;
 	}
@@ -557,8 +559,26 @@ bool showFileDialogItems(const FileDialogOptions& options, std::vector<FileDialo
 
 	DWORD adviseCookie = 0;
 	ComPtr<IFileDialogEvents> sink;
-	if(options.events && !options.events->empty()) {
-		sink.reset(new FileDialogEventSink(*options.events), false);
+	FileDialogEvents events = options.events ? *options.events : FileDialogEvents();
+	if(options.save && !options.allowOverwrite) {
+		const auto fileOk = events.fileOk;
+		events.fileOk = [fileOk](IFileDialog* dialog) -> HRESULT {
+			ComPtr<IShellItem> item;
+			tstring path;
+			if(FAILED(dialog->GetResult(item.put())) || !getPath(item.get(), path)) return S_FALSE;
+			if(GetFileAttributes(toNativePath(path).c_str()) != INVALID_FILE_ATTRIBUTES) {
+				ComPtr<IOleWindow> window;
+				HWND owner = nullptr;
+				if(SUCCEEDED(dialog->QueryInterface(IID_PPV_ARGS(window.put())))) window->GetWindow(&owner);
+				::MessageBox(owner, fileDialogText("That name already exists. Choose another filename.").c_str(),
+					fileDialogText("Save As").c_str(), MB_OK | MB_ICONINFORMATION);
+				return S_FALSE;
+			}
+			return fileOk ? fileOk(dialog) : S_OK;
+		};
+	}
+	if(!events.empty()) {
+		sink.reset(new FileDialogEventSink(events), false);
 		result = dialog->Advise(sink.get(), &adviseCookie);
 		if(FAILED(result)) {
 			throwDialogError("IFileDialog::Advise", result);
@@ -583,6 +603,12 @@ bool showFileDialogItems(const FileDialogOptions& options, std::vector<FileDialo
 }
 
 bool showFileDialog(const FileDialogOptions& options, std::vector<tstring>& paths) {
+	if(Application::instance().getAppearance().isManual() && ThemedFileDialog::supports(options)) {
+		ThemedFileDialog dialog(options);
+		if(dialog.run() != IDOK) return false;
+		paths.assign(1, dialog.getPath());
+		return true;
+	}
 	std::vector<FileDialogResult> results;
 	if(!showFileDialogItems(options, results)) {
 		return false;

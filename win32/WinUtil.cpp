@@ -368,6 +368,7 @@ void WinUtil::init() {
 }
 
 void WinUtil::initSeeds() {
+	dwt::util::win32::setFileDialogDefaults({ font, [](const char* text) { return Text::toT(gettext(text)); } });
 	// Const so that noone else will change them after they've been initialized
 	Button::Seed& xbutton = const_cast<Button::Seed&> (Seeds::button);
 	ComboBox::Seed& xcomboBoxEdit = const_cast<ComboBox::Seed&> (Seeds::comboBoxEdit);

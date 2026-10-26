@@ -120,6 +120,12 @@ public:
 		return W();
 	}
 
+	/** Reject an existing save destination instead of offering to replace it. */
+	WidgetType& setAllowOverwrite(bool allow = true) {
+		itsAllowOverwrite = allow;
+		return W();
+	}
+
 	WidgetType& setInitialFolder(IShellItem* item) {
 		itsInitialFolder.reset(item);
 		return W();
@@ -180,6 +186,7 @@ protected:
 		options.shellPlaces = itsShellPlaces;
 		options.options = itsOptions;
 		options.forceFilesystem = itsForceFilesystem;
+		options.allowOverwrite = itsAllowOverwrite;
 		options.initialFolder = itsInitialFolder;
 		options.clientGuid = itsClientGuid ? &*itsClientGuid : nullptr;
 		options.events = itsEvents.empty() ? nullptr : &itsEvents;
@@ -200,6 +207,7 @@ private:
 	std::vector<std::pair<util::win32::ShellItemPtr, FDAP>> itsShellPlaces;
 	FILEOPENDIALOGOPTIONS itsOptions = 0;
 	bool itsForceFilesystem = true;
+	bool itsAllowOverwrite = true;
 	util::win32::ShellItemPtr itsInitialFolder;
 	std::optional<GUID> itsClientGuid;
 	util::win32::FileDialogEvents itsEvents;
