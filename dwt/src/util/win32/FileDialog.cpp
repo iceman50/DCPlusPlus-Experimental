@@ -228,9 +228,29 @@ void configureDialog(const FileDialogOptions& options, IFileDialog* dialog) {
 
 	if(!options.title.empty()) dialog->SetTitle(options.title.c_str());
 	if(!options.defaultExtension.empty()) dialog->SetDefaultExtension(options.defaultExtension.c_str());
-	if(!options.initialFileName.empty()) dialog->SetFileName(options.initialFileName.c_str());
 	if(options.clientGuid) dialog->SetClientGuid(*options.clientGuid);
 	setFolder(dialog, options);
+	// SetFileName alone leaves the browser in its remembered folder even when
+	// given a full destination path. Split an absolute save path only when no
+	// explicit starting folder was supplied, and keep the original on failure.
+	auto fileName = options.initialFileName;
+	const bool absolute = (fileName.size() >= 3 && fileName[1] == _T(':') &&
+		(fileName[2] == _T('\\') || fileName[2] == _T('/'))) ||
+		fileName.compare(0, 2, _T("\\\\")) == 0;
+	if(options.save && absolute && options.initialDirectory.empty() &&
+		!options.initialFolder && !options.initialItem)
+	{
+		const auto separator = fileName.find_last_of(_T("\\/"));
+		if(separator != tstring::npos && separator + 1 < fileName.size()) {
+			ComPtr<IShellItem> folder;
+			if(SUCCEEDED(createShellItem(fileName.substr(0, separator + 1), folder.put())) &&
+				SUCCEEDED(dialog->SetFolder(folder.get())))
+			{
+				fileName.erase(0, separator + 1);
+			}
+		}
+	}
+	if(!fileName.empty()) dialog->SetFileName(fileName.c_str());
 
 	for(const auto& place: options.places) {
 		ComPtr<IShellItem> item;
