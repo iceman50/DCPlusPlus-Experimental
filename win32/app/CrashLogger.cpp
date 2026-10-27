@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <win32/app/UiServices.h>
 #include <win32/app/CrashLogger.h>
 
 #include <algorithm>
@@ -24,7 +25,6 @@
 #include <dcpp/system/File.h>
 #include <dcpp/util/Util.h>
 #include <dcpp/version.h>
-#include <win32/util/WinUtil.h>
 
 namespace {
 	
@@ -585,7 +585,7 @@ inline void writeAppInfo() {
 	fputs("Please report this data to the " APPNAME " team for further investigation.\n\n", f);
 
 	fprintf(f, APPNAME " version: %s\n", fullVersionString.c_str());
-	fprintf(f, "TTH: %S\n", WinUtil::tth.c_str());
+	fprintf(f, "TTH: %S\n", UiServices::tth.c_str());
 
 	// see also AboutDlg.cpp for similar tests.
 #ifdef __MINGW64_VERSION_MAJOR

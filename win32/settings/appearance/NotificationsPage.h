@@ -19,7 +19,7 @@
 #define DCPLUSPLUS_WIN32_NOTIFICATIONS_PAGE_H
 
 #include <win32/settings/PropPage.h>
-#include <win32/util/WinUtil.h>
+#include <win32/services/Notifications.h>
 
 class NotificationsPage : public PropPage
 {
@@ -37,7 +37,7 @@ private:
 		unsigned helpId;
 		Option() : balloon(0), helpId(0) { }
 	};
-	Option options[WinUtil::NOTIFICATION_LAST];
+	Option options[Notifications::NOTIFICATION_LAST];
 
 	enum {
 		COLUMN_DUMMY, // so that the first column doesn't have a blank space.

@@ -9,6 +9,10 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
 #include <win32/controls/RichTextEditorDlg.h>
 
 #include <dcpp/text/format.h>
@@ -24,7 +28,6 @@
 
 #include <win32/controls/HtmlToRtf.h>
 #include <win32/controls/RichTextBox.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Button;
 using dwt::Grid;
@@ -89,7 +92,7 @@ bool RichTextEditorDlg::handleInitDialog() {
 	auto sourceLabel = grid->addChild(Label::Seed(T_("Markdown source")));
 	grid->setWidget(sourceLabel, 0, 0);
 
-	TextBox::Seed sourceSeed = WinUtil::Seeds::Dialog::textBox;
+	TextBox::Seed sourceSeed = ControlSeeds::Dialog::textBox;
 	sourceSeed.style |= ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL;
 	source = grid->addChild(sourceSeed);
 	grid->setWidget(source, 1, 0);
@@ -155,10 +158,10 @@ bool RichTextEditorDlg::handleInitDialog() {
 	auto previewLabel = grid->addChild(Label::Seed(T_("Live preview")));
 	grid->setWidget(previewLabel, 3, 0);
 
-	RichTextBox::Seed previewSeed = WinUtil::Seeds::richTextBox;
+	RichTextBox::Seed previewSeed = ControlSeeds::richTextBox;
 	previewSeed.style |= ES_READONLY | WS_VSCROLL;
 	preview = dwt::WidgetCreator<RichTextBox>::create(grid, previewSeed);
-	WinUtil::setColor(preview);
+	AppAppearance::setColor(preview);
 	const auto richTextLimit = std::max(1024, SETTING(RICH_TEXT_MAX_SIZE));
 	preview->setTextLimit(richTextLimit > std::numeric_limits<int>::max() / 4 ?
 		std::numeric_limits<int>::max() : richTextLimit * 4);
@@ -175,7 +178,7 @@ bool RichTextEditorDlg::handleInitDialog() {
 	buttons->column(0).align = GridInfo::BOTTOM_RIGHT;
 	buttons->setSpacing(grid->getSpacing());
 	grid->setWidget(buttons, 6, 0);
-	auto dialogButtons = WinUtil::addDlgButtons(buttons,
+	auto dialogButtons = DialogControls::addDlgButtons(buttons,
 		[this] { handleUse(); },
 		[this] { endDialog(IDCANCEL); });
 	useButton = dialogButtons.first;

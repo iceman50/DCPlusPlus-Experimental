@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
 
 #include <win32/settings/transfers/DownloadPage.h>
 
@@ -28,7 +29,6 @@
 
 #include <win32/resource.h>
 #include <win32/frames/hub/HubListsDlg.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -53,7 +53,7 @@ PropPage(parent, 3, 1)
 		cur->setWidget(label, 0, 0, 1, 2);
 		label->setHelpId(IDH_SETTINGS_DOWNLOAD_DOWNLOADDIR);
 
-		TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::DOWNLOAD_DIRECTORY, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_DOWNLOADDIR);
 
@@ -65,7 +65,7 @@ PropPage(parent, 3, 1)
 		cur->setWidget(label, 2, 0, 1, 2);
 		label->setHelpId(IDH_SETTINGS_DOWNLOAD_TEMP_DOWNLOAD_DIRECTORY);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::TEMP_DOWNLOAD_DIRECTORY, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_TEMP_DOWNLOAD_DIRECTORY);
 
@@ -84,7 +84,7 @@ PropPage(parent, 3, 1)
 		cur2->column(0).size = 40;
 		cur2->column(0).mode = GridInfo::STATIC;
 
-		TextBoxPtr box = cur2->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		TextBoxPtr box = cur2->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::DOWNLOAD_SLOTS, PropPage::T_INT_WITH_SPIN);
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_DOWNLOADS);
 
@@ -94,7 +94,7 @@ PropPage(parent, 3, 1)
 
 		cur2->addChild(Label::Seed(T_("Maximum simultaneous downloads (0 = infinite)")))->setHelpId(IDH_SETTINGS_DOWNLOAD_DOWNLOADS);
 
-		box = cur2->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur2->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::MAX_DOWNLOAD_SPEED, PropPage::T_INT_WITH_SPIN);
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_MAXSPEED);
 
@@ -124,7 +124,7 @@ PropPage(parent, 3, 1)
 		resetList->onClicked([this] { handleResetHubLists(); });
 
 		cur->addChild(Label::Seed(T_("HTTP proxy (hub lists and GeoLite2)")))->setHelpId(IDH_SETTINGS_DOWNLOAD_PROXY);
-		TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::HTTP_PROXY, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_PROXY);
 	}

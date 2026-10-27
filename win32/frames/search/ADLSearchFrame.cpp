@@ -16,6 +16,12 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/services/HelpService.h>
 #include <win32/frames/search/ADLSearchFrame.h>
 
 #include <dcpp/hub/Client.h>
@@ -37,7 +43,7 @@ using dwt::GridInfo;
 const string ADLSearchFrame::id = "ADLSearch";
 const string& ADLSearchFrame::getId() const { return id; }
 
-static const ColumnInfo itemsColumns[] = {
+static const TableLayout::ColumnInfo itemsColumns[] = {
 	{ N_("Enabled / Search String"), 200, false },
 	{ N_("Regular Expression"), 100, false },
 	{ N_("Source Type"), 100, false },
@@ -62,14 +68,14 @@ items(0)
 	grid->row(0).align = GridInfo::STRETCH;
 
 	{
-		auto cs = WinUtil::Seeds::table;
+		auto cs = ControlSeeds::table;
 		cs.style |= LVS_NOSORTHEADER;
 		cs.lvStyle |= LVS_EX_CHECKBOXES;
 		items = grid->addChild(cs);
 		grid->setWidget(items, 0, 0, 1, 6);
 		addWidget(items);
 
-		WinUtil::makeColumns(items, itemsColumns, COLUMN_LAST, SETTING(ADLSEARCHFRAME_ORDER), SETTING(ADLSEARCHFRAME_WIDTHS));
+		TableLayout::makeColumns(items, itemsColumns, COLUMN_LAST, SETTING(ADLSEARCHFRAME_ORDER), SETTING(ADLSEARCHFRAME_WIDTHS));
 
 		items->onDblClicked([this] { handleDoubleClick(); });
 		items->onKeyDown([this](int c) { return handleKeyDown(c); });
@@ -78,7 +84,7 @@ items(0)
 	}
 
 	{
-		auto cs = WinUtil::Seeds::button;
+		auto cs = ControlSeeds::button;
 
 		cs.caption = T_("&New...");
 		auto button = grid->addChild(cs);
@@ -110,8 +116,8 @@ items(0)
 		button->onClicked([this] { handleRemove(); });
 		addWidget(button);
 
-		button = WinUtil::addHelpButton(grid);
-		button->onClicked([this] { WinUtil::help(this); });
+		button = DialogControls::addHelpButton(grid);
+		button->onClicked([this] { HelpService::help(this); });
 		addWidget(button);
 	}
 
@@ -141,8 +147,8 @@ bool ADLSearchFrame::preClosing() {
 }
 
 void ADLSearchFrame::postClosing() {
-	SettingsManager::getInstance()->set(SettingsManager::ADLSEARCHFRAME_ORDER, WinUtil::toString(items->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::ADLSEARCHFRAME_WIDTHS, WinUtil::toString(items->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::ADLSEARCHFRAME_ORDER, TableLayout::toString(items->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::ADLSEARCHFRAME_WIDTHS, TableLayout::toString(items->getColumnWidths()));
 }
 
 void ADLSearchFrame::handleAdd() {
@@ -311,13 +317,13 @@ bool ADLSearchFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 
 	size_t sel = items->countSelected();
 
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	menu->setTitle((sel == 0) ? getText() : (sel == 1) ? escapeMenu(items->getText(items->getSelected(), COLUMN_ACTIVE_SEARCH_STRING)) :
 		str(TF_("%1% items") % sel), getParent()->getIcon(this));
 	menu->appendItem(T_("&New..."), [this] { handleAdd(); });
 	menu->appendItem(T_("&Properties"), [this] { handleProperties(); }, dwt::IconPtr(), sel);
 	menu->appendItem(T_("&Remove"), [this] { handleRemove(); }, dwt::IconPtr(), sel);
-	WinUtil::addCopyMenu(menu.get(), items);
+	TableActions::addCopyMenu(menu.get(), items);
 
 	menu->open(pt);
 	return true;

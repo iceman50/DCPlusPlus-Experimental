@@ -6,6 +6,7 @@
 #define DCPLUSPLUS_PRIVATE_SEND_DLG_H
 
 #include <win32/dialogs/GridDialog.h>
+#include <dcpp/user/HintedUser.h>
 
 #include <dcpp/transfer/private/DirectTransferManager.h>
 

@@ -16,11 +16,15 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/controls/TableLayout.h>
 #include <win32/controls/ListFilter.h>
 
 #include <dwt/widgets/Grid.h>
 
-ListFilter::ListFilter(const ColumnInfo* columns, size_t colCount, UpdateF updateF) :
+ListFilter::ListFilter(const TableLayout::ColumnInfo* columns, size_t colCount, UpdateF updateF) :
 columns(columns),
 colCount(colCount),
 updateF(updateF)
@@ -28,17 +32,17 @@ updateF(updateF)
 }
 
 void ListFilter::createTextBox(GridPtr grid) {
-	auto seed = WinUtil::Seeds::textBox;
+	auto seed = ControlSeeds::textBox;
 	seed.style |= ES_AUTOHSCROLL | WS_CLIPCHILDREN;
 	text = grid->addChild(seed);
 
 	text->onUpdated([this] { textUpdated(); });
 
-	WinUtil::addSearchIcon(text);
+	DialogControls::addSearchIcon(text);
 }
 
 void ListFilter::createColumnBox(GridPtr grid) {
-	column = grid->addChild(WinUtil::Seeds::comboBox);
+	column = grid->addChild(ControlSeeds::comboBox);
 
 	for(size_t i = 0; i < colCount; ++i) {
 		column->addValue(T_(columns[i].name));
@@ -50,9 +54,9 @@ void ListFilter::createColumnBox(GridPtr grid) {
 }
 
 void ListFilter::createMethodBox(GridPtr grid) {
-	method = grid->addChild(WinUtil::Seeds::comboBox);
+	method = grid->addChild(ControlSeeds::comboBox);
 
-	WinUtil::addFilterMethods(method);
+	DialogControls::addFilterMethods(method);
 	method->setSelected(StringMatch::PARTIAL);
 
 	method->onSelectionChanged([this] { updateF(); });

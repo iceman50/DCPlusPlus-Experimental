@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
 #include <win32/settings/general/GeneralPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -25,7 +27,6 @@
 #include <dwt/widgets/Spinner.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -51,18 +52,18 @@ connections(0)
 		cur->setSpacing(grid->getSpacing());
 
 		cur->addChild(Label::Seed(T_("Nick")))->setHelpId(IDH_SETTINGS_GENERAL_NICK);
-		nick = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		nick = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(nick, SettingsManager::NICK, PropPage::T_STR);
 		nick->setHelpId(IDH_SETTINGS_GENERAL_NICK);
-		WinUtil::preventSpaces(nick);
+		DialogControls::preventSpaces(nick);
 
 		cur->addChild(Label::Seed(T_("Description")))->setHelpId(IDH_SETTINGS_GENERAL_DESCRIPTION);
-		auto box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		auto box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::DESCRIPTION, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_GENERAL_DESCRIPTION);
 
 		cur->addChild(Label::Seed(T_("Email")))->setHelpId(IDH_SETTINGS_GENERAL_EMAIL);
-		box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::EMAIL, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_GENERAL_EMAIL);
 
@@ -72,7 +73,7 @@ connections(0)
 			auto conn = cur->addChild(Grid::Seed(1, 2));
 			conn->setHelpId(IDH_SETTINGS_GENERAL_CONNECTION);
 
-			connections = conn->addChild(WinUtil::Seeds::Dialog::comboBox);
+			connections = conn->addChild(ControlSeeds::Dialog::comboBox);
 
 			conn->addChild(Label::Seed(T_("MiBits/s")));
 		}
@@ -93,7 +94,7 @@ connections(0)
 			auto cur2 = group->addChild(Grid::Seed(2, 1));
 			cur2->column(0).mode = GridInfo::FILL;
 
-			auto seed = WinUtil::Seeds::Dialog::textBox;
+			auto seed = ControlSeeds::Dialog::textBox;
 			seed.style |= ES_MULTILINE | WS_VSCROLL | ES_WANTRETURN;
 			items.emplace_back(cur2->addChild(seed), SettingsManager::DEFAULT_AWAY_MESSAGE, PropPage::T_STR);
 
@@ -119,7 +120,7 @@ connections(0)
 
 			idle->addChild(Label::Seed(T_("Enable away mode after")));
 
-			auto box = idle->addChild(WinUtil::Seeds::Dialog::intTextBox);
+			auto box = idle->addChild(ControlSeeds::Dialog::intTextBox);
 			items.emplace_back(box, SettingsManager::AWAY_IDLE, PropPage::T_INT_WITH_SPIN);
 			idle->setWidget(idle->addChild(Spinner::Seed(0, UD_MAXVAL, box)));
 

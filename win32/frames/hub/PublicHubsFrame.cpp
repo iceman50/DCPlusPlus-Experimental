@@ -17,6 +17,14 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/users/UserPresentation.h>
 #include <win32/frames/hub/PublicHubsFrame.h>
 
 #include <dcpp/hub/ClientManager.h>
@@ -40,7 +48,7 @@ const string& PublicHubsFrame::getId() const { return id; }
 
 dwt::ImageListPtr PublicHubsFrame::hubIcons;
 
-static const ColumnInfo hubsColumns[] = {
+static const TableLayout::ColumnInfo hubsColumns[] = {
 	{ N_("Status"), 25, false },
 	{ N_("Name"), 200, false },
 	{ N_("Description"), 290, false },
@@ -112,7 +120,7 @@ users(0)
 		upper->row(1).align = GridInfo::STRETCH;
 
 		{
-			TextBox::Seed seed = WinUtil::Seeds::textBox;
+			TextBox::Seed seed = ControlSeeds::textBox;
 			seed.style &= ~WS_VISIBLE;
 			seed.style |= WS_DISABLED | ES_MULTILINE | WS_VSCROLL | ES_READONLY;
 			seed.lines = 8;
@@ -121,20 +129,20 @@ users(0)
 		}
 
 		{
-			WidgetHubs::Seed seed(WinUtil::Seeds::table);
+			WidgetHubs::Seed seed(ControlSeeds::table);
 			seed.style |= LVS_SINGLESEL;
 			hubs = upper->addChild(seed);
 			addWidget(hubs);
 		}
 
-		WinUtil::makeColumns(hubs, hubsColumns, COLUMN_LAST, SETTING(PUBLICHUBSFRAME_ORDER), SETTING(PUBLICHUBSFRAME_WIDTHS));
-		WinUtil::setTableSort(hubs, COLUMN_LAST, SettingsManager::PUBLICHUBSFRAME_SORT, COLUMN_USERS, false);
+		TableLayout::makeColumns(hubs, hubsColumns, COLUMN_LAST, SETTING(PUBLICHUBSFRAME_ORDER), SETTING(PUBLICHUBSFRAME_WIDTHS));
+		TableLayout::setTableSort(hubs, COLUMN_LAST, SettingsManager::PUBLICHUBSFRAME_SORT, COLUMN_USERS, false);
 
 		if(!hubIcons) {
 			const dwt::Point size(16, 16);
 			hubIcons = dwt::ImageListPtr(new dwt::ImageList(size));
-			hubIcons->add(*WinUtil::createIcon(IDI_HUB, size.x));
-			hubIcons->add(*WinUtil::createIcon(IDI_HUB_OFF, size.x));
+			hubIcons->add(*IconManager::load(IDI_HUB, size.x));
+			hubIcons->add(*IconManager::load(IDI_HUB_OFF, size.x));
 		}
 		hubs->setSmallImageList(hubIcons);
 
@@ -156,7 +164,7 @@ users(0)
 		lower->row(1).mode = GridInfo::STATIC;
 		lower->setSpacing(6);
 
-		GroupBox::Seed gs = WinUtil::Seeds::group;
+		GroupBox::Seed gs = ControlSeeds::group;
 
 		gs.caption = T_("F&ilter");
 		GroupBoxPtr group = lower->addChild(gs);
@@ -184,11 +192,11 @@ users(0)
 		listsGrid = group->addChild(Grid::Seed(1, 3));
 		listsGrid->column(0).mode = GridInfo::FILL;
 
-		lists = listsGrid->addChild(WinUtil::Seeds::comboBox);
+		lists = listsGrid->addChild(ControlSeeds::comboBox);
 		addWidget(lists);
 		lists->onSelectionChanged([this] { handleListSelChanged(); });
 
-		Button::Seed bs = WinUtil::Seeds::button;
+		Button::Seed bs = ControlSeeds::button;
 
 		bs.caption = T_("&Configure");
 		ButtonPtr button = listsGrid->addChild(bs);
@@ -241,9 +249,9 @@ bool PublicHubsFrame::preClosing() {
 }
 
 void PublicHubsFrame::postClosing() {
-	SettingsManager::getInstance()->set(SettingsManager::PUBLICHUBSFRAME_ORDER, WinUtil::toString(hubs->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::PUBLICHUBSFRAME_WIDTHS, WinUtil::toString(hubs->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::PUBLICHUBSFRAME_SORT, WinUtil::getTableSort(hubs));
+	SettingsManager::getInstance()->set(SettingsManager::PUBLICHUBSFRAME_ORDER, TableLayout::toString(hubs->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::PUBLICHUBSFRAME_WIDTHS, TableLayout::toString(hubs->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::PUBLICHUBSFRAME_SORT, TableLayout::getTableSort(hubs));
 }
 
 void PublicHubsFrame::layout() {
@@ -316,7 +324,7 @@ void PublicHubsFrame::updateList() {
 
 			tstring statusText;
 			int statusIcon;
-			WinUtil::getHubStatus(hubEntry->getServer(), statusText, statusIcon);
+			UserPresentation::getHubStatus(hubEntry->getServer(), statusText, statusIcon);
 
 			auto hubInfo = new HubInfo(hubEntry, statusText);
 
@@ -354,7 +362,7 @@ void PublicHubsFrame::changeHubStatus(const string& url)
 		{
 			tstring statusText;
 			int statusIcon;
-			WinUtil::getHubStatus(url, statusText, statusIcon);
+			UserPresentation::getHubStatus(url, statusText, statusIcon);
 
 			{
 				HoldRedraw hold { hubs };
@@ -397,11 +405,11 @@ bool PublicHubsFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 			pt = hubs->getContextMenuPos();
 		}
 
-		auto menu = addChild(WinUtil::Seeds::menu);
+		auto menu = addChild(ControlSeeds::menu);
 		menu->setTitle(escapeMenu(hubs->getSelectedData()->getText(COLUMN_NAME)), getParent()->getIcon(this));
 		menu->appendItem(T_("&Connect"), [this] { handleConnect(); }, dwt::IconPtr(), true, true);
-		menu->appendItem(T_("Add To &Favorites"), [this] { handleAdd(); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
-		WinUtil::addCopyMenu(menu.get(), hubs);
+		menu->appendItem(T_("Add To &Favorites"), [this] { handleAdd(); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
+		TableActions::addCopyMenu(menu.get(), hubs);
 
 		menu->open(pt);
 		return true;
@@ -425,7 +433,7 @@ void PublicHubsFrame::handleConfigure() {
 }
 
 void PublicHubsFrame::handleConnect() {
-	if(!WinUtil::checkNick())
+	if(!UiServices::checkNick())
 		return;
 
 	if(hubs->hasSelected() == 1) {
@@ -434,7 +442,7 @@ void PublicHubsFrame::handleConnect() {
 }
 
 void PublicHubsFrame::handleAdd() {
-	if(!WinUtil::checkNick())
+	if(!UiServices::checkNick())
 		return;
 
 	if(hubs->hasSelected()) {
@@ -443,7 +451,7 @@ void PublicHubsFrame::handleAdd() {
 }
 
 void PublicHubsFrame::openSelected() {
-	if(!WinUtil::checkNick())
+	if(!UiServices::checkNick())
 		return;
 
 	if(hubs->hasSelected()) {

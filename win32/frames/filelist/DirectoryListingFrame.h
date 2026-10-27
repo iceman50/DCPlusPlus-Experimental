@@ -20,6 +20,8 @@
 #define DCPLUSPLUS_WIN32_DIRECTORY_LISTING_FRAME_H
 
 #include <deque>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
 #include <list>
 #include <memory>
 #include <unordered_map>
@@ -30,7 +32,7 @@
 #include <dcpp/text/StringMatch.h>
 #include <dcpp/user/User.h>
 
-#include <win32/util/AspectUserCommand.h>
+#include <win32/frames/users/AspectUserCommand.h>
 #include <win32/frames/base/IRecent.h>
 #include <win32/frames/base/MDIChildFrame.h>
 #include <win32/frames/users/UserInfoBase.h>

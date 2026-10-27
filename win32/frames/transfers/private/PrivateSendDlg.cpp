@@ -3,11 +3,15 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/users/UserPresentation.h>
 
 #include <win32/frames/transfers/private/PrivateSendDlg.h>
 
 #include <win32/dialogs/ParamDlg.h>
-#include <win32/util/WinUtil.h>
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/settings/SettingsManager.h>
@@ -26,7 +30,7 @@ using dcpp::DirectTransferManager;
 
 namespace {
 
-const ColumnInfo columns[] = {
+const TableLayout::ColumnInfo columns[] = {
 	{ N_("File"), 230, false },
 	{ N_("Status"), 230, false },
 	{ N_("Progress"), 180, true }
@@ -70,7 +74,7 @@ void PrivateSendDlg::relayout() {
 }
 
 bool PrivateSendDlg::init() {
-	setText(T_("Private Send") + _T(" - ") + WinUtil::getNicks(peer.user->getCID()));
+	setText(T_("Private Send") + _T(" - ") + UserPresentation::getNicks(peer.user->getCID()));
 
 	grid = addChild(Grid::Seed(7, 1));
 	grid->column(0).mode = GridInfo::FILL;
@@ -94,11 +98,11 @@ bool PrivateSendDlg::init() {
 	grid->row(2).align = GridInfo::STRETCH;
 
 	{
-		auto seed = WinUtil::Seeds::Dialog::table;
+		auto seed = ControlSeeds::Dialog::table;
 		seed.exStyle &= ~WS_EX_CLIENTEDGE;
 		seed.style |= LVS_SINGLESEL;
 		table = grid->addChild(seed);
-		WinUtil::makeColumns(table, columns, std::size(columns));
+		TableLayout::makeColumns(table, columns, std::size(columns));
 		grid->row(3).mode = GridInfo::STATIC;
 		grid->row(3).size = 210;
 		grid->row(3).align = GridInfo::STRETCH;
@@ -117,10 +121,10 @@ bool PrivateSendDlg::init() {
 		details->row(0).size = 60;
 		details->row(0).align = GridInfo::STRETCH;
 
-		auto identity = details->addChild(WinUtil::Seeds::Dialog::textBox);
+		auto identity = details->addChild(ControlSeeds::Dialog::textBox);
 		identity->setReadOnly(true);
 		identity->setText(Text::toT("Your CID: " + ClientManager::getInstance()->getMyCID().toBase32()));
-		auto fingerprint = details->addChild(WinUtil::Seeds::Dialog::textBox);
+		auto fingerprint = details->addChild(ControlSeeds::Dialog::textBox);
 		fingerprint->setReadOnly(true);
 		fingerprint->setText(Text::toT("Your SHA-256: " + DirectTransferManager::getInstance()->ownFingerprint()));
 

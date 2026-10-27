@@ -16,12 +16,16 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/services/LinkActions.h>
 #include <win32/settings/advanced/PluginPage.h>
 
 #include <win32/controls/HoldRedraw.h>
 #include <win32/plugins/PluginApiWin.h>
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
@@ -39,7 +43,7 @@ using dwt::Label;
 using dwt::Link;
 
 enum { COLUMN_PLUGIN, COLUMN_GUID, COLUMN_COUNT };
-static const ColumnInfo columns[COLUMN_COUNT] = {
+static const TableLayout::ColumnInfo columns[COLUMN_COUNT] = {
 	{ "", 100, false },
 	{ "", 0, false } // hidden column to store the GUID
 };
@@ -75,7 +79,7 @@ pluginInfo(0)
 		cur->setHelpId(IDH_SETTINGS_PLUGINS_LIST);
 		cur->setSpacing(6);
 
-		auto seed = WinUtil::Seeds::Dialog::table;
+		auto seed = ControlSeeds::Dialog::table;
 		seed.style |= LVS_SINGLESEL | LVS_NOCOLUMNHEADER;
 		plugins = cur->addChild(seed);
 
@@ -137,7 +141,7 @@ pluginInfo(0)
 		cur->addChild(Link::Seed(_T("<a href=\"https://dcplusplus.sourceforge.io/plugins/\">") + T_("Visit the DC plugin repository") + _T("</a>")));
 	}
 
-	WinUtil::makeColumns(plugins, columns, COLUMN_COUNT);
+	TableLayout::makeColumns(plugins, columns, COLUMN_COUNT);
 
 	refreshList();
 
@@ -221,7 +225,7 @@ void PluginPage::handleSelectionChanged() {
 		}
 		infoGrid->addChild(Label::Seed(name));
 		if((type == Website || type == Path) && !value.empty()) {
-			infoGrid->addChild(Link::Seed(Text::toT(value), true, WinUtil::parseLink));
+			infoGrid->addChild(Link::Seed(Text::toT(value), true, LinkActions::parseLink));
 		} else {
 			infoGrid->addChild(Label::Seed(value.empty() ?
 				T_("<Information unavailable>") : Text::toT(value)));
@@ -247,9 +251,9 @@ bool PluginPage::handleContextMenu(dwt::ScreenCoordinate pt) {
 	auto selected = plugins->hasSelected();
 	auto enabled = selected ? PluginManager::getInstance()->isLoaded(sel()) : false;
 
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
-	menu->setTitle(T_("Plugins"), WinUtil::menuIcon(IDI_PLUGINS));
+	menu->setTitle(T_("Plugins"), IconManager::menuIcon(IDI_PLUGINS));
 	menu->appendItem(T_("&Add"), [this] { handleAddPlugin(); });
 	menu->appendSeparator();
 	menu->appendItem(T_("&Configure"), [this] { handleConfigurePlugin(); }, nullptr, selected);

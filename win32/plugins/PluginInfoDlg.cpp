@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/LinkActions.h>
 #include <win32/plugins/PluginInfoDlg.h>
 
 #include <dcpp/plugins/PluginManager.h>
@@ -25,7 +28,6 @@
 #include <dwt/widgets/Link.h>
 #include <dwt/widgets/MessageBox.h>
 
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -78,7 +80,7 @@ bool PluginInfoDlg::handleInitDialog(const string& path) {
 		}
 		grid->addChild(Label::Seed(name));
 		if(type == Website && !value.empty()) {
-			grid->addChild(Link::Seed(Text::toT(value), true, WinUtil::parseLink));
+			grid->addChild(Link::Seed(Text::toT(value), true, LinkActions::parseLink));
 		} else {
 			grid->addChild(Label::Seed(value.empty() ?
 				T_("<Information unavailable>") : Text::toT(value)));
@@ -98,7 +100,7 @@ bool PluginInfoDlg::handleInitDialog(const string& path) {
 		cur->column(0).mode = GridInfo::FILL;
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
 		cur->setSpacing(grid->getSpacing());
-		WinUtil::addDlgButtons(cur,
+		DialogControls::addDlgButtons(cur,
 			[this, info] { handleOK(info); },
 			[this] { endDialog(IDCANCEL); })
 			.first->setText(info.updating ? T_("Update the plugin") : T_("Install the plugin"));

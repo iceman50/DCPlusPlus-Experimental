@@ -16,6 +16,22 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/KeyState.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/dialogs/FilePickers.h>
+#include <win32/frames/users/UserActions.h>
+#include <win32/frames/users/UserCommands.h>
+#include <win32/frames/users/UserPresentation.h>
+#include <win32/services/LinkActions.h>
 #include <win32/frames/search/SearchFrame.h>
 #include <win32/appearance/CountryFlags.h>
 
@@ -43,7 +59,7 @@ using dwt::SplitterContainer;
 const string SearchFrame::id = "Search";
 const string& SearchFrame::getId() const { return id; }
 
-static const ColumnInfo resultsColumns[] = {
+static const TableLayout::ColumnInfo resultsColumns[] = {
 	{ N_("File"), 200, false },
 	{ N_("Hits"), 50, true },
 	{ N_("User"), 100, false },
@@ -67,20 +83,20 @@ SearchFrame::SearchInfo::~SearchInfo() { }
 
 int SearchFrame::SearchInfo::getImage(int col) const {
 	if(col == COLUMN_IP)
-		return SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::fileFlagOffset) : -1;
+		return SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, ImageLists::fileFlagOffset) : -1;
 	if(col != 0) {
 		return -1;
 	}
 
 	const SearchResultPtr& sr = srs[0];
-	return sr->getType() == SearchResult::TYPE_FILE ? static_cast<int>(WinUtil::getFileIcon(sr->getFile())) : static_cast<int>(WinUtil::DIR_ICON);
+	return sr->getType() == SearchResult::TYPE_FILE ? static_cast<int>(ImageLists::getFileIcon(sr->getFile())) : static_cast<int>(ImageLists::DIR_ICON);
 }
 
 int SearchFrame::SearchInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgColor, int col) const {
 		auto style = srs[0]->getStyle();
 
 		if (!style.font.empty()) {
-			auto cached = WinUtil::getUserMatchFont(style.font);
+			auto cached = UiFonts::getUserMatchFont(style.font);
 			if (cached.get()) {
 				font = cached->handle();
 			}
@@ -146,7 +162,7 @@ droppedResults(0)
 		options->row(4).mode = GridInfo::FILL;
 		options->row(4).align = GridInfo::STRETCH;
 
-		auto gs = WinUtil::Seeds::group;
+		auto gs = ControlSeeds::group;
 
 		gs.caption = T_("Search for");
 		auto group = options->addChild(gs);
@@ -156,7 +172,7 @@ droppedResults(0)
 		cur->column(0).mode = GridInfo::FILL;
 		cur->column(1).mode = GridInfo::FILL;
 
-		searchBox = cur->addChild(WinUtil::Seeds::comboBoxEdit);
+		searchBox = cur->addChild(ControlSeeds::comboBoxEdit);
 		cur->setWidget(searchBox, 0, 0, 1, 2);
 		searchBox->getTextBox()->setCue(T_("Enter search here"));
 		addWidget(searchBox);
@@ -166,7 +182,7 @@ droppedResults(0)
 		searchBox->getTextBox()->onKeyDown([this](int c) { return handleSearchKeyDown(c); });
 		searchBox->getTextBox()->onChar([this] (int c) { return handleSearchChar(c); });
 
-		Button::Seed bs = WinUtil::Seeds::button;
+		Button::Seed bs = ControlSeeds::button;
 		bs.caption = T_("Purge");
 		ButtonPtr button = cur->addChild(bs);
 		button->setHelpId(IDH_SEARCH_PURGE);
@@ -185,19 +201,19 @@ droppedResults(0)
 		cur = group->addChild(Grid::Seed(1, 3));
 		cur->column(1).mode = GridInfo::FILL;
 
-		mode = cur->addChild(WinUtil::Seeds::comboBox);
+		mode = cur->addChild(ControlSeeds::comboBox);
 		addWidget(mode);
 
 		mode->addValue(T_("Normal"));
 		mode->addValue(T_("At least"));
 		mode->addValue(T_("At most"));
 
-		TextBox::Seed ts = WinUtil::Seeds::textBox;
+		TextBox::Seed ts = ControlSeeds::textBox;
 		ts.style |= ES_AUTOHSCROLL | ES_NUMBER;
 		size = cur->addChild(ts);
 		addWidget(size);
 
-		sizeMode = cur->addChild(WinUtil::Seeds::comboBox);
+		sizeMode = cur->addChild(ControlSeeds::comboBox);
 		addWidget(sizeMode);
 
 		sizeMode->addValue(T_("B"));
@@ -211,7 +227,7 @@ droppedResults(0)
 		group->setHelpId(IDH_SEARCH_TYPE);
 
 		{
-			ComboBox::Seed cs = WinUtil::Seeds::comboBox;
+			ComboBox::Seed cs = ControlSeeds::comboBox;
 			cs.style |= CBS_SORT;
 			fileType = group->addChild(cs);
 			addWidget(fileType);
@@ -221,7 +237,7 @@ droppedResults(0)
 		gs.caption = T_("Search options");
 		cur = options->addChild(gs)->addChild(Grid::Seed(2, 1));
 
-		CheckBox::Seed cs = WinUtil::Seeds::checkBox;
+		CheckBox::Seed cs = ControlSeeds::checkBox;
 		
 		cs.caption = T_("Only users with free slots");
 		auto box = cur->addChild(cs);
@@ -239,7 +255,7 @@ droppedResults(0)
 		group = options->addChild(gs);
 		group->setHelpId(IDH_SEARCH_HUBS);
 
-		WidgetHubs::Seed ls(WinUtil::Seeds::table);
+		WidgetHubs::Seed ls(ControlSeeds::table);
 		ls.style |= LVS_NOCOLUMNHEADER;
 		ls.lvStyle |= LVS_EX_CHECKBOXES;
 		hubs = group->addChild(ls);
@@ -261,14 +277,14 @@ droppedResults(0)
 		cur->row(0).mode = GridInfo::FILL;
 		cur->row(0).align = GridInfo::STRETCH;
 
-		results = cur->addChild(WidgetResults::Seed(WinUtil::Seeds::table));
+		results = cur->addChild(WidgetResults::Seed(ControlSeeds::table));
 		addWidget(results);
 
-		results->setSmallImageList(WinUtil::fileImages);
+		results->setSmallImageList(ImageLists::fileImages);
 		results->setImageColumns({ COLUMN_IP });
 
-		WinUtil::makeColumns(results, resultsColumns, COLUMN_LAST, SETTING(SEARCHFRAME_ORDER), SETTING(SEARCHFRAME_WIDTHS));
-		WinUtil::setTableSort(results, COLUMN_LAST, SettingsManager::SEARCHFRAME_SORT, COLUMN_HITS, false);
+		TableLayout::makeColumns(results, resultsColumns, COLUMN_LAST, SETTING(SEARCHFRAME_ORDER), SETTING(SEARCHFRAME_WIDTHS));
+		TableLayout::setTableSort(results, COLUMN_LAST, SettingsManager::SEARCHFRAME_SORT, COLUMN_HITS, false);
 
 		results->onDblClicked([this] { handleDownload(); });
 		results->onKeyDown([this](int c) { return handleKeyDown(c); });
@@ -278,7 +294,7 @@ droppedResults(0)
 		cur->column(1).mode = GridInfo::FILL;
 		cur->setHelpId(IDH_SEARCH_FILTER);
 
-		auto ls = WinUtil::Seeds::label;
+		auto ls = ControlSeeds::label;
 		ls.caption = T_("Filter search results:");
 		cur->addChild(ls);
 
@@ -296,7 +312,7 @@ droppedResults(0)
 	initStatus();
 
 	{
-		auto showUI = addChild(WinUtil::Seeds::splitCheckBox);
+		auto showUI = addChild(ControlSeeds::splitCheckBox);
 		showUI->setChecked(true);
 		showUI->onClicked([this, showUI] { paned->maximize(showUI->getChecked() ? nullptr : results->getParent()); });
 		status->setWidget(STATUS_SHOW_UI, showUI);
@@ -400,9 +416,9 @@ bool SearchFrame::preClosing() {
 void SearchFrame::postClosing() {
 	SettingsManager::getInstance()->set(SettingsManager::SEARCH_PANED_POS, paned->getSplitterPos(0));
 
-	SettingsManager::getInstance()->set(SettingsManager::SEARCHFRAME_ORDER, WinUtil::toString(results->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::SEARCHFRAME_WIDTHS, WinUtil::toString(results->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::SEARCHFRAME_SORT, WinUtil::getTableSort(results));
+	SettingsManager::getInstance()->set(SettingsManager::SEARCHFRAME_ORDER, TableLayout::toString(results->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::SEARCHFRAME_WIDTHS, TableLayout::toString(results->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::SEARCHFRAME_SORT, TableLayout::getTableSort(results));
 }
 
 void SearchFrame::SearchInfo::view() {
@@ -432,7 +448,7 @@ void SearchFrame::SearchInfo::Download::addFile(SearchInfo* si, const string& ta
 		}
 	}
 
-	if(WinUtil::isShift())
+	if(KeyState::isShift())
 		QueueManager::getInstance()->setPriority(target, QueueItem::HIGHEST);
 }
 
@@ -441,7 +457,7 @@ void SearchFrame::SearchInfo::Download::addDir(SearchInfo* si, const string& tar
 	// TODO Add all users...
 	QueueManager::getInstance()->addDirectory(target.empty() ? si->srs[0]->getFile() : target,
 		si->srs[0]->getUser(), Text::fromT(tgt),
-		WinUtil::isShift() ? QueueItem::HIGHEST : QueueItem::DEFAULT);
+		KeyState::isShift() ? QueueItem::HIGHEST : QueueItem::DEFAULT);
 }
 
 void SearchFrame::SearchInfo::DownloadWhole::operator()(SearchInfo* si) {
@@ -540,7 +556,7 @@ void SearchFrame::SearchInfo::update() {
 		columns[COLUMN_SLOTS] = Text::toT(std::to_string(freeSlots) + '/' + std::to_string(slots));
 
 	} else {
-		columns[COLUMN_NICK] = WinUtil::getNicks(sr->getUser());
+		columns[COLUMN_NICK] = UserPresentation::getNicks(sr->getUser());
 		columns[COLUMN_CONNECTION] = Text::toT(ClientManager::getInstance()->getConnection(sr->getUser().user->getCID()));
 		columns[COLUMN_SLOTS] = Text::toT(sr->getSlotString());
 		const auto& ip = sr->getIP();
@@ -776,32 +792,32 @@ void SearchFrame::handleDownloadTo() {
 
 		if(sr->getType() == SearchResult::TYPE_FILE) {
 			tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY)) + si->columns[COLUMN_FILENAME];
-			if(WinUtil::browseSaveFile(this, target)) {
-				WinUtil::addLastDir(Util::getFilePath(target));
+			if(FilePickers::browseSaveFile(this, target)) {
+				FilePickers::addLastDir(Util::getFilePath(target));
 				treat(results->forEachSelectedT(SearchInfo::DownloadTarget(target)));
 			}
 		} else {
 			tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY));
 			if(FolderDialog(this).open(target)) {
-				WinUtil::addLastDir(target);
+				FilePickers::addLastDir(target);
 				treat(results->forEachSelectedT(SearchInfo::Download(target)));
 			}
 		}
 	} else {
 		tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY));
 		if(FolderDialog(this).open(target)) {
-			WinUtil::addLastDir(target);
+			FilePickers::addLastDir(target);
 			treat(results->forEachSelectedT(SearchInfo::Download(target)));
 		}
 	}
 }
 
 void SearchFrame::handleDownloadTarget(unsigned index) {
-	if(index < WinUtil::lastDirs.size()) {
-		treat(results->forEachSelectedT(SearchInfo::Download(WinUtil::lastDirs[index])));
+	if(index < FilePickers::lastDirs.size()) {
+		treat(results->forEachSelectedT(SearchInfo::Download(FilePickers::lastDirs[index])));
 	} else {
-		dcassert((index - WinUtil::lastDirs.size()) < targets.size());
-		treat(results->forEachSelectedT(SearchInfo::DownloadTarget(Text::toT(targets[index - WinUtil::lastDirs.size()]))));
+		dcassert((index - FilePickers::lastDirs.size()) < targets.size());
+		treat(results->forEachSelectedT(SearchInfo::DownloadTarget(Text::toT(targets[index - FilePickers::lastDirs.size()]))));
 	}
 }
 
@@ -816,14 +832,14 @@ void SearchFrame::handleDownloadWholeFavoriteDirs(unsigned index) {
 }
 
 void SearchFrame::handleDownloadWholeTarget(unsigned index) {
-	dcassert(index < WinUtil::lastDirs.size());
-	treat(results->forEachSelectedT(SearchInfo::DownloadWhole(WinUtil::lastDirs[index])));
+	dcassert(index < FilePickers::lastDirs.size());
+	treat(results->forEachSelectedT(SearchInfo::DownloadWhole(FilePickers::lastDirs[index])));
 }
 
 void SearchFrame::handleDownloadDirTo() {
 	tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY));
 	if(FolderDialog(this).open(target)) {
-		WinUtil::addLastDir(target);
+		FilePickers::addLastDir(target);
 		treat(results->forEachSelectedT(SearchInfo::DownloadWhole(target)));
 	}
 }
@@ -864,7 +880,7 @@ struct UserCollector {
 };
 
 MenuPtr SearchFrame::makeMenu() {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
 	StringPairList favoriteDirs = FavoriteManager::getInstance()->getFavoriteDirs();
 	SearchInfo::CheckTTH checkTTH = results->forEachSelectedT(SearchInfo::CheckTTH());
@@ -872,7 +888,7 @@ MenuPtr SearchFrame::makeMenu() {
 	menu->setTitle(checkTTH.hasTTH ? escapeMenu(checkTTH.name) : str(TF_("%1% results") % results->countSelected()),
 		getParent()->getIcon(this));
 
-	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
+	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, IconManager::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargetMenu(menu.get(), favoriteDirs, checkTTH);
 	menu->appendItem(T_("Download whole directory"), [this] { handleDownloadDir(); });
 	addTargetDirMenu(menu.get(), favoriteDirs);
@@ -880,12 +896,12 @@ MenuPtr SearchFrame::makeMenu() {
 
 	if(checkTTH.hasTTH) {
 		menu->appendSeparator();
-		WinUtil::addHashItems(menu.get(), checkTTH.tth, checkTTH.name, checkTTH.size);
+		LinkActions::addHashItems(menu.get(), checkTTH.tth, checkTTH.name, checkTTH.size);
 	}
 
 	menu->appendSeparator();
 	UserCollector users = results->forEachSelectedT(UserCollector());
-	WinUtil::addUserItems(menu.get(), users.users, getParent(), users.dirs);
+	UserActions::addUserItems(menu.get(), users.users, getParent(), users.dirs);
 
 	if(users.users.size() == 1) {
 		const auto& selectedUser = users.users.front();
@@ -919,7 +935,7 @@ MenuPtr SearchFrame::makeMenu() {
 	menu->appendSeparator();
 	menu->appendItem(T_("&Remove"), [this] { handleRemove(); });
 
-	WinUtil::addCopyMenu(menu.get(), results);
+	TableActions::addCopyMenu(menu.get(), results);
 
 	prepareMenu(menu.get(), UserCommand::CONTEXT_SEARCH, checkTTH.hubs);
 
@@ -938,7 +954,7 @@ void SearchFrame::setUserHubHint(const UserPtr& user, const string& hubUrl, cons
 	const HintedUser hintedUser(user, hubUrl);
 	const auto displayHub = hubName.empty() ? hubUrl : hubName;
 	status->setText(STATUS_STATUS, str(TF_("%1% will connect through %2%") %
-		WinUtil::getNicks(hintedUser) % Text::toT(displayHub)));
+		UserPresentation::getNicks(hintedUser) % Text::toT(displayHub)));
 }
 
 void SearchFrame::addTargetMenu(Menu* menu, const StringPairList& favoriteDirs, const SearchInfo::CheckTTH& checkTTH) {
@@ -953,9 +969,9 @@ void SearchFrame::addTargetMenu(Menu* menu, const StringPairList& favoriteDirs, 
 
 	n = 0;
 	sub->appendItem(T_("&Browse..."), [this] { handleDownloadTo(); });
-	if(!WinUtil::lastDirs.empty()) {
+	if(!FilePickers::lastDirs.empty()) {
 		sub->appendSeparator();
-		for(auto i = WinUtil::lastDirs.begin(); i != WinUtil::lastDirs.end(); ++i, ++n)
+		for(auto i = FilePickers::lastDirs.begin(); i != FilePickers::lastDirs.end(); ++i, ++n)
 			sub->appendItem(*i, [=] { handleDownloadTarget(n); });
 	}
 
@@ -981,9 +997,9 @@ void SearchFrame::addTargetDirMenu(Menu* menu, const StringPairList& favoriteDir
 
 	n = 0;
 	sub->appendItem(T_("&Browse..."), [this] { handleDownloadDirTo(); });
-	if(!WinUtil::lastDirs.empty()) {
+	if(!FilePickers::lastDirs.empty()) {
 		sub->appendSeparator();
-		for(auto i = WinUtil::lastDirs.begin(); i != WinUtil::lastDirs.end(); ++i, ++n)
+		for(auto i = FilePickers::lastDirs.begin(); i != FilePickers::lastDirs.end(); ++i, ++n)
 			sub->appendItem(*i, [=] { handleDownloadWholeTarget(n); });
 	}
 }
@@ -1063,7 +1079,7 @@ void SearchFrame::runSearch() {
 	int ftype = fileType->getData(fileType->getSelected());
 	if(ftype == SearchManager::TYPE_TTH) {
 		s.erase(std::remove_if(begin(s), end(s), [l = std::locale{""}](auto c) { return std::isspace(c, l); }), end(s));
-		if(!WinUtil::checkTTH(s)) {
+		if(!LinkActions::checkTTH(s)) {
 			auto text = T_("Invalid input value for TTH search");
 			status->setText(STATUS_STATUS, text);
 			setText(str(TF_("Search - %1%") % text));
@@ -1207,7 +1223,7 @@ void SearchFrame::treat(const SearchInfo::Download& dl) {
 }
 
 void SearchFrame::runUserCommand(const UserCommand& uc) {
-	if(!WinUtil::getUCParams(this, uc, ucLineParams))
+	if(!UserCommands::getUCParams(this, uc, ucLineParams))
 		return;
 
 	auto ucParams = ucLineParams;
@@ -1234,7 +1250,7 @@ void SearchFrame::runUserCommand(const UserCommand& uc) {
 			if(sr->getType() == SearchResult::TYPE_FILE) {
 				ucParams["fileTR"] = [sr] { return sr->getTTH().toBase32(); };
 			}
-			ucParams["fileMN"] = [sr] { return WinUtil::makeMagnet(sr->getTTH(), sr->getFile(), sr->getSize()); };
+			ucParams["fileMN"] = [sr] { return LinkActions::makeMagnet(sr->getTTH(), sr->getFile(), sr->getSize()); };
 
 			// compatibility with 0.674 and earlier
 			ucParams["file"] = ucParams["fileFN"];
@@ -1249,7 +1265,7 @@ void SearchFrame::runUserCommand(const UserCommand& uc) {
 }
 
 bool SearchFrame::handleSearchKeyDown(int c) {
-	if(c == VK_RETURN && !(WinUtil::isShift() || WinUtil::isCtrl() || WinUtil::isAlt())) {
+	if(c == VK_RETURN && !(KeyState::isShift() || KeyState::isCtrl() || KeyState::isAlt())) {
 		runSearch();
 		return true;
 	}

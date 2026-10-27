@@ -16,6 +16,10 @@
  */
 
 #include "stdafx.h"
+#include <dwt/widgets/CheckBox.h>
+#include <dwt/widgets/ComboBox.h>
+#include <dwt/widgets/Table.h>
+#include <dwt/widgets/TextBox.h>
 
 #include <win32/resource.h>
 
@@ -26,7 +30,6 @@
 #include <dwt/widgets/LoadDialog.h>
 
 #include <dcpp/settings/SettingsManager.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::FolderDialog;
 using dwt::Grid;

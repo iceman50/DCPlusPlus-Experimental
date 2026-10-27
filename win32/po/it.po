@@ -81,7 +81,7 @@ msgid "%1% dropped"
 msgstr "%1% abbandonato"
 
 #: win32\plugins\PluginApiWin.cpp:70 win32\plugins\PluginApiWin.cpp:71 win32\frames\queue\QueueFrame.cpp:948
-#: win32\util\WinUtil.cpp:853 win32\frames\transfers\FinishedFrameBase.h:460
+#: win32\dialogs\FilePickers.cpp:55 win32\frames\transfers\FinishedFrameBase.h:460
 #, boost-format
 msgid "%1% files"
 msgstr "%1% file"
@@ -182,7 +182,7 @@ msgid "%1%/s, %2% left"
 msgstr "%1%/s, %2% rimanente"
 
 #: win32\frames\filelist\DirectoryListingFrame.cpp:832 win32\frames\users\UserInfoBase.cpp:116
-#: win32\frames\users\UserInfoBase.cpp:141 win32\util\WinUtil.cpp:1714
+#: win32\frames\users\UserInfoBase.cpp:141 win32\controls\TableActions.cpp:58
 #, boost-format
 msgid "%1%: %2%"
 msgstr "%1%: %2%"
@@ -197,7 +197,7 @@ msgstr "&Aggiungi"
 msgid "&Add folder"
 msgstr "&Aggiungi cartella"
 
-#: win32\util\WinUtil.cpp:1646 win32\frames\users\UserInfoBase.h:155
+#: win32\frames\users\UserActions.cpp:97 win32\frames\users\UserInfoBase.h:155
 msgid "&Browse file list"
 msgstr "&Sfoglia l'elenco dei file"
 
@@ -233,7 +233,7 @@ msgstr "&Connetti"
 msgid "&Copy"
 msgstr "&Copia"
 
-#: win32\util\dwtTexts.cpp:32
+#: win32\app\dwtTexts.cpp:32
 msgid "&Copy\tCtrl+C"
 msgstr "&Copy\tCtrl+C"
 
@@ -245,7 +245,7 @@ msgstr "&Personalizza\tDoppio click"
 msgid "&Defaults"
 msgstr "&Valori predefiniti"
 
-#: win32\util\dwtTexts.cpp:34
+#: win32\app\dwtTexts.cpp:34
 msgid "&Delete\tDel"
 msgstr "&Cancella\t Canc"
 
@@ -286,7 +286,7 @@ msgstr "&Trova...\tCtrl+F"
 msgid "&Force attempt"
 msgstr "&Forza tentativo"
 
-#: win32\frames\queue\QueueFrame.cpp:1002 win32\util\WinUtil.cpp:1643 win32\frames\users\UserInfoBase.h:154
+#: win32\frames\queue\QueueFrame.cpp:1002 win32\frames\users\UserActions.cpp:94 win32\frames\users\UserInfoBase.h:154
 msgid "&Get file list"
 msgstr "&Scarica l'elenco dei file"
 
@@ -302,7 +302,7 @@ msgstr "&Aiuto"
 msgid "&Hide\tCtrl+1"
 msgstr "&Nascondi\tCtrl+1"
 
-#: win32\util\WinUtil.cpp:1649 win32\frames\users\UserInfoBase.h:156
+#: win32\frames\users\UserActions.cpp:100 win32\frames\users\UserInfoBase.h:156
 msgid "&Match queue"
 msgstr "&Coda delle corrispondenze"
 
@@ -334,7 +334,7 @@ msgstr "&Blocco note \tCtrl+N"
 msgid "&Open"
 msgstr "&Apri"
 
-#: win32\util\dwtTexts.cpp:33
+#: win32\app\dwtTexts.cpp:33
 msgid "&Paste\tCtrl+V"
 msgstr "&Incolla\tCtrl+V"
 
@@ -382,7 +382,7 @@ msgstr "&Ricerca\tCtrl+S"
 msgid "&Search hub"
 msgstr "&Cerca un hub"
 
-#: win32\frames\queue\QueueFrame.cpp:1009 win32\util\WinUtil.cpp:1652 win32\frames\users\UserInfoBase.h:158
+#: win32\frames\queue\QueueFrame.cpp:1009 win32\frames\users\UserActions.cpp:103 win32\frames\users\UserInfoBase.h:158
 msgid "&Send private message"
 msgstr "Invia un messaggio privato"
 
@@ -394,7 +394,7 @@ msgstr ""
 msgid "&Toggle"
 msgstr ""
 
-#: win32\util\dwtTexts.cpp:30
+#: win32\app\dwtTexts.cpp:30
 msgid "&Undo\tCtrl+Z"
 msgstr "&Annulla\tCtrl+Z"
 
@@ -455,7 +455,7 @@ msgstr "-:--:--"
 msgid "<Information unavailable>"
 msgstr "<Informazioni non disponibili>"
 
-#: win32\util\WinUtil.cpp:1547
+#: win32\services\LinkActions.cpp:102
 msgid ""
 "A MAGNET link was given to DC++, but it didn't contain a valid file hash for "
 "use on the Direct Connect network.  No action will be taken."
@@ -529,7 +529,7 @@ msgstr ""
 msgid "Add"
 msgstr "Aggiungi"
 
-#: win32\frames\hub\HubFrame.cpp:1314 win32\frames\hub\PublicHubsFrame.cpp:402 win32\util\WinUtil.cpp:1655
+#: win32\frames\hub\HubFrame.cpp:1314 win32\frames\hub\PublicHubsFrame.cpp:402 win32\frames\users\UserActions.cpp:106
 #: win32\frames\users\UserInfoBase.h:160
 msgid "Add To &Favorites"
 msgstr "Aggiungi ai Pre&feriti"
@@ -620,7 +620,7 @@ msgstr "Aggiunge l'elenco degli utenti alla coda dei download."
 msgid "Advanced"
 msgstr "Avanzate"
 
-#: win32\frames\queue\QueueFrame.cpp:1017 win32\frames\queue\QueueFrame.cpp:1026 win32\util\WinUtil.cpp:1610
+#: win32\frames\queue\QueueFrame.cpp:1017 win32\frames\queue\QueueFrame.cpp:1026 win32\frames\users\UserActions.cpp:61
 msgid "All"
 msgstr "Tutti"
 
@@ -629,11 +629,11 @@ msgstr "Tutti"
 msgid "All %1% users offline"
 msgstr "Tutti i %1% utenti non sono in linea"
 
-#: win32\util\WinUtil.cpp:1708
+#: win32\controls\TableActions.cpp:52
 msgid "All columns"
 msgstr "Aggiungi delle colonne"
 
-#: win32\util\WinUtil.cpp:856 win32\util\WinUtil.cpp:863
+#: win32\dialogs\FilePickers.cpp:58 win32\dialogs\FilePickers.cpp:65
 msgid "All files"
 msgstr "Tutti i files"
 
@@ -672,7 +672,7 @@ msgstr "Un'altro gruppo con il nome \"%1%\" esiste già"
 msgid "Any"
 msgstr "Qualsiasi"
 
-#: win32\util\WinUtil.cpp:1571
+#: win32\services\LinkActions.cpp:126
 msgid "Any program that is launched will have the same access rights as DC++."
 msgstr ""
 
@@ -798,11 +798,11 @@ msgstr "Messaggio di assenza (vuoto = nessun messaggio di assenza)"
 msgid "Away mode"
 msgstr "Modalità di assenza"
 
-#: win32\util\WinUtil.cpp:639 win32\util\WinUtil.cpp:648
+#: win32\frames\chat\ChatCommands.cpp:162 win32\frames\chat\ChatCommands.cpp:171
 msgid "Away mode off"
 msgstr "Modalità di assenza disattivata"
 
-#: win32\util\WinUtil.cpp:644
+#: win32\frames\chat\ChatCommands.cpp:167
 #, boost-format
 msgid "Away mode on: %1%"
 msgstr "Modalità di assenza attivata: %1%"
@@ -892,7 +892,7 @@ msgstr "Inconsistenza CRC32 (Controllo SFV)"
 msgid "Cached hub list is corrupted or unsupported"
 msgstr "La lista degli hub nella cache è corrotto o non supportata"
 
-#: win32\util\WinUtil.cpp:1128
+#: win32\controls\DialogControls.cpp:50
 msgid "Cancel"
 msgstr "Annulla"
 
@@ -954,7 +954,7 @@ msgstr ""
 msgid "Clear search box after each search"
 msgstr "Pulisci la casella di ricerca dopo ogni ricerca"
 
-#: win32\util\WinUtil.cpp:550
+#: win32\frames\chat\ChatCommands.cpp:71
 msgid ""
 "Clears the current window of all text. Optionally, you can specify how many "
 "of the latest (most recent) lines should be kept."
@@ -962,7 +962,7 @@ msgstr ""
 "Pulisce la finestra corrente da tutto il testo. Opzionalmente, puoi "
 "specificare quante delle ultime (più recenti) righe dover conservare."
 
-#: win32\util\dwtTexts.cpp:36
+#: win32\app\dwtTexts.cpp:36
 msgid "Click and drag to resize"
 msgstr "Clicca e trascina per ridimensionare"
 
@@ -978,7 +978,7 @@ msgstr ""
 msgid "Client type"
 msgstr "Tipo di client"
 
-#: win32\util\dwtTexts.cpp:37
+#: win32\app\dwtTexts.cpp:37
 msgid "Close"
 msgstr "Chiudi"
 
@@ -1014,7 +1014,7 @@ msgstr "Chiudi gli hub disconessi"
 msgid "Close hubs not in a favorite group"
 msgstr "Chiudi gli hub che non sono in un gruppo preferito"
 
-#: win32\util\WinUtil.cpp:564
+#: win32\frames\chat\ChatCommands.cpp:85
 #, fuzzy
 msgid "Closes the current window."
 msgstr "Chiudi tutte le finestre dei messaggi privati"
@@ -1101,7 +1101,7 @@ msgstr "Connetti a tutti gli hub in questo gruppo"
 msgid "Connect to hub"
 msgstr "Connetti all'hub"
 
-#: win32\frames\hub\HubFrame.cpp:680 win32\util\WinUtil.cpp:1803
+#: win32\frames\hub\HubFrame.cpp:680 win32\frames\users\UserPresentation.cpp:67
 msgid "Connected"
 msgstr "Connesso"
 
@@ -1131,7 +1131,7 @@ msgstr "Contesto"
 msgid "Contribute"
 msgstr "Contribuisci"
 
-#: win32\util\WinUtil.cpp:1690
+#: win32\controls\TableActions.cpp:34
 msgid "Copy"
 msgstr "Copia"
 
@@ -1153,7 +1153,7 @@ msgstr "Copia l'&indirizzo negli appunti"
 msgid "Copy address with &keyprint to clipboard"
 msgstr "Copia l'&indirizzo negli appunti"
 
-#: win32\util\WinUtil.cpp:806
+#: win32\services\LinkActions.cpp:49
 msgid "Copy magnet link to clipboard"
 msgstr "Copia i collegamenti magnet negli appunti"
 
@@ -1178,7 +1178,7 @@ msgstr "Crea/Modifica Comando Utente"
 msgid "Creating file index..."
 msgstr "Creazione indice dei file..."
 
-#: win32\util\dwtTexts.cpp:31
+#: win32\app\dwtTexts.cpp:31
 msgid "Cu&t\tCtrl+X"
 msgstr "Tag&lia\tCtrl+X"
 
@@ -1253,7 +1253,7 @@ msgstr "Diminuisci priorità"
 
 #: win32\settings\appearance\AppearancePage.cpp:142 win32\settings\appearance\AppearancePage.cpp:175
 #: win32\settings\connection\ConnectivityManualPage.cpp:268 win32\frames\favorites\FavHubProperties.cpp:268
-#: win32\util\WinUtil.cpp:1172 win32\frames\tools\ACFrame.h:140
+#: win32\controls\DialogControls.cpp:94 win32\frames\tools\ACFrame.h:140
 msgid "Default"
 msgstr "Predefinito"
 
@@ -1336,7 +1336,7 @@ msgstr "Disabilitato"
 msgid "Disconnect the direct encrypted channel"
 msgstr "Disconnetti il canale cifrato diretto"
 
-#: win32\util\WinUtil.cpp:1808
+#: win32\frames\users\UserPresentation.cpp:72
 msgid "Disconnected"
 msgstr "Disconnessa"
 
@@ -1356,7 +1356,7 @@ msgstr "Mostra un popup a palloncino"
 msgid "Display the balloon only when DC++ is in the background"
 msgstr "Mostra il pallone soltanto quando DC++ è in secondo piano"
 
-#: win32\util\WinUtil.cpp:559
+#: win32\frames\chat\ChatCommands.cpp:80
 #, fuzzy
 msgid ""
 "Displays available commands. (The ones listed on this page.) Optionally, you "
@@ -1395,7 +1395,7 @@ msgstr ""
 msgid "Do you really want to delete this search type?"
 msgstr "Vuoi veramente cancellare questa tipologia di ricerca?"
 
-#: win32\util\WinUtil.cpp:1573
+#: win32\services\LinkActions.cpp:128
 msgid "Do you still want to allow to open a program on your computer?"
 msgstr ""
 
@@ -1467,7 +1467,7 @@ msgstr ""
 msgid "Download failed: %1%"
 msgstr "Download fallito: %1%"
 
-#: win32\frames\transfers\TransferView.cpp:1134 win32\util\WinUtil.cpp:93
+#: win32\frames\transfers\TransferView.cpp:1134 win32\services\Notifications.cpp:35
 msgid "Download finished"
 msgstr "Download completato"
 
@@ -1479,11 +1479,11 @@ msgstr "Scarica l'elenco completo"
 msgid "Download limit"
 msgstr "Limite dei download"
 
-#: win32\util\WinUtil.cpp:687
+#: win32\frames\chat\ChatCommands.cpp:212
 msgid "Download limit disabled"
 msgstr "Limite download disabilitato"
 
-#: win32\util\WinUtil.cpp:687
+#: win32\frames\chat\ChatCommands.cpp:212
 #, boost-format
 msgid "Download limit set to %1% KiB/s"
 msgstr "Limite dei download impostato a %1% KiB/s"
@@ -1493,7 +1493,7 @@ msgstr "Limite dei download impostato a %1% KiB/s"
 msgid "Download limit: %1%/s - Click to adjust"
 msgstr "Limite dei download: %1%/s - Clicca per regolare"
 
-#: win32\util\WinUtil.cpp:624
+#: win32\frames\chat\ChatCommands.cpp:147
 msgid "Download slots set"
 msgstr "Imposta slot in download"
 
@@ -1678,21 +1678,21 @@ msgstr "Errore nel caricare il file del blocco note: %1%"
 msgid "Error processing version information"
 msgstr "Errore nell'ottenere le informazioni sulla versione"
 
-#: win32\util\WinUtil.cpp:1453
+#: win32\shell\ShellIntegration.cpp:177
 msgid ""
 "Error registering DC++ for automatic startup (could not find or create key)"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1463
+#: win32\shell\ShellIntegration.cpp:188
 msgid "Error registering DC++ for automatic startup (could not set key value)"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1393
+#: win32\shell\ShellIntegration.cpp:116
 #, boost-format
 msgid "Error registering the %1% handler"
 msgstr "Errore durante la registrazione del gestore %1%"
 
-#: win32\util\WinUtil.cpp:1498
+#: win32\shell\ShellIntegration.cpp:218
 msgid ""
 "Error unregistering DC++ for automatic startup (could not delete key value)"
 msgstr ""
@@ -1727,7 +1727,7 @@ msgstr ""
 "\n"
 "DC++ è sotto la licenza GPL."
 
-#: win32\settings\advanced\UserMatchPage.cpp:216 win32\util\WinUtil.cpp:1167
+#: win32\settings\advanced\UserMatchPage.cpp:216 win32\controls\DialogControls.cpp:89
 msgid "Exact match"
 msgstr "Corrispondenza esatta"
 
@@ -1779,7 +1779,7 @@ msgstr "IP esterno / WAN"
 msgid "External / WAN IP address"
 msgstr "IP esterno / WAN"
 
-#: win32\util\WinUtil.cpp:1574
+#: win32\services\LinkActions.cpp:129
 msgid "External protocol request"
 msgstr ""
 
@@ -1833,7 +1833,7 @@ msgstr "Nome preferito"
 msgid "Favorite user added"
 msgstr "Aggiunto agli utenti preferiti"
 
-#: win32\util\WinUtil.cpp:451
+#: win32\appearance\UiFonts.cpp:115
 #, boost-format
 msgid "Favorite users (added by %1%)"
 msgstr "Utenti preferiti (aggiunti da %1%)"
@@ -1863,7 +1863,7 @@ msgstr "Indicizzazione dei file:"
 msgid "File List"
 msgstr "Elenco dei file"
 
-#: win32\frames\queue\QueueFrame.cpp:506 win32\util\WinUtil.cpp:863
+#: win32\frames\queue\QueueFrame.cpp:506 win32\dialogs\FilePickers.cpp:65
 msgid "File Lists"
 msgstr "Elenchi dei file"
 
@@ -1879,7 +1879,7 @@ msgstr "Estensioni dei file"
 msgid "File is already finished"
 msgstr "Il file è già stato scaricato"
 
-#: win32\util\WinUtil.cpp:94
+#: win32\services\Notifications.cpp:36
 msgid "File list downloaded"
 msgstr "Elenco dei file scaricato"
 
@@ -2064,7 +2064,7 @@ msgstr "GB"
 msgid "Global application style"
 msgstr "Stile globale dell'applicazione"
 
-#: win32\util\WinUtil.cpp:1658 win32\frames\users\UserInfoBase.h:161
+#: win32\frames\users\UserActions.cpp:109 win32\frames\users\UserInfoBase.h:161
 msgid "Grant &extra slot"
 msgstr "Concedi &extra slot"
 
@@ -2112,7 +2112,7 @@ msgstr "Proxy HTTP (solamente per l'elenco degli hub)"
 msgid "Height of the message editing box"
 msgstr "Altezza della casella dei messaggi"
 
-#: win32\util\WinUtil.cpp:1140
+#: win32\controls\DialogControls.cpp:62
 msgid "Help"
 msgstr "Aiuto"
 
@@ -2152,7 +2152,7 @@ msgstr "Dimensione massima con priorità più alta"
 msgid "Highlighted tab"
 msgstr "Scheda selezionata"
 
-#: win32\util\WinUtil.cpp:561
+#: win32\frames\chat\ChatCommands.cpp:82
 msgid ""
 "Highlights the last occourrence of the specified search string in the chat "
 "window."
@@ -2314,7 +2314,7 @@ msgstr "Identificazione (lasciare vuoto per il predefinito)"
 msgid "Idle"
 msgstr "In attesa"
 
-#: win32\util\WinUtil.cpp:558
+#: win32\frames\chat\ChatCommands.cpp:79
 msgid ""
 "If no parameter is specified, it launches the log for the hub or private "
 "chat with the associated application in Windows. If one of the parameters is "
@@ -2389,11 +2389,11 @@ msgstr "Elenco file non valido"
 msgid "Invalid input value for TTH search"
 msgstr "Valore di input non valido per la ricerca TTH"
 
-#: win32\util\WinUtil.cpp:618 win32\util\WinUtil.cpp:626
+#: win32\frames\chat\ChatCommands.cpp:141 win32\frames\chat\ChatCommands.cpp:149
 msgid "Invalid number of slots"
 msgstr "Numero di slot non valido"
 
-#: win32\util\WinUtil.cpp:681 win32\util\WinUtil.cpp:689
+#: win32\frames\chat\ChatCommands.cpp:201 win32\frames\chat\ChatCommands.cpp:209
 #, fuzzy
 msgid "Invalid speed value"
 msgstr "Valore non valido"
@@ -2482,7 +2482,7 @@ msgstr "Ultimo messaggio ricevuto il %1%"
 msgid "Latest stable version"
 msgstr "Ultima versione stabile"
 
-#: win32\util\WinUtil.cpp:554
+#: win32\frames\chat\ChatCommands.cpp:75
 msgid ""
 "Launches your default web browser to the DuckDuckGo search engine with the "
 "specified search."
@@ -2490,7 +2490,7 @@ msgstr ""
 "Apre nel tuo browser predefinito il motore di ricerca DuckDuckGo con la "
 "ricerca specificata."
 
-#: win32\util\WinUtil.cpp:555
+#: win32\frames\chat\ChatCommands.cpp:76
 msgid ""
 "Launches your default web browser to the Google search engine with the "
 "specified search."
@@ -2498,7 +2498,7 @@ msgstr ""
 "Apre il tuo browser predefinito alla pagina di ricerca di Google con la "
 "ricerca specificata."
 
-#: win32\util\WinUtil.cpp:556
+#: win32\frames\chat\ChatCommands.cpp:77
 msgid ""
 "Launches your default web browser to the Internet Movie Database (imdb) with "
 "the specified query."
@@ -2506,7 +2506,7 @@ msgstr ""
 "Apre il tuo browser predefinito alla pagina Internet Movie Database (imdb) "
 "con la ricerca specificata."
 
-#: win32\util\WinUtil.cpp:560
+#: win32\frames\chat\ChatCommands.cpp:81
 msgid "Launches your default web browser with the given URL."
 msgstr "Lancia il tuo browser predefinito con l'URL dato."
 
@@ -2622,7 +2622,7 @@ msgstr "Minima"
 msgid "M&odify"
 msgstr "M&odifica"
 
-#: win32\dialogs\MagnetDlg.cpp:121 win32\util\WinUtil.cpp:1548
+#: win32\dialogs\MagnetDlg.cpp:121 win32\services\LinkActions.cpp:103
 msgid "MAGNET Link detected"
 msgstr "MAGNET Link trovato"
 
@@ -2630,7 +2630,7 @@ msgstr "MAGNET Link trovato"
 msgid "MB"
 msgstr "MB"
 
-#: win32\util\WinUtil.cpp:95
+#: win32\services\Notifications.cpp:37
 msgid "Main chat message received"
 msgstr "Ricevuto un messaggio dalla chat principale"
 
@@ -2643,7 +2643,7 @@ msgstr "Gestisci &gruppi"
 msgid "Manual configuration"
 msgstr "Configurazione manuale"
 
-#: win32\util\WinUtil.cpp:545
+#: win32\frames\chat\ChatCommands.cpp:66
 msgid ""
 "Manually refreshes DC++'s share list by going through the shared directories "
 "and adding new folders and files. DC++ automatically refreshes once an hour "
@@ -2898,12 +2898,12 @@ msgid "Nicks"
 msgstr "Soprannomi"
 
 #: win32\frames\search\ADLSearchFrame.cpp:330 win32\settings\appearance\NotificationsPage.cpp:280
-#: win32\settings\appearance\NotificationsPage.cpp:286 win32\util\WinUtil.cpp:1174
+#: win32\settings\appearance\NotificationsPage.cpp:286 win32\controls\DialogControls.cpp:96
 #: win32\frames\transfers\FinishedFrameBase.h:262
 msgid "No"
 msgstr "No"
 
-#: win32\util\WinUtil.cpp:644
+#: win32\frames\chat\ChatCommands.cpp:167
 msgid "No away message"
 msgstr "Nessun messaggio di assenza"
 
@@ -2927,7 +2927,7 @@ msgstr ""
 msgid "No full tree available"
 msgstr "Nessun albero completo disponibile"
 
-#: win32\util\WinUtil.cpp:1105
+#: win32\services\HelpService.cpp:257
 msgid "No help information available"
 msgstr "Nessuna informazione di aiuto disponibile"
 
@@ -3006,11 +3006,11 @@ msgstr "Blocco note"
 msgid "Notifications"
 msgstr "Notifiche"
 
-#: win32\util\WinUtil.cpp:1120
+#: win32\controls\DialogControls.cpp:42
 msgid "OK"
 msgstr "OK"
 
-#: win32\frames\users\UsersFrame.cpp:344 win32\frames\users\UsersFrame.cpp:359 win32\util\WinUtil.cpp:742
+#: win32\frames\users\UsersFrame.cpp:344 win32\frames\users\UsersFrame.cpp:359 win32\frames\users\UserPresentation.cpp:37
 msgid "Offline"
 msgstr "Non in linea"
 
@@ -3091,7 +3091,7 @@ msgstr "Apri i  messaggi privati in una nuova finestra"
 msgid "OpenSSL version"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:549
+#: win32\frames\chat\ChatCommands.cpp:70
 msgid ""
 "Opens a new search window with the specified search string. It does not "
 "automatically send the search."
@@ -3107,11 +3107,11 @@ msgstr ""
 "Apre una finestra di messaggio all'utente, e facoltativamente invia il "
 "messaggio, se uno è stato specificato"
 
-#: win32\util\WinUtil.cpp:565
+#: win32\frames\chat\ChatCommands.cpp:86
 msgid "Opens the internal settings list debugging tool window."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:462
+#: win32\appearance\UiFonts.cpp:126
 #, boost-format
 msgid "Operators (added by %1%)"
 msgstr "Operatori (aggiunti da %1%)"
@@ -3145,7 +3145,7 @@ msgstr "Parametri"
 msgid "Partial file list loaded"
 msgstr "Elenco dei file parziali caricato"
 
-#: win32\settings\advanced\UserMatchPage.cpp:216 win32\util\WinUtil.cpp:1167
+#: win32\settings\advanced\UserMatchPage.cpp:216 win32\controls\DialogControls.cpp:89
 msgid "Partial match"
 msgstr "Corrispondenza parziale"
 
@@ -3221,7 +3221,7 @@ msgstr "Riproduci"
 msgid "Play a sound"
 msgstr "Riproduci un suono"
 
-#: win32\util\WinUtil.cpp:506
+#: win32\app\UiServices.cpp:65
 msgid "Please enter a nickname in the settings dialog!"
 msgstr "Per piacere, inserisci un soprannome nel pannello delle impostazioni!"
 
@@ -3298,11 +3298,11 @@ msgstr "Messaggio privato"
 msgid "Private message from %1%: %2%"
 msgstr "Messaggio privato da %1%: %2%"
 
-#: win32\util\WinUtil.cpp:96
+#: win32\services\Notifications.cpp:38
 msgid "Private message received"
 msgstr "Ricevuto un messaggio privato"
 
-#: win32\util\WinUtil.cpp:97
+#: win32\services\Notifications.cpp:39
 msgid "Private message window opened"
 msgstr "Aperta la finestra dei messaggi privati"
 
@@ -3410,7 +3410,6 @@ msgstr "Vuoi davvero uscire?"
 msgid "Really remove?"
 msgstr "Vuoi davvero eliminarlo?"
 
-#: win32\util\WinUtil.cpp:557
 msgid ""
 "Rebuilds the HashIndex.xml and HashData.dat files, removing entries to files "
 "that are no longer shared, or old hashes for files that have since changed. "
@@ -3496,7 +3495,7 @@ msgstr ""
 "Registra l'applicazione in Windows come gestore dei collegamenti MAGNET:URI"
 
 #: win32\frames\search\ADLSearchFrame.cpp:44 win32\frames\search\ADLSProperties.cpp:67
-#: win32\settings\advanced\UserMatchPage.cpp:216 win32\util\WinUtil.cpp:1167
+#: win32\settings\advanced\UserMatchPage.cpp:216 win32\controls\DialogControls.cpp:89
 msgid "Regular Expression"
 msgstr "Espressione regolare"
 
@@ -3534,7 +3533,7 @@ msgstr "Rimuovi gli elenchi di file lenti"
 msgid "Remove source"
 msgstr "Rimuovi fonti"
 
-#: win32\frames\queue\QueueFrame.cpp:1034 win32\util\WinUtil.cpp:1661 win32\frames\users\UserInfoBase.h:165
+#: win32\frames\queue\QueueFrame.cpp:1034 win32\frames\users\UserActions.cpp:112 win32\frames\users\UserInfoBase.h:165
 msgid "Remove user from queue"
 msgstr "Rimuovi l'utente dalla coda"
 
@@ -3605,7 +3604,7 @@ msgstr "Ricerca  - %1%"
 msgid "Search - Ready to search..."
 msgstr "Ricerca -Pronti a cercare..."
 
-#: win32\util\WinUtil.cpp:1732
+#: win32\services\LinkActions.cpp:150
 #, fuzzy, boost-format
 msgid "Search Hubs for \"%1%\""
 msgstr "Ricerca in corso di: %1%"
@@ -3618,7 +3617,7 @@ msgstr "Menu Ricerca"
 msgid "Search String"
 msgstr "Chiave di ricerca"
 
-#: win32\util\WinUtil.cpp:1738
+#: win32\services\LinkActions.cpp:156
 #, fuzzy
 msgid "Search by TTH"
 msgstr "&Cerca un hub"
@@ -3627,7 +3626,7 @@ msgstr "&Cerca un hub"
 msgid "Search for"
 msgstr "Stringa di ricerca"
 
-#: win32\util\WinUtil.cpp:805
+#: win32\services\LinkActions.cpp:48
 msgid "Search for alternates"
 msgstr "Ricerca files alternativi"
 
@@ -3700,7 +3699,7 @@ msgstr "Sicurezza & certificati"
 msgid "Security certificates"
 msgstr "Certificati di sicurezza"
 
-#: win32\util\dwtTexts.cpp:35
+#: win32\app\dwtTexts.cpp:35
 msgid "Select &All\tCtrl+A"
 msgstr "Seleziona &tutto\tCtrl+A"
 
@@ -3728,7 +3727,7 @@ msgstr "Invia una sola volta per soprannome"
 msgid "Send unknown /commands to the hub"
 msgstr "Invia comandi sconosciuti all'hub"
 
-#: win32\util\WinUtil.cpp:551
+#: win32\frames\chat\ChatCommands.cpp:72
 msgid ""
 "Sends a random DC++ advertising message to the chat, including a link to the "
 "DC++ homepage and the version number."
@@ -3758,18 +3757,18 @@ msgstr ""
 msgid "Set priority"
 msgstr "Imposta priorità"
 
-#: win32\util\WinUtil.cpp:562
+#: win32\frames\chat\ChatCommands.cpp:83
 msgid ""
 "Set the download speed limit in KiBs. Zero or omitted value disables the "
 "limit."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:563
+#: win32\frames\chat\ChatCommands.cpp:84
 msgid ""
 "Set the upload speed limit in KiBs. Zero or omitted value disables the limit."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:552
+#: win32\frames\chat\ChatCommands.cpp:73
 msgid ""
 "Sets Away status. New private message windows will be responded to, once, "
 "with the message you specified, or the default away message configured in "
@@ -3780,7 +3779,7 @@ msgstr ""
 "predefinito di assenza configurato nella pagina delle impostazioni delle "
 "informazioni personali."
 
-#: win32\util\WinUtil.cpp:548
+#: win32\frames\chat\ChatCommands.cpp:69
 msgid ""
 "Sets the current number of download slots to the number you specify. If this "
 "is less than the current number of slots, no downloads are cancelled."
@@ -3789,7 +3788,7 @@ msgstr ""
 "specificato. Se questo è inferiore al numero corrente di slot, nessun "
 "download sarà annullato."
 
-#: win32\util\WinUtil.cpp:547
+#: win32\frames\chat\ChatCommands.cpp:68
 msgid ""
 "Sets the current number of upload slots to the number you specify. If this "
 "is less than the current number of slots, no uploads are cancelled."
@@ -3917,7 +3916,7 @@ msgstr "Slot concesso"
 msgid "Slots"
 msgstr "Slot"
 
-#: win32\util\WinUtil.cpp:616
+#: win32\frames\chat\ChatCommands.cpp:139
 msgid "Slots set"
 msgstr "Imposta slot"
 
@@ -3954,11 +3953,11 @@ msgstr "Tipo di fonte"
 msgid "Source too slow"
 msgstr "Fonte troppo lenta"
 
-#: win32\util\WinUtil.cpp:546
+#: win32\frames\chat\ChatCommands.cpp:67
 msgid "Speak as a third person."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:669
+#: win32\frames\chat\ChatCommands.cpp:192
 msgid "Specify a URL"
 msgstr "Specifica un indirzzo URL"
 
@@ -3966,8 +3965,7 @@ msgstr "Specifica un indirzzo URL"
 msgid "Specify a name for this user matching definition"
 msgstr "Specifica un nome per questa definizione di corrispondenza di utente"
 
-#: win32\util\WinUtil.cpp:632 win32\util\WinUtil.cpp:651 win32\util\WinUtil.cpp:657
-#: win32\util\WinUtil.cpp:663
+#: win32\frames\chat\ChatCommands.cpp:155 win32\frames\chat\ChatCommands.cpp:174 win32\frames\chat\ChatCommands.cpp:180 win32\frames\chat\ChatCommands.cpp:186
 msgid "Specify a search string"
 msgstr "Specifica una chiave di ricerca"
 
@@ -4164,7 +4162,7 @@ msgstr "Il messaggio non può essere ricevuto perché l'hub non è in linea."
 msgid "The message cannot be delivered because the user is offline."
 msgstr "Il messaggio non può essere ricevuto perché l'utente non è in linea."
 
-#: win32\util\WinUtil.cpp:1572
+#: win32\services\LinkActions.cpp:127
 msgid "The requested link is "
 msgstr ""
 
@@ -4317,7 +4315,7 @@ msgstr "U: %1%/s (%2%)"
 msgid "Un-ignore chat"
 msgstr "Non ignorare la chat"
 
-#: win32\util\WinUtil.cpp:553
+#: win32\frames\chat\ChatCommands.cpp:74
 msgid "Un-sets Away status."
 msgstr "Disattiva lo stato di assenza."
 
@@ -4382,11 +4380,11 @@ msgstr "Slot in upload"
 msgid "Upload limit"
 msgstr "Limite di upload"
 
-#: win32\util\WinUtil.cpp:679
+#: win32\frames\chat\ChatCommands.cpp:204
 msgid "Upload limit disabled"
 msgstr "Limite in upload disabilitato"
 
-#: win32\util\WinUtil.cpp:679
+#: win32\frames\chat\ChatCommands.cpp:204
 #, boost-format
 msgid "Upload limit set to %1% KiB/s"
 msgstr "Limite di upload impostato a %1% KiB/s"
@@ -4581,7 +4579,7 @@ msgid ""
 "Click here to proceed."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1569
+#: win32\services\LinkActions.cpp:123
 msgid ""
 "Warning: Allowing content to open a program can be useful, but it can "
 "potentially harm your computer. Do not allow it unless you trust the source "
@@ -4638,7 +4636,7 @@ msgid "Write buffer size"
 msgstr "Dimensione del buffer di scrittura"
 
 #: win32\frames\search\ADLSearchFrame.cpp:330 win32\settings\appearance\NotificationsPage.cpp:287
-#: win32\util\WinUtil.cpp:1173 win32\frames\transfers\FinishedFrameBase.h:262
+#: win32\controls\DialogControls.cpp:95 win32\frames\transfers\FinishedFrameBase.h:262
 msgid "Yes"
 msgstr "Sì"
 

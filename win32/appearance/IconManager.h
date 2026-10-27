@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include <dwt/forward.h>
+#include <dwt/resources/Icon.h>
 
 /** Discovers .dcico ZIP packages and loads their application icons with a compiled-resource fallback.
  *
@@ -51,6 +51,11 @@ public:
 	static void setDarkMode(bool enabled) noexcept;
 	static void reload() noexcept;
 	static dwt::IconPtr load(unsigned resourceId, long size);
+	static dwt::IconPtr buttonIcon(unsigned id) { return load(id, 16); }
+	static dwt::IconPtr menuIcon(unsigned id) { return load(id, 16); }
+	static dwt::IconPtr statusIcon(unsigned id) { return load(id, 16); }
+	static dwt::IconPtr tabIcon(unsigned id) { return load(id, 16); }
+	static dwt::IconPtr toolbarIcon(unsigned id);
 	static const char* getFileName(unsigned resourceId) noexcept;
 	static Package inspectPackage(const std::string& path);
 	static std::vector<Package> getPackages();

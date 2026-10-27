@@ -17,6 +17,11 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/HelpService.h>
 
 #include <win32/resource.h>
 
@@ -30,7 +35,6 @@
 #include <dwt/widgets/ScrolledContainer.h>
 #include <dwt/widgets/ToolTip.h>
 
-#include <win32/util/WinUtil.h>
 
 #include <win32/settings/general/GeneralPage.h>
 
@@ -83,7 +87,7 @@ help(0),
 tip(0)
 {
 	onInitDialog([this] { return initDialog(); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 	onClosing([this] { return handleClosing(); });
 }
 
@@ -150,7 +154,7 @@ bool SettingsDialog::initDialog() {
 		const size_t setting = SETTING(SETTINGS_PAGE);
 		auto addPage = [&](const tstring& title, const std::type_info& type, std::function<PropPage* ()> create, unsigned icon, HTREEITEM parent) -> HTREEITEM {
 			auto index = static_cast<int>(pages.size());
-			images->add(*WinUtil::createIcon(icon, size.x));
+			images->add(*IconManager::load(icon, size.x));
 			auto item = tree->insert(title, parent, TVI_LAST, 0, true, index);
 			if(static_cast<size_t>(index) == setting) {
 				selectedPage = item;
@@ -212,12 +216,12 @@ bool SettingsDialog::initDialog() {
 		auto helpGrid = cur->addChild(gs);
 		helpGrid->column(0).mode = GridInfo::FILL;
 
-		auto ts = WinUtil::Seeds::Dialog::richTextBox;
+		auto ts = ControlSeeds::Dialog::richTextBox;
 		ts.style &= ~ES_SUNKEN;
 		ts.exStyle &= ~WS_EX_CLIENTEDGE;
 		ts.lines = 6;
 		help = helpGrid->addChild(ts);
-		WinUtil::setColor(help);
+		AppAppearance::setColor(help);
 		help->onRaw([this](WPARAM w, LPARAM) { return helpDlgCode(w); }, dwt::Message(WM_GETDLGCODE));
 
 		cur = cur->addChild(Grid::Seed(1, 3));
@@ -225,11 +229,11 @@ bool SettingsDialog::initDialog() {
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
 		cur->setSpacing(grid->getSpacing());
 
-		WinUtil::addDlgButtons(cur,
+		DialogControls::addDlgButtons(cur,
 			[this] { handleClosing(); handleOKClicked(); },
 			[this] { handleClosing(); endDialog(IDCANCEL); });
 
-		WinUtil::addHelpButton(cur)->onClicked([this] { WinUtil::help(this); });
+		DialogControls::addHelpButton(cur)->onClicked([this] { HelpService::help(this); });
 
 		if(!selectedPage) {
 			selectedPage = tree->getFirst();
@@ -254,14 +258,14 @@ bool SettingsDialog::initDialog() {
 		auto& ttdi = *reinterpret_cast<LPNMTTDISPINFO>(lParam);
 		auto widget = dwt::hwnd_cast<dwt::Control*>(reinterpret_cast<HWND>(ttdi.hdr.idFrom));
 		if(widget) {
-			WinUtil::helpTooltip(widget, pos);
+			HelpService::helpTooltip(widget, pos);
 		}
 		return TRUE;
 	}, dwt::Message(WM_NOTIFY, TTN_SHOW));
 
 	// kill our rich tooltip on TTN_POP.
 	tip->onRaw([this](WPARAM, LPARAM) -> LRESULT {
-		WinUtil::killHelpTooltip();
+		HelpService::killHelpTooltip();
 		return 0;
 	}, dwt::Message(WM_NOTIFY, TTN_POP));
 
@@ -298,8 +302,8 @@ PropPage* SettingsDialog::ensurePage(PageInfo& info) {
 	info.page = info.create();
 	const auto icon = info.icon;
 	info.page->onVisibilityChanged([=](bool b) { if(b) {
-		setSmallIcon(WinUtil::createIcon(icon, 16));
-		setLargeIcon(WinUtil::createIcon(icon, 32));
+		setSmallIcon(IconManager::load(icon, 16));
+		setLargeIcon(IconManager::load(icon, 32));
 	} });
 
 	if(tip) {
@@ -348,7 +352,7 @@ BOOL CALLBACK SettingsDialog::EnumChildProc(HWND hwnd, LPARAM lParam) {
 }
 
 void SettingsDialog::handleChildHelp(dwt::Control* widget) {
-	const auto text = Text::toT(WinUtil::getHelpText(widget->getHelpId()).second);
+	const auto text = Text::toT(HelpService::getHelpText(widget->getHelpId()).second);
 	if(help->getText() != text) help->setText(text);
 }
 

@@ -19,6 +19,11 @@
 #define DCPLUSPLUS_WIN32_ASPECT_CHAT_H
 
 #include <dcpp/chat/ChatMessage.h>
+#include <dcpp/text/format.h>
+#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/frames/chat/ChatText.h>
 #include <dcpp/system/File.h>
 #include <dcpp/chat/RichText.h>
 #include <dcpp/share/ShareManager.h>
@@ -40,7 +45,6 @@
 #include <win32/controls/HtmlToRtf.h>
 #include <win32/controls/RichTextEditorDlg.h>
 #include <win32/controls/RichTextBox.h>
-#include <win32/util/WinUtil.h>
 
 template<typename T>
 class AspectChat {
@@ -64,7 +68,7 @@ protected:
 
 	void createChat(dwt::Widget *parent) {
 		{
-			RichTextBox::Seed cs = WinUtil::Seeds::richTextBox;
+			RichTextBox::Seed cs = ControlSeeds::richTextBox;
 			cs.style |= ES_READONLY;
 			chat = dwt::WidgetCreator<RichTextBox>::create(parent, cs);
 			chat->setTextLimit(1024*64*2);
@@ -72,7 +76,7 @@ protected:
 		}
 
 		{
-			TextBox::Seed cs = WinUtil::Seeds::textBox;
+			TextBox::Seed cs = ControlSeeds::textBox;
 			cs.style |= WS_VSCROLL | ES_AUTOVSCROLL | ES_MULTILINE | ES_NOHIDESEL;
 			message = t().addChild(cs);
 			message->onUpdated([this] { this->handleMessageUpdated(); });
@@ -96,7 +100,7 @@ protected:
 		t().setDragAcceptFiles(false);
 
 		{
-			auto cs = WinUtil::Seeds::button;
+			auto cs = ControlSeeds::button;
 			cs.caption = T_("RTF...");
 			richTextButton = t().addChild(cs);
 			richTextButton->setVisible(false);
@@ -589,7 +593,7 @@ private:
 
 	void findText(bool next) {
 		tstring text;
-		WinUtil::getChatSelText(chat, text, chat->getContextMenuPos());
+		ChatText::getChatSelText(chat, text, chat->getContextMenuPos());
 
 		next ? chat->findTextNext(text) : chat->findTextNew(text);
 	}

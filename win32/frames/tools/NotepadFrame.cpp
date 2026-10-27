@@ -16,6 +16,11 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/frames/chat/ChatText.h>
+#include <win32/services/LinkActions.h>
 
 #include <win32/frames/tools/NotepadFrame.h>
 
@@ -34,11 +39,11 @@ NotepadFrame::NotepadFrame(TabViewPtr parent) :
 	pad(0)
 {
 	{
-		TextBox::Seed cs = WinUtil::Seeds::textBox;
+		TextBox::Seed cs = ControlSeeds::textBox;
 		cs.style |= WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_NOHIDESEL | ES_WANTRETURN;
 		pad = addChild(cs);
 		addWidget(pad, AUTO_FOCUS, false);
-		WinUtil::handleDblClicks(pad);
+		LinkActions::handleDblClicks(pad);
 
 		pad->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return handleMenu(sc); });
 	}
@@ -106,14 +111,14 @@ MenuPtr NotepadFrame::makeMenu(dwt::ScreenCoordinate pt) {
 
 	string name, hash, key;
 	tstring searchText;
-	WinUtil::getChatSelText(pad, searchText, pt);
+	ChatText::getChatSelText(pad, searchText, pt);
 
 	if (!searchText.empty()) {
 		if(searchText.size() > 8 && Magnet::parseUri(Text::fromT(searchText), hash, name, key) && (!name.empty() || !key.empty())) {
 			searchText = name.empty() ? Text::toT(key) : Text::toT(name);
 		}
 
-		WinUtil::addSearchMenu(menu.get(), searchText, hash);
+		LinkActions::addSearchMenu(menu.get(), searchText, hash);
 	}
 
 	return menu;

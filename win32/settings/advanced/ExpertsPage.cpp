@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/advanced/ExpertsPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -25,7 +28,6 @@
 #include <dwt/widgets/Label.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 #include <win32/dialogs/ItemsEditDlg.h>
 
 using dwt::Grid;
@@ -84,7 +86,7 @@ void ExpertsPage::addItem(const tstring& text, int setting, bool isInt, unsigned
 	auto cur = group->addChild(Grid::Seed(1, 2));
 	cur->column(0).mode = GridInfo::FILL;
 
-	auto box = cur->addChild(isInt ? WinUtil::Seeds::Dialog::intTextBox : WinUtil::Seeds::Dialog::textBox);
+	auto box = cur->addChild(isInt ? ControlSeeds::Dialog::intTextBox : ControlSeeds::Dialog::textBox);
 	items.emplace_back(box, setting, isInt ? PropPage::T_INT : PropPage::T_STR);
 
 	if(text2.empty())
@@ -101,7 +103,7 @@ void ExpertsPage::AddWhitelistUI()
 	auto cur = group->addChild(Grid::Seed(1, 2));
 	cur->column(0).mode = GridInfo::FILL;
 
-	TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+	TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::textBox);
 	items.emplace_back(box, SettingsManager::WHITELIST_OPEN_URIS, PropPage::T_STR);
 
 	box->setText(Text::toT(SETTING(WHITELIST_OPEN_URIS)));

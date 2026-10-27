@@ -19,6 +19,8 @@
 #define DCPLUSPLUS_WIN32_STDAFX_H
 
 #include <dcpp/compiler.h>
+#include <dcpp/text/format.h>
+#include <dcpp/util/Util.h>
 #include "compiler.h"
 
 #include <dcpp/stdinc.h>

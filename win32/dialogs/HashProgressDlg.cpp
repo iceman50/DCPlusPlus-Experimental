@@ -16,6 +16,11 @@
  */
 
 #include "stdafx.h"
+#include <dwt/widgets/GroupBox.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/HelpService.h>
 
 #include <win32/resource.h>
 
@@ -27,7 +32,6 @@
 
 #include <dcpp/text/format.h>
 #include <dcpp/hash/HashManager.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -47,7 +51,7 @@ pauseResume(0),
 autoClose(aAutoClose)
 {
 	onInitDialog([this] { return handleInitDialog(); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 }
 
 HashProgressDlg::~HashProgressDlg() {
@@ -85,7 +89,7 @@ bool HashProgressDlg::handleInitDialog() {
 		cur->column(1).mode = GridInfo::FILL;
 		cur->column(1).align = GridInfo::BOTTOM_RIGHT;
 
-		pair<ButtonPtr, ButtonPtr> buttons = WinUtil::addDlgButtons(cur,
+		pair<ButtonPtr, ButtonPtr> buttons = DialogControls::addDlgButtons(cur,
 			[this] { endDialog(IDOK); },
 			[this] { endDialog(IDCANCEL); });
 		buttons.first->setText(T_("Run in background"));
@@ -106,8 +110,8 @@ bool HashProgressDlg::handleInitDialog() {
 	setTimer([this] { return updateStats(); }, 1000);
 
 	setText(T_("Creating file index..."));
-	setSmallIcon(WinUtil::createIcon(IDI_INDEXING, 16));
-	setLargeIcon(WinUtil::createIcon(IDI_INDEXING, 32));
+	setSmallIcon(IconManager::load(IDI_INDEXING, 16));
+	setLargeIcon(IconManager::load(IDI_INDEXING, 32));
 
 	layout();
 	centerWindow();

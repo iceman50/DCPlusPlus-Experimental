@@ -8,6 +8,16 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <unordered_map>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/KeyState.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/shell/ClipboardActions.h>
 
 #include <win32/frames/bbs/BBSFrame.h>
 
@@ -72,14 +82,14 @@ string getThreadKey(const BBSEntry& entry) {
 const string BBSFrame::id = "BBS";
 const string& BBSFrame::getId() const { return id; }
 
-static const ColumnInfo boardColumns[] = {
+static const TableLayout::ColumnInfo boardColumns[] = {
 	{ N_("Board"), 180, false },
 	{ N_("Name"), 120, false },
 	{ N_("State"), 110, false },
 	{ N_("Posts"), 70, true }
 };
 
-static const ColumnInfo entryColumns[] = {
+static const TableLayout::ColumnInfo entryColumns[] = {
 	{ N_("Subject"), 260, false },
 	{ N_("Author"), 120, false },
 	{ N_("Indexed"), 120, false },
@@ -187,11 +197,11 @@ BBSFrame::BBSFrame(TabViewPtr parent, string&& aUrl, HubFrame* aHubFrame) :
 	paned = addChild(SplitterContainer::Seed(SETTING(BBSFRAME_PANED_POS)));
 
 	{
-		auto seed = WinUtil::Seeds::table;
+		auto seed = ControlSeeds::table;
 		seed.style |= LVS_NOSORTHEADER;
 		boards = paned->addChild(WidgetBoards::Seed(seed));
 		addWidget(boards);
-		WinUtil::makeColumns(boards, boardColumns, BOARD_COLUMN_LAST, SETTING(BBSFRAME_BOARDS_ORDER), SETTING(BBSFRAME_BOARDS_WIDTHS));
+		TableLayout::makeColumns(boards, boardColumns, BOARD_COLUMN_LAST, SETTING(BBSFRAME_BOARDS_ORDER), SETTING(BBSFRAME_BOARDS_WIDTHS));
 		boards->onSelectionChanged([this] { handleBoardSelection(); });
 		boards->onContextMenu([this](const dwt::ScreenCoordinate& point) { return handleBoardContextMenu(point); });
 	}
@@ -199,11 +209,11 @@ BBSFrame::BBSFrame(TabViewPtr parent, string&& aUrl, HubFrame* aHubFrame) :
 	contentPaned = paned->addChild(SplitterContainer::Seed(SETTING(BBSFRAME_CONTENT_PANED_POS)));
 
 	{
-		auto seed = WinUtil::Seeds::table;
+		auto seed = ControlSeeds::table;
 		seed.style |= LVS_NOSORTHEADER;
 		entries = contentPaned->addChild(WidgetEntries::Seed(seed));
 		addWidget(entries, ALWAYS_FOCUS);
-		WinUtil::makeColumns(entries, entryColumns, ENTRY_COLUMN_LAST, SETTING(BBSFRAME_ENTRIES_ORDER), SETTING(BBSFRAME_ENTRIES_WIDTHS));
+		TableLayout::makeColumns(entries, entryColumns, ENTRY_COLUMN_LAST, SETTING(BBSFRAME_ENTRIES_ORDER), SETTING(BBSFRAME_ENTRIES_WIDTHS));
 		entries->onSelectionChanged([this] { handleEntrySelection(); });
 		entries->onDblClicked([this] { handleFetch(); });
 		entries->onKeyDown([this](int key) { return handleEntriesKeyDown(key); });
@@ -222,10 +232,10 @@ BBSFrame::BBSFrame(TabViewPtr parent, string&& aUrl, HubFrame* aHubFrame) :
 		documentMeta = documentGrid->addChild(Label::Seed());
 		documentGrid->setWidget(documentMeta, 1, 0);
 
-		RichTextBox::Seed seed = WinUtil::Seeds::richTextBox;
+		RichTextBox::Seed seed = ControlSeeds::richTextBox;
 		seed.style |= ES_READONLY | WS_VSCROLL;
 		documentView = dwt::WidgetCreator<RichTextBox>::create(documentGrid, seed);
-		WinUtil::setColor(documentView);
+		AppAppearance::setColor(documentView);
 		documentView->setTextLimit(static_cast<int>(BBSManager::MAX_DOCUMENT_SIZE * 2));
 		documentGrid->setWidget(documentView, 2, 0);
 		addWidget(documentView);
@@ -236,18 +246,18 @@ BBSFrame::BBSFrame(TabViewPtr parent, string&& aUrl, HubFrame* aHubFrame) :
 		auto toolbarSeed = ToolBar::Seed();
 		toolbarSeed.style &= ~CCS_ADJUSTABLE;
 		toolbar = addChild(toolbarSeed);
-		toolbar->addButton(BUTTON_REFRESH, WinUtil::toolbarIcon(IDI_REFRESH), nullptr, T_("Refresh"), false, IDH_HUB, [this] { refreshBoards(); });
-		toolbar->addButton(BUTTON_SUBSCRIBE, WinUtil::toolbarIcon(IDI_PLAY), nullptr, T_("Subscribe"), false, IDH_HUB, [this] { handleSubscribe(); });
-		toolbar->addButton(BUTTON_LEAVE, WinUtil::toolbarIcon(IDI_PAUSE), nullptr, T_("Leave board"), false, IDH_HUB, [this] { handleLeave(); });
-		toolbar->addButton(BUTTON_NEW, WinUtil::toolbarIcon(IDI_NOTEPAD), nullptr, T_("New thread"), false, IDH_HUB, [this] { handleNewThread(); });
-		toolbar->addButton(BUTTON_REPLY, WinUtil::toolbarIcon(IDI_CHAT), nullptr, T_("Reply"), false, IDH_HUB, [this] { handleReply(); });
-		toolbar->addButton(BUTTON_FETCH, WinUtil::toolbarIcon(IDI_DOWNLOAD), nullptr, T_("Fetch and verify post"), false, IDH_HUB, [this] { handleFetch(); });
-		toolbar->addButton(BUTTON_WITHDRAW, WinUtil::toolbarIcon(IDI_DELETE), nullptr, T_("Withdraw post"), false, IDH_HUB, [this] { handleWithdraw(); });
-		toolbar->addButton(BUTTON_COPY_TTH, WinUtil::toolbarIcon(IDI_MAGNET), nullptr, T_("Copy post TTH"), false, IDH_HUB, [this] { handleCopyTTH(); });
+		toolbar->addButton(BUTTON_REFRESH, IconManager::toolbarIcon(IDI_REFRESH), nullptr, T_("Refresh"), false, IDH_HUB, [this] { refreshBoards(); });
+		toolbar->addButton(BUTTON_SUBSCRIBE, IconManager::toolbarIcon(IDI_PLAY), nullptr, T_("Subscribe"), false, IDH_HUB, [this] { handleSubscribe(); });
+		toolbar->addButton(BUTTON_LEAVE, IconManager::toolbarIcon(IDI_PAUSE), nullptr, T_("Leave board"), false, IDH_HUB, [this] { handleLeave(); });
+		toolbar->addButton(BUTTON_NEW, IconManager::toolbarIcon(IDI_NOTEPAD), nullptr, T_("New thread"), false, IDH_HUB, [this] { handleNewThread(); });
+		toolbar->addButton(BUTTON_REPLY, IconManager::toolbarIcon(IDI_CHAT), nullptr, T_("Reply"), false, IDH_HUB, [this] { handleReply(); });
+		toolbar->addButton(BUTTON_FETCH, IconManager::toolbarIcon(IDI_DOWNLOAD), nullptr, T_("Fetch and verify post"), false, IDH_HUB, [this] { handleFetch(); });
+		toolbar->addButton(BUTTON_WITHDRAW, IconManager::toolbarIcon(IDI_DELETE), nullptr, T_("Withdraw post"), false, IDH_HUB, [this] { handleWithdraw(); });
+		toolbar->addButton(BUTTON_COPY_TTH, IconManager::toolbarIcon(IDI_MAGNET), nullptr, T_("Copy post TTH"), false, IDH_HUB, [this] { handleCopyTTH(); });
 		toolbar->setLayout({ BUTTON_REFRESH, string(), BUTTON_SUBSCRIBE, BUTTON_LEAVE, string(), BUTTON_NEW, BUTTON_REPLY, BUTTON_FETCH, BUTTON_WITHDRAW, BUTTON_COPY_TTH });
 		rebar->add(toolbar, RBBS_NOGRIPPER);
 
-		filter = addChild(WinUtil::Seeds::textBox);
+		filter = addChild(ControlSeeds::textBox);
 		filter->setCue(T_("Filter posts"));
 		filter->onUpdated([this] { if(!refreshing) refreshEntries(); });
 		addWidget(filter);
@@ -256,7 +266,7 @@ BBSFrame::BBSFrame(TabViewPtr parent, string&& aUrl, HubFrame* aHubFrame) :
 	}
 
 	initStatus();
-	status->setIcon(STATUS_CONNECTION, WinUtil::statusIcon(IDI_HUB_OFF));
+	status->setIcon(STATUS_CONNECTION, IconManager::statusIcon(IDI_HUB_OFF));
 	status->setToolTip(STATUS_CONNECTION, T_("BBS0 connection state"));
 
 	addAccel(FCONTROL, 'N', [this] { handleNewThread(); });
@@ -293,15 +303,15 @@ bool BBSFrame::preClosing() {
 void BBSFrame::postClosing() {
 	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_PANED_POS, paned->getSplitterPos(0));
 	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_CONTENT_PANED_POS, contentPaned->getSplitterPos(0));
-	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_BOARDS_ORDER, WinUtil::toString(boards->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_BOARDS_WIDTHS, WinUtil::toString(boards->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_ENTRIES_ORDER, WinUtil::toString(entries->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_ENTRIES_WIDTHS, WinUtil::toString(entries->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_BOARDS_ORDER, TableLayout::toString(boards->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_BOARDS_WIDTHS, TableLayout::toString(boards->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_ENTRIES_ORDER, TableLayout::toString(entries->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::BBSFRAME_ENTRIES_WIDTHS, TableLayout::toString(entries->getColumnWidths()));
 }
 
 void BBSFrame::tabMenuImpl(dwt::Menu* menu) {
-	menu->appendItem(T_("Open &hub"), [this] { handleOpenHub(); }, WinUtil::menuIcon(IDI_HUB));
-	menu->appendItem(T_("Copy hub &address"), [this] { WinUtil::setClipboard(Text::toT(url)); });
+	menu->appendItem(T_("Open &hub"), [this] { handleOpenHub(); }, IconManager::menuIcon(IDI_HUB));
+	menu->appendItem(T_("Copy hub &address"), [this] { ClipboardActions::setClipboard(Text::toT(url)); });
 	menu->appendSeparator();
 }
 
@@ -311,7 +321,7 @@ void BBSFrame::updateTitle() {
 	setText(T_("Bulletin boards") + _T(" - ") + Text::toT(BBSManager::sanitizeDisplayText(hubName, 256)));
 	const auto online = isOnline();
 	status->setText(STATUS_CONNECTION, online ? T_("Online") : T_("Offline cache"), true);
-	status->setIcon(STATUS_CONNECTION, WinUtil::statusIcon(online ? IDI_HUB : IDI_HUB_OFF), true);
+	status->setIcon(STATUS_CONNECTION, IconManager::statusIcon(online ? IDI_HUB : IDI_HUB_OFF), true);
 }
 
 void BBSFrame::updateActions() {
@@ -645,7 +655,7 @@ void BBSFrame::handleWithdraw() {
 
 void BBSFrame::handleCopyTTH() {
 	auto entry = getSelectedEntry();
-	if(entry) WinUtil::setClipboard(Text::toT(entry->tth));
+	if(entry) ClipboardActions::setClipboard(Text::toT(entry->tth));
 }
 
 void BBSFrame::handleOpenHub() {
@@ -655,12 +665,12 @@ void BBSFrame::handleOpenHub() {
 bool BBSFrame::handleBoardContextMenu(dwt::ScreenCoordinate point) {
 	auto board = getSelectedBoard();
 	if(!board) return false;
-	auto menu = addChild(WinUtil::Seeds::menu);
-	menu->setTitle(Text::toT(BBSManager::sanitizeDisplayText(board->title.empty() ? board->name : board->title)), WinUtil::menuIcon(IDI_CHAT));
-	menu->appendItem(T_("&Subscribe"), [this] { handleSubscribe(); }, WinUtil::menuIcon(IDI_PLAY), isOnline() && board->canSubscribe() && !board->subscribed);
-	menu->appendItem(T_("&Leave board"), [this] { handleLeave(); }, WinUtil::menuIcon(IDI_PAUSE), isOnline() && board->subscribed);
+	auto menu = addChild(ControlSeeds::menu);
+	menu->setTitle(Text::toT(BBSManager::sanitizeDisplayText(board->title.empty() ? board->name : board->title)), IconManager::menuIcon(IDI_CHAT));
+	menu->appendItem(T_("&Subscribe"), [this] { handleSubscribe(); }, IconManager::menuIcon(IDI_PLAY), isOnline() && board->canSubscribe() && !board->subscribed);
+	menu->appendItem(T_("&Leave board"), [this] { handleLeave(); }, IconManager::menuIcon(IDI_PAUSE), isOnline() && board->subscribed);
 	menu->appendSeparator();
-	menu->appendItem(T_("&New thread...\tCtrl+N"), [this] { handleNewThread(); }, WinUtil::menuIcon(IDI_NOTEPAD), isOnline() && board->canPost());
+	menu->appendItem(T_("&New thread...\tCtrl+N"), [this] { handleNewThread(); }, IconManager::menuIcon(IDI_NOTEPAD), isOnline() && board->canPost());
 	menu->open(point);
 	return true;
 }
@@ -669,23 +679,23 @@ bool BBSFrame::handleEntryContextMenu(dwt::ScreenCoordinate point) {
 	auto entry = getSelectedEntry();
 	if(!entry) return false;
 	auto board = getSelectedBoard();
-	auto menu = addChild(WinUtil::Seeds::menu);
-	menu->setTitle(Text::toT(BBSManager::sanitizeDisplayText(entry->subject.empty() ? entry->tth : entry->subject)), WinUtil::menuIcon(IDI_CHAT));
-	menu->appendItem(T_("&Fetch and verify"), [this] { handleFetch(); }, WinUtil::menuIcon(IDI_DOWNLOAD), !BBSManager::getInstance()->getDocument(entry->tth) && !BBSManager::getInstance()->isDocumentPending(url, currentBoard, entry->tth));
-	menu->appendItem(T_("&Reply...\tCtrl+R"), [this] { handleReply(); }, WinUtil::menuIcon(IDI_CHAT), board && isOnline() && board->canReply());
+	auto menu = addChild(ControlSeeds::menu);
+	menu->setTitle(Text::toT(BBSManager::sanitizeDisplayText(entry->subject.empty() ? entry->tth : entry->subject)), IconManager::menuIcon(IDI_CHAT));
+	menu->appendItem(T_("&Fetch and verify"), [this] { handleFetch(); }, IconManager::menuIcon(IDI_DOWNLOAD), !BBSManager::getInstance()->getDocument(entry->tth) && !BBSManager::getInstance()->isDocumentPending(url, currentBoard, entry->tth));
+	menu->appendItem(T_("&Reply...\tCtrl+R"), [this] { handleReply(); }, IconManager::menuIcon(IDI_CHAT), board && isOnline() && board->canReply());
 	const auto myCID = getMyCID();
 	const auto canWithdraw = board && isOnline() && (board->canWithdrawAny() || (!myCID.empty() && entry->authorId == myCID && board->canWithdrawOwn()));
-	menu->appendItem(T_("&Withdraw"), [this] { handleWithdraw(); }, WinUtil::menuIcon(IDI_DELETE), canWithdraw);
+	menu->appendItem(T_("&Withdraw"), [this] { handleWithdraw(); }, IconManager::menuIcon(IDI_DELETE), canWithdraw);
 	menu->appendSeparator();
-	menu->appendItem(T_("Copy &TTH"), [this] { handleCopyTTH(); }, WinUtil::menuIcon(IDI_MAGNET));
+	menu->appendItem(T_("Copy &TTH"), [this] { handleCopyTTH(); }, IconManager::menuIcon(IDI_MAGNET));
 	menu->open(point);
 	return true;
 }
 
 bool BBSFrame::handleEntriesKeyDown(int key) {
-	if(key == VK_RETURN && !WinUtil::isCtrl() && !WinUtil::isShift() && !WinUtil::isAlt()) { handleFetch(); return true; }
+	if(key == VK_RETURN && !KeyState::isCtrl() && !KeyState::isShift() && !KeyState::isAlt()) { handleFetch(); return true; }
 	if(key == VK_DELETE) { handleWithdraw(); return true; }
-	if(key == 'C' && WinUtil::isCtrl()) { handleCopyTTH(); return true; }
+	if(key == 'C' && KeyState::isCtrl()) { handleCopyTTH(); return true; }
 	return false;
 }
 

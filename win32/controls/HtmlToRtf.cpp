@@ -19,6 +19,7 @@
 // inspired by Bjarke Viksoe's Simple HTML Viewer <https://www.viksoe.dk/code/simplehtmlviewer.htm>.
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
 #include <win32/controls/HtmlToRtf.h>
 
 #include <win32/appearance/Emoticons.h>

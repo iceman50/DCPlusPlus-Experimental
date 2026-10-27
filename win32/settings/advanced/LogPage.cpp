@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/advanced/LogPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -26,7 +28,6 @@
 #include <dwt/widgets/Label.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -72,7 +73,7 @@ oldSelection(-1)
 		cur->column(1).mode = GridInfo::FILL;
 
 		cur->addChild(Label::Seed(T_("Directory")))->setHelpId(IDH_SETTINGS_LOG_DIRECTORY);
-		dir = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		dir = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(dir, SettingsManager::LOG_DIRECTORY, PropPage::T_STR);
 		dir->setHelpId(IDH_SETTINGS_LOG_DIRECTORY);
 
@@ -81,7 +82,7 @@ oldSelection(-1)
 		browse->setHelpId(IDH_SETTINGS_LOG_DIRECTORY);
 	}
 
-	options = grid->addChild(WinUtil::Seeds::Dialog::optionsTable);
+	options = grid->addChild(ControlSeeds::Dialog::optionsTable);
 
 	{
 		GridPtr cur = grid->addChild(Grid::Seed(2, 2));
@@ -89,10 +90,10 @@ oldSelection(-1)
 		cur->column(1).mode = GridInfo::FILL;
 
 		cur->addChild(Label::Seed(T_("Format")));
-		logFormat = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		logFormat = cur->addChild(ControlSeeds::Dialog::textBox);
 
 		cur->addChild(Label::Seed(T_("Filename")));
-		logFile = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		logFile = cur->addChild(ControlSeeds::Dialog::textBox);
 	}
 
 	{

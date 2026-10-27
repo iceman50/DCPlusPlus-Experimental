@@ -16,6 +16,10 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/HelpService.h>
 #include <win32/frames/favorites/FavHubProperties.h>
 
 #include <dcpp/favorites/FavoriteManager.h>
@@ -33,7 +37,6 @@
 #include <win32/frames/favorites/FavHubGroupsDlg.h>
 #include <win32/frames/hub/HubFrame.h>
 #include <win32/controls/HoldRedraw.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -64,7 +67,7 @@ updatingShareFolders(false),
 entry(_entry)
 {
 	onInitDialog([this] { return handleInitDialog(); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 }
 
 FavHubProperties::~FavHubProperties() {
@@ -90,25 +93,25 @@ bool FavHubProperties::handleInitDialog() {
 		cur->column(1).mode = GridInfo::FILL;
 
 		cur->addChild(Label::Seed(T_("Name")))->setHelpId(IDH_FAVORITE_HUB_NAME);
-		name = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		name = cur->addChild(ControlSeeds::Dialog::textBox);
 		name->setText(Text::toT(entry->getName()));
 		name->setHelpId(IDH_FAVORITE_HUB_NAME);
 
 		cur->addChild(Label::Seed(T_("Address")))->setHelpId(IDH_FAVORITE_HUB_ADDRESS);
-		address = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		address = cur->addChild(ControlSeeds::Dialog::textBox);
 		address->setText(Text::toT(entry->getServer()));
 		address->setHelpId(IDH_FAVORITE_HUB_ADDRESS);
-		WinUtil::preventSpaces(address);
+		DialogControls::preventSpaces(address);
 
 		cur->addChild(Label::Seed(T_("Description")))->setHelpId(IDH_FAVORITE_HUB_DESC);
-		hubDescription = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		hubDescription = cur->addChild(ControlSeeds::Dialog::textBox);
 		hubDescription->setText(Text::toT(entry->getHubDescription()));
 		hubDescription->setHelpId(IDH_FAVORITE_HUB_DESC);
 
 		if(!isAdcHub)
 		{
 			cur->addChild(Label::Seed(T_("Encoding")))->setHelpId(IDH_FAVORITE_HUB_ENCODING);
-			encoding = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+			encoding = cur->addChild(ControlSeeds::Dialog::comboBox);
 			encoding->setHelpId(IDH_FAVORITE_HUB_ENCODING);
 
 			fillEncodings();
@@ -124,39 +127,39 @@ bool FavHubProperties::handleInitDialog() {
 		cur->column(1).mode = GridInfo::FILL;
 
 		cur->addChild(Label::Seed(T_("Nick")))->setHelpId(IDH_FAVORITE_HUB_NICK);
-		nick = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		nick = cur->addChild(ControlSeeds::Dialog::textBox);
 		nick->setText(Text::toT(entry->get(HubSettings::Nick)));
 		nick->setHelpId(IDH_FAVORITE_HUB_NICK);
-		WinUtil::preventSpaces(nick);
+		DialogControls::preventSpaces(nick);
 
 		cur->addChild(Label::Seed(T_("Password")))->setHelpId(IDH_FAVORITE_HUB_PASSWORD);
-		password = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		password = cur->addChild(ControlSeeds::Dialog::textBox);
 		password->setPassword();
 		password->setText(Text::toT(entry->getPassword()));
 		password->setHelpId(IDH_FAVORITE_HUB_PASSWORD);
-		WinUtil::preventSpaces(password);
+		DialogControls::preventSpaces(password);
 
 		cur->addChild(Label::Seed(T_("Description")))->setHelpId(IDH_FAVORITE_HUB_USER_DESC);
-		description = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		description = cur->addChild(ControlSeeds::Dialog::textBox);
 		description->setText(Text::toT(entry->get(HubSettings::Description)));
 		description->setHelpId(IDH_FAVORITE_HUB_USER_DESC);
 
 		cur->addChild(Label::Seed(T_("Email")))->setHelpId(IDH_FAVORITE_HUB_EMAIL);
-		email = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		email = cur->addChild(ControlSeeds::Dialog::textBox);
 		email->setText(Text::toT(entry->get(HubSettings::Email)));
 		email->setHelpId(IDH_FAVORITE_HUB_EMAIL);
 
 		cur->addChild(Label::Seed(T_("IPv4")))->setHelpId(IDH_FAVORITE_HUB_USER_IP);
-		userIp = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		userIp = cur->addChild(ControlSeeds::Dialog::textBox);
 		userIp->setText(Text::toT(entry->get(HubSettings::UserIp)));
 		userIp->setHelpId(IDH_FAVORITE_HUB_USER_IP);
-		WinUtil::preventSpaces(userIp);
+		DialogControls::preventSpaces(userIp);
 
 		cur->addChild(Label::Seed(T_("IPv6")))->setHelpId(IDH_FAVORITE_HUB_USER_IP6);
-		userIp6 = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		userIp6 = cur->addChild(ControlSeeds::Dialog::textBox);
 		userIp6->setText(Text::toT(entry->get(HubSettings::UserIp6)));
 		userIp6->setHelpId(IDH_FAVORITE_HUB_USER_IP6);
-		WinUtil::preventSpaces(userIp6);
+		DialogControls::preventSpaces(userIp6);
 	}
 
 	{
@@ -166,22 +169,22 @@ bool FavHubProperties::handleInitDialog() {
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
 
 		cur->addChild(Label::Seed(T_("Show joins / parts in chat by default")));
-		showJoins = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
-		WinUtil::fillTriboolCombo(showJoins);
+		showJoins = cur->addChild(ControlSeeds::Dialog::comboBox);
+		DialogControls::fillTriboolCombo(showJoins);
 		showJoins->setSelected(toInt(entry->get(HubSettings::ShowJoins)));
 
 		cur->addChild(Label::Seed(T_("Only show joins / parts for favorite users")));
-		favShowJoins = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
-		WinUtil::fillTriboolCombo(favShowJoins);
+		favShowJoins = cur->addChild(ControlSeeds::Dialog::comboBox);
+		DialogControls::fillTriboolCombo(favShowJoins);
 		favShowJoins->setSelected(toInt(entry->get(HubSettings::FavShowJoins)));
 
 		cur->addChild(Label::Seed(T_("Log main chat")));
-		logMainChat = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
-		WinUtil::fillTriboolCombo(logMainChat);
+		logMainChat = cur->addChild(ControlSeeds::Dialog::comboBox);
+		DialogControls::fillTriboolCombo(logMainChat);
 		logMainChat->setSelected(toInt(entry->get(HubSettings::LogMainChat)));
 
 		cur->addChild(Label::Seed(T_("User icon size")));
-		userIconSize = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+		userIconSize = cur->addChild(ControlSeeds::Dialog::comboBox);
 		userIconSize->addValue(T_("Default"));
 		int selectedSize = 0;
 		for(size_t i = 0; i < std::size(HubSettings::userIconSizes); ++i) {
@@ -198,7 +201,7 @@ bool FavHubProperties::handleInitDialog() {
 		auto cur = group->addChild(Grid::Seed(1, 2));
 		cur->column(0).mode = GridInfo::FILL;
 
-		auto seed = WinUtil::Seeds::Dialog::comboBox;
+		auto seed = ControlSeeds::Dialog::comboBox;
 		seed.style |= CBS_SORT;
 		groups = cur->addChild(seed);
 		groups->setHelpId(IDH_FAVORITE_HUB_GROUP);
@@ -268,7 +271,7 @@ bool FavHubProperties::handleInitDialog() {
 		});
 	}
 
-	WinUtil::addDlgButtons(grid,
+	DialogControls::addDlgButtons(grid,
 		[this] { handleOKClicked(); },
 		[this] { endDialog(IDCANCEL); });
 

@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/TableLayout.h>
 
 #include <win32/resource.h>
 
@@ -34,7 +37,6 @@
 #include <dcpp/version.h>
 #include <win32/dialogs/ParamDlg.h>
 #include <win32/dialogs/HashProgressDlg.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::FolderDialog;
 using dwt::Grid;
@@ -42,7 +44,7 @@ using dwt::GridInfo;
 using dwt::Label;
 using dwt::Spinner;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ N_("Virtual name"), 100, false },
 	{ N_("Directory"), 100, false },
 	{ N_("Size"), 100, true }
@@ -71,7 +73,7 @@ remove(0)
 		cur->row(0).align = GridInfo::STRETCH;
 		cur->setSpacing(6);
 
-		Table::Seed seed = WinUtil::Seeds::Dialog::table;
+		Table::Seed seed = ControlSeeds::Dialog::table;
 		seed.exStyle |= WS_EX_ACCEPTFILES;
 		directories = cur->addChild(seed);
 
@@ -104,7 +106,7 @@ remove(0)
 
 		cur->addChild(Label::Seed(T_("Upload slots")))->setHelpId(IDH_SETTINGS_UPLOAD_SLOTS);
 
-		TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::SLOTS_PRIMARY, PropPage::T_INT_WITH_SPIN);
 		box->setHelpId(IDH_SETTINGS_UPLOAD_SLOTS);
 
@@ -116,7 +118,7 @@ remove(0)
 
 		cur->addChild(Label::Seed(T_("Automatically open an extra slot if speed is below (0 = disable)")))->setHelpId(IDH_SETTINGS_UPLOAD_MIN_UPLOAD_SPEED);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::MIN_UPLOAD_SPEED, PropPage::T_INT_WITH_SPIN);
 		box->setHelpId(IDH_SETTINGS_UPLOAD_MIN_UPLOAD_SPEED);
 
@@ -128,7 +130,7 @@ remove(0)
 
 		cur->addChild(Label::Seed(T_("Max extra upload slots")))->setHelpId(IDH_SETTINGS_MAX_EXTRA_UPLOAD_SLOTS);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::MAX_EXTRA_SLOTS, PropPage::T_INT_WITH_SPIN);
 		box->setHelpId(IDH_SETTINGS_MAX_EXTRA_UPLOAD_SLOTS);
 
@@ -141,7 +143,7 @@ remove(0)
 
 	PropPage::read(items);
 
-	WinUtil::makeColumns(directories, columns, 3);
+	TableLayout::makeColumns(directories, columns, 3);
 
 	fillList();
 

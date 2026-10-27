@@ -8,6 +8,9 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/DialogControls.h>
 
 #include <win32/frames/bbs/BBSPostDlg.h>
 
@@ -22,7 +25,6 @@
 #include <dwt/widgets/TextBox.h>
 
 #include <win32/controls/RichTextEditorDlg.h>
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using dwt::Grid;
@@ -68,13 +70,13 @@ bool BBSPostDlg::handleInitDialog() {
 	subjectRow->setSpacing(grid->getSpacing());
 	grid->setWidget(subjectRow, 1, 0);
 	subjectRow->addChild(Label::Seed(T_("Subject:")));
-	subject = subjectRow->addChild(WinUtil::Seeds::Dialog::textBox);
+	subject = subjectRow->addChild(ControlSeeds::Dialog::textBox);
 	subject->setTextLimit(4096);
 
 	auto bodyLabel = grid->addChild(Label::Seed(T_("Body")));
 	grid->setWidget(bodyLabel, 2, 0);
 
-	TextBox::Seed bodySeed = WinUtil::Seeds::Dialog::textBox;
+	TextBox::Seed bodySeed = ControlSeeds::Dialog::textBox;
 	bodySeed.style |= ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL;
 	body = grid->addChild(bodySeed);
 	const auto documentLimit = static_cast<int>(std::min<int64_t>(BBSManager::MAX_DOCUMENT_SIZE, std::numeric_limits<int>::max()));
@@ -91,7 +93,7 @@ bool BBSPostDlg::handleInitDialog() {
 	richText = options->addChild(CheckBox::Seed(T_("RTF0 Markdown")));
 	options->setWidget(richText, 0, 0);
 	editRichText = options->addChild(Button::Seed(T_("Edit rich text...")));
-	editRichText->setImage(WinUtil::buttonIcon(IDI_CHAT));
+	editRichText->setImage(IconManager::buttonIcon(IDI_CHAT));
 	options->setWidget(editRichText, 0, 2);
 
 	validation = grid->addChild(Label::Seed());
@@ -102,7 +104,7 @@ bool BBSPostDlg::handleInitDialog() {
 	buttons->column(0).align = GridInfo::BOTTOM_RIGHT;
 	buttons->setSpacing(grid->getSpacing());
 	grid->setWidget(buttons, 6, 0);
-	auto dialogButtons = WinUtil::addDlgButtons(buttons, [this] { handlePost(); }, [this] { endDialog(IDCANCEL); });
+	auto dialogButtons = DialogControls::addDlgButtons(buttons, [this] { handlePost(); }, [this] { endDialog(IDCANCEL); });
 	postButton = dialogButtons.first;
 	postButton->setText(T_("Post"));
 	postButton->setEnabled(false);

@@ -12,6 +12,7 @@
 #define DCPLUSPLUS_WIN32_RICH_TEXT_EDITOR_DLG_H
 
 #include <dcpp/share/ShareManager.h>
+#include <dcpp/util/Util.h>
 #include <dcpp/typedefs.h>
 
 #include <atomic>

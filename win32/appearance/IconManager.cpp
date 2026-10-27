@@ -334,3 +334,7 @@ string IconManager::getDirectory() {
 	File::ensureDirectory(directory);
 	return directory;
 }
+
+dwt::IconPtr IconManager::toolbarIcon(unsigned id) {
+	return load(id, SETTING(TOOLBAR_SIZE));
+}

@@ -17,6 +17,23 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <unordered_map>
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/controls/KeyState.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/dialogs/FilePickers.h>
+#include <win32/frames/users/UserCommands.h>
+#include <win32/frames/users/UserPresentation.h>
+#include <win32/services/LinkActions.h>
 #include <win32/frames/filelist/DirectoryListingFrame.h>
 
 #include <atomic>
@@ -59,7 +76,7 @@ using dwt::ToolBar;
 const string DirectoryListingFrame::id = "DirectoryListing";
 const string& DirectoryListingFrame::getId() const { return id; }
 
-static const ColumnInfo filesColumns[] = {
+static const TableLayout::ColumnInfo filesColumns[] = {
 	{ N_("File"), 300, false },
 	{ N_("Type"), 60, false },
 	{ N_("Size"), 80, true },
@@ -78,10 +95,10 @@ int DirectoryListingFrame::ItemInfo::getImage(int col) const {
 	}
 
 	if(type == DIRECTORY || type == USER) {
-		return dir->getComplete() ? WinUtil::DIR_ICON : WinUtil::DIR_ICON_INCOMPLETE;
+		return dir->getComplete() ? ImageLists::DIR_ICON : ImageLists::DIR_ICON_INCOMPLETE;
 	}
 
-	return static_cast<int>(WinUtil::getFileIcon(getText(COLUMN_FILENAME)));
+	return static_cast<int>(ImageLists::getFileIcon(getText(COLUMN_FILENAME)));
 }
 
 int DirectoryListingFrame::ItemInfo::compareItems(const ItemInfo* a, const ItemInfo* b, int col) {
@@ -139,7 +156,7 @@ void DirectoryListingFrame::openWindow_(TabViewPtr parent, const tstring& aFile,
 	} else {
 		frame->setDirty(SettingsManager::BOLD_FL);
 		frame->onVisibilityChanged([frame, aDir](bool b) {
-			if(b && !frame->loaded && !frame->loading && !WinUtil::mainWindow->closing())
+			if(b && !frame->loaded && !frame->loading && !UiServices::mainWindow->closing())
 				frame->loadFile(aDir);
 		});
 	}
@@ -259,7 +276,7 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 		searchGrid = grid->addChild(Grid::Seed(1, 4));
 		searchGrid->column(0).mode = GridInfo::FILL;
 
-		searchBox = searchGrid->addChild(WinUtil::Seeds::comboBoxEdit);
+		searchBox = searchGrid->addChild(ControlSeeds::comboBoxEdit);
 		searchBox->setHelpId(IDH_FILE_LIST_SEARCH_BOX);
 		searchBox->getTextBox()->setCue(T_("Find files"));
 		addWidget(searchBox);
@@ -267,22 +284,22 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 		searchBox->getTextBox()->onChar([this] (int c) { return handleSearchChar(c); });
 
 		searchBox->getTextBox()->addRemoveStyle(WS_CLIPCHILDREN, true);
-		WinUtil::addSearchIcon(searchBox->getTextBox());
+		DialogControls::addSearchIcon(searchBox->getTextBox());
 
-		filterMethod = searchGrid->addChild(WinUtil::Seeds::comboBox);
+		filterMethod = searchGrid->addChild(ControlSeeds::comboBox);
 		filterMethod->setHelpId(IDH_FILE_LIST_SEARCH_BOX);
 		addWidget(filterMethod);
 
-		WinUtil::addFilterMethods(filterMethod);
+		DialogControls::addFilterMethods(filterMethod);
 		filterMethod->setSelected(StringMatch::PARTIAL);
 
 		searchBox->onSelectionChanged([this] { handleSearchSelChanged(); });
 
-		auto seed = WinUtil::Seeds::button;
+		auto seed = ControlSeeds::button;
 		seed.caption = T_("Find previous");
 		ButtonPtr button = searchGrid->addChild(seed);
 		button->setHelpId(IDH_FILE_LIST_FIND_PREV);
-		button->setImage(WinUtil::buttonIcon(IDI_LEFT));
+		button->setImage(IconManager::buttonIcon(IDI_LEFT));
 		button->onClicked([this] { handleFind(true); });
 		addWidget(button);
 
@@ -290,7 +307,7 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 		seed.style |= BS_DEFPUSHBUTTON;
 		button = searchGrid->addChild(seed);
 		button->setHelpId(IDH_FILE_LIST_FIND_NEXT);
-		button->setImage(WinUtil::buttonIcon(IDI_RIGHT));
+		button->setImage(IconManager::buttonIcon(IDI_RIGHT));
 		button->onClicked([this] { handleFind(false); });
 		addWidget(button);
 	}
@@ -301,25 +318,25 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 	paned = grid->addChild(SplitterContainer::Seed(SETTING(FILE_LIST_PANED_POS)));
 
 	{
-		dirs = paned->addChild(WidgetDirs::Seed(WinUtil::Seeds::treeView));
+		dirs = paned->addChild(WidgetDirs::Seed(ControlSeeds::treeView));
 		dirs->setHelpId(IDH_FILE_LIST_DIRS);
 		addWidget(dirs);
 
-		dirs->setNormalImageList(WinUtil::fileImages);
+		dirs->setNormalImageList(ImageLists::fileImages);
 		dirs->onSelectionChanged([this] { handleSelectionChanged(); });
 		dirs->onKeyDown([this](int c) { return handleKeyDownDirs(c); });
 		dirs->onSysKeyDown([this](int c) { return handleKeyDownDirs(c); });
 		dirs->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return handleDirsContextMenu(sc); });
 		dirs->onXMouseUp([this](const dwt::MouseEvent &me) { return handleXMouseUp(me); });
 
-		files = paned->addChild(WidgetFiles::Seed(WinUtil::Seeds::table));
+		files = paned->addChild(WidgetFiles::Seed(ControlSeeds::table));
 		files->setHelpId(IDH_FILE_LIST_FILES);
 		addWidget(files);
 
-		files->setSmallImageList(WinUtil::fileImages);
+		files->setSmallImageList(ImageLists::fileImages);
 
-		WinUtil::makeColumns(files, filesColumns, COLUMN_LAST, SETTING(DIRECTORYLISTINGFRAME_ORDER), SETTING(DIRECTORYLISTINGFRAME_WIDTHS));
-		WinUtil::setTableSort(files, COLUMN_LAST, SettingsManager::DIRECTORYLISTINGFRAME_SORT, COLUMN_FILENAME);
+		TableLayout::makeColumns(files, filesColumns, COLUMN_LAST, SETTING(DIRECTORYLISTINGFRAME_ORDER), SETTING(DIRECTORYLISTINGFRAME_WIDTHS));
+		TableLayout::setTableSort(files, COLUMN_LAST, SettingsManager::DIRECTORYLISTINGFRAME_SORT, COLUMN_FILENAME);
 
 		files->onDblClicked([this] { handleDoubleClickFiles(); });
 		files->onKeyDown([this](int c) { return handleKeyDownFiles(c); });
@@ -342,7 +359,7 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 			unsigned helpId, const dwt::Dispatchers::VoidVoid<>::F& f)
 		{
 			ids.emplace_back(std::to_string(ids.size()));
-			toolbar->addButton(ids.back(), icon ? WinUtil::toolbarIcon(icon) : 0, 0, text, showText, helpId, f);
+			toolbar->addButton(ids.back(), icon ? IconManager::toolbarIcon(icon) : 0, 0, text, showText, helpId, f);
 		};
 
 		addButton(IDI_LEFT, T_("Back"), false, IDH_FILE_LIST_BACK, [this] { back(); });
@@ -354,7 +371,7 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 		rebar->add(toolbar, RBBS_NOGRIPPER);
 
 		// create the address bar.
-		pathBox = addChild(WinUtil::Seeds::comboBoxEdit);
+		pathBox = addChild(ControlSeeds::comboBoxEdit);
 		pathBox->getTextBox()->setReadOnly();
 		addWidget(pathBox);
 		pathBox->onSelectionChanged([this] { selectItem(Text::toT(history[pathBox->getSelected()])); });
@@ -371,7 +388,7 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 		addButton(0, T_("Download full list"), true, IDH_FILE_LIST_DOWNLOAD_FULL, [this] { user.getList(); });
 		ids.push_back("Find");
 		auto findId = ids.back();
-		toolbar->addButton(findId, WinUtil::toolbarIcon(IDI_SEARCH), 0, T_("Find"), true, IDH_FILE_LIST_FIND,
+		toolbar->addButton(findId, IconManager::toolbarIcon(IDI_SEARCH), 0, T_("Find"), true, IDH_FILE_LIST_FIND,
 			nullptr, [this](const dwt::ScreenCoordinate&) { handleFindToggle(); });
 		toolbar->setLayout(ids);
 
@@ -383,7 +400,7 @@ DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser
 	initStatus();
 
 	{
-		auto showTree = addChild(WinUtil::Seeds::splitCheckBox);
+		auto showTree = addChild(ControlSeeds::splitCheckBox);
 		showTree->setChecked(true);
 		showTree->onClicked([this, showTree] {
 			auto checked = showTree->getChecked();
@@ -593,10 +610,10 @@ void DirectoryListingFrame::loadFile(const tstring& dir) {
 
 	{
 		// this control will cover the whole window.
-		Label::Seed seed(WinUtil::createIcon(IDI_OPEN_FILE_LIST, 32));
+		Label::Seed seed(IconManager::load(IDI_OPEN_FILE_LIST, 32));
 		seed.style |= SS_CENTERIMAGE;
 		loading = addChild(seed);
-		WinUtil::setColor(loading);
+		AppAppearance::setColor(loading);
 		layout();
 	}
 
@@ -752,9 +769,9 @@ void DirectoryListingFrame::postClosing() {
 
 	SettingsManager::getInstance()->set(SettingsManager::FILE_LIST_PANED_POS, paned->getSplitterPos(0));
 
-	SettingsManager::getInstance()->set(SettingsManager::DIRECTORYLISTINGFRAME_ORDER, WinUtil::toString(files->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::DIRECTORYLISTINGFRAME_WIDTHS, WinUtil::toString(files->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::DIRECTORYLISTINGFRAME_SORT, WinUtil::getTableSort(files));
+	SettingsManager::getInstance()->set(SettingsManager::DIRECTORYLISTINGFRAME_ORDER, TableLayout::toString(files->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::DIRECTORYLISTINGFRAME_WIDTHS, TableLayout::toString(files->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::DIRECTORYLISTINGFRAME_SORT, TableLayout::getTableSort(files));
 }
 
 void DirectoryListingFrame::handleSearchSelChanged() {
@@ -792,7 +809,7 @@ void DirectoryListingFrame::UserHolder::matchQueue() {
 
 void DirectoryListingFrame::handleListDiff() {
 	tstring file;
-	if(WinUtil::browseFileList(this, file)) {
+	if(FilePickers::browseFileList(this, file)) {
 		DirectoryListing dirList(dl->getUser());
 		try {
 			dirList.loadFile(Text::fromT(file));
@@ -846,9 +863,9 @@ void DirectoryListingFrame::refreshTree(const tstring& root) {
 }
 
 void DirectoryListingFrame::updateTitle() {
-	tstring text = WinUtil::getNicks(dl->getUser());
+	tstring text = UserPresentation::getNicks(dl->getUser());
 	if(error.empty()) {
-		text += _T(" - ") + WinUtil::getHubNames(dl->getUser()).first;
+		text += _T(" - ") + UserPresentation::getHubNames(dl->getUser()).first;
 	} else {
 		text = str(TF_("%1%: %2%") % text % error);
 	}
@@ -866,11 +883,11 @@ void DirectoryListingFrame::updateTitle() {
 }
 
 ShellMenuPtr DirectoryListingFrame::makeSingleMenu(ItemInfo* ii) {
-	auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
+	auto menu = addChild(ShellMenu::Seed(ControlSeeds::menu));
 
-	menu->setTitle(escapeMenu(ii->getText(COLUMN_FILENAME)), WinUtil::fileImages->getIcon(ii->getImage(0)));
+	menu->setTitle(escapeMenu(ii->getText(COLUMN_FILENAME)), ImageLists::fileImages->getIcon(ii->getImage(0)));
 
-	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
+	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, IconManager::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargets(menu.get(), ii);
 
 	if(ii->type == ItemInfo::FILE) {
@@ -878,7 +895,7 @@ ShellMenuPtr DirectoryListingFrame::makeSingleMenu(ItemInfo* ii) {
 
 		menu->appendSeparator();
 
-		WinUtil::addHashItems(menu.get(), ii->file->getTTH(), Text::toT(ii->file->getName()), ii->file->getSize());
+		LinkActions::addHashItems(menu.get(), ii->file->getTTH(), Text::toT(ii->file->getName()), ii->file->getSize());
 	}
 
 	if((ii->type == ItemInfo::FILE && ii->file->getAdls()) ||
@@ -892,12 +909,12 @@ ShellMenuPtr DirectoryListingFrame::makeSingleMenu(ItemInfo* ii) {
 }
 
 ShellMenuPtr DirectoryListingFrame::makeMultiMenu() {
-	auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
+	auto menu = addChild(ShellMenu::Seed(ControlSeeds::menu));
 
 	size_t sel = files->countSelected();
 	menu->setTitle(str(TF_("%1% items") % sel), getParent()->getIcon(this));
 
-	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
+	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, IconManager::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargets(menu.get());
 	addUserCommands(menu.get());
 
@@ -905,12 +922,12 @@ ShellMenuPtr DirectoryListingFrame::makeMultiMenu() {
 }
 
 ShellMenuPtr DirectoryListingFrame::makeDirMenu(ItemInfo* ii) {
-	auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
+	auto menu = addChild(ShellMenu::Seed(ControlSeeds::menu));
 
 	menu->setTitle(escapeMenu(ii ? ii->getText(COLUMN_FILENAME) : getText()),
-		ii ? WinUtil::fileImages->getIcon(ii->getImage(0)) : getParent()->getIcon(this));
+		ii ? ImageLists::fileImages->getIcon(ii->getImage(0)) : getParent()->getIcon(this));
 
-	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
+	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, IconManager::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargets(menu.get());
 	return menu;
 }
@@ -964,11 +981,11 @@ void DirectoryListingFrame::addTargets(Menu* menu, ItemInfo* ii) {
 		}
 	}
 
-	if(!WinUtil::lastDirs.empty()) {
+	if(!FilePickers::lastDirs.empty()) {
 		sub->appendSeparator();
 
-		for(i = 0; i < WinUtil::lastDirs.size(); ++i) {
-			sub->appendItem(WinUtil::lastDirs[i], [this, i] { handleDownloadLastDir(static_cast<unsigned>(i)); });
+		for(i = 0; i < FilePickers::lastDirs.size(); ++i) {
+			sub->appendItem(FilePickers::lastDirs[i], [this, i] { handleDownloadLastDir(static_cast<unsigned>(i)); });
 		}
 	}
 }
@@ -997,7 +1014,7 @@ bool DirectoryListingFrame::handleFilesContextMenu(dwt::ScreenCoordinate pt) {
 
 		addUserMenu(menu.get());
 
-		WinUtil::addCopyMenu(menu.get(), files);
+		TableActions::addCopyMenu(menu.get(), files);
 
 		usingDirMenu = false;
 		menu->open(pt);
@@ -1051,9 +1068,9 @@ void DirectoryListingFrame::download(ItemInfo* ii, const string& dir, bool view)
 			if(view) {
 				File::deleteFile(dir + Util::validateFileName(ii->file->getName()));
 			}
-			dl->download(ii->file, dir + Text::fromT(ii->getText(COLUMN_FILENAME)), view, WinUtil::isShift() || view);
+			dl->download(ii->file, dir + Text::fromT(ii->getText(COLUMN_FILENAME)), view, KeyState::isShift() || view);
 		} else if(!view) {
-			dl->download(ii->dir, dir, WinUtil::isShift());
+			dl->download(ii->dir, dir, KeyState::isShift());
 		}
 
 	} catch(const Exception& e) {
@@ -1078,7 +1095,7 @@ void DirectoryListingFrame::handleDownloadBrowse() {
 		if(ii) {
 			tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY));
 			if(FolderDialog(this).open(target)) {
-				WinUtil::addLastDir(target);
+				FilePickers::addLastDir(target);
 				download(ii, Text::fromT(target));
 			}
 		}
@@ -1089,14 +1106,14 @@ void DirectoryListingFrame::handleDownloadBrowse() {
 				if(ii->type == ItemInfo::FILE) {
 					tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY)) + ii->getText(COLUMN_FILENAME);
 					if(SaveDialog(this).open(target)) {
-						WinUtil::addLastDir(Util::getFilePath(target));
-						dl->download(ii->file, Text::fromT(target), false, WinUtil::isShift());
+						FilePickers::addLastDir(Util::getFilePath(target));
+						dl->download(ii->file, Text::fromT(target), false, KeyState::isShift());
 					}
 				} else {
 					tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY));
 					if(FolderDialog(this).open(target)) {
-						WinUtil::addLastDir(target);
-						dl->download(ii->dir, Text::fromT(target), WinUtil::isShift());
+						FilePickers::addLastDir(target);
+						dl->download(ii->dir, Text::fromT(target), KeyState::isShift());
 					}
 				}
 			} catch(const Exception& e) {
@@ -1105,7 +1122,7 @@ void DirectoryListingFrame::handleDownloadBrowse() {
 		} else {
 			tstring target = Text::toT(SETTING(DOWNLOAD_DIRECTORY));
 			if(FolderDialog(this).open(target)) {
-				WinUtil::addLastDir(target);
+				FilePickers::addLastDir(target);
 				downloadFiles(Text::fromT(target));
 			}
 		}
@@ -1113,10 +1130,10 @@ void DirectoryListingFrame::handleDownloadBrowse() {
 }
 
 void DirectoryListingFrame::handleDownloadLastDir(unsigned index) {
-	if(index >= WinUtil::lastDirs.size()) {
+	if(index >= FilePickers::lastDirs.size()) {
 		return;
 	}
-	download(Text::fromT(WinUtil::lastDirs[index]));
+	download(Text::fromT(FilePickers::lastDirs[index]));
 }
 
 void DirectoryListingFrame::handleDownloadFavorite(unsigned index) {
@@ -1139,7 +1156,7 @@ void DirectoryListingFrame::handleDownloadTarget(unsigned index) {
 	const string& target = targets[index];
 	ItemInfo* ii = files->getSelectedData();
 	try {
-		dl->download(ii->file, target, false, WinUtil::isShift());
+		dl->download(ii->file, target, false, KeyState::isShift());
 	} catch(const Exception& e) {
 		status->setText(STATUS_STATUS, Text::toT(e.getError()));
 	}
@@ -1577,7 +1594,7 @@ void DirectoryListingFrame::findFile(bool reverse) {
 }
 
 void DirectoryListingFrame::runUserCommand(const UserCommand& uc) {
-	if(!WinUtil::getUCParams(this, uc, ucLineParams))
+	if(!UserCommands::getUCParams(this, uc, ucLineParams))
 		return;
 
 	auto ucParams = ucLineParams;
@@ -1601,7 +1618,7 @@ void DirectoryListingFrame::runUserCommand(const UserCommand& uc) {
 			ucParams["fileSI"] = [ii] { return std::to_string(ii->file->getSize()); };
 			ucParams["fileSIshort"] = [ii] { return Util::formatBytes(ii->file->getSize()); };
 			ucParams["fileTR"] = [ii] { return ii->file->getTTH().toBase32(); };
-			ucParams["fileMN"] = [ii] { return WinUtil::makeMagnet(ii->file->getTTH(), ii->file->getName(), ii->file->getSize()); };
+			ucParams["fileMN"] = [ii] { return LinkActions::makeMagnet(ii->file->getTTH(), ii->file->getName(), ii->file->getSize()); };
 		} else {
 			ucParams["type"] = [] { return _("Directory"); };
 			ucParams["fileFN"] = [this, ii] { return dl->getPath(ii->dir) + ii->dir->getName(); };
@@ -1629,7 +1646,7 @@ void DirectoryListingFrame::handleDoubleClickFiles() {
 
 		if(ii->type == ItemInfo::FILE) {
 			try {
-				dl->download(ii->file, SETTING(DOWNLOAD_DIRECTORY) + Text::fromT(ii->getText(COLUMN_FILENAME)), false, WinUtil::isShift());
+				dl->download(ii->file, SETTING(DOWNLOAD_DIRECTORY) + Text::fromT(ii->getText(COLUMN_FILENAME)), false, KeyState::isShift());
 			} catch(const Exception& e) {
 				status->setText(STATUS_STATUS, Text::toT(e.getError()));
 			}
@@ -1706,7 +1723,7 @@ bool DirectoryListingFrame::handleKeyDownFiles(int c) {
 }
 
 bool DirectoryListingFrame::handleSearchKeyDown(int c) {
-	if(c == VK_RETURN && !(WinUtil::isShift() || WinUtil::isCtrl() || WinUtil::isAlt())) {
+	if(c == VK_RETURN && !(KeyState::isShift() || KeyState::isCtrl() || KeyState::isAlt())) {
 		handleFind(false);
 		return true;
 	}

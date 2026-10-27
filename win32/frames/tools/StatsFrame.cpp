@@ -17,6 +17,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/UiFonts.h>
 
 #include <win32/frames/tools/StatsFrame.h>
 
@@ -208,16 +211,16 @@ StatsFrame::~StatsFrame() {
 void StatsFrame::updateColors() {
 	// Every derived shade uses the current global background as its base so a
 	// palette update cannot leave construction-time colors in the custom canvas.
-	setColor(WinUtil::textColor, WinUtil::bgColor);
-	setFont(WinUtil::font);
-	headingFont = WinUtil::font->makeBold();
-	backgroundBrush = dwt::BrushPtr(new dwt::Brush(WinUtil::bgColor));
-	cardBrush = dwt::BrushPtr(new dwt::Brush(blendColor(WinUtil::textColor, WinUtil::bgColor, 4)));
-	graphBrush = dwt::BrushPtr(new dwt::Brush(blendColor(WinUtil::textColor, WinUtil::bgColor, 3)));
-	borderPen = dwt::PenPtr(new dwt::Pen(blendColor(WinUtil::textColor, WinUtil::bgColor, 24)));
+	setColor(AppAppearance::textColor, AppAppearance::bgColor);
+	setFont(UiFonts::font);
+	headingFont = UiFonts::font->makeBold();
+	backgroundBrush = dwt::BrushPtr(new dwt::Brush(AppAppearance::bgColor));
+	cardBrush = dwt::BrushPtr(new dwt::Brush(blendColor(AppAppearance::textColor, AppAppearance::bgColor, 4)));
+	graphBrush = dwt::BrushPtr(new dwt::Brush(blendColor(AppAppearance::textColor, AppAppearance::bgColor, 3)));
+	borderPen = dwt::PenPtr(new dwt::Pen(blendColor(AppAppearance::textColor, AppAppearance::bgColor, 24)));
 	upPen = dwt::PenPtr(new dwt::Pen(SETTING(UPLOAD_BG_COLOR), dwt::Pen::Solid, 2));
 	downPen = dwt::PenPtr(new dwt::Pen(SETTING(DOWNLOAD_BG_COLOR), dwt::Pen::Solid, 2));
-	secondaryTextColor = blendColor(WinUtil::textColor, WinUtil::bgColor, 62);
+	secondaryTextColor = blendColor(AppAppearance::textColor, AppAppearance::bgColor, 62);
 }
 
 void StatsFrame::draw(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
@@ -226,8 +229,8 @@ void StatsFrame::draw(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 		::BitBlt(canvas.handle(), rect.x(), rect.y(), rect.width(), rect.height(), NULL, 0, 0, PATCOPY);
 	}
 
-	canvas.setTextColor(WinUtil::textColor);
-	canvas.setBkColor(WinUtil::bgColor);
+	canvas.setTextColor(AppAppearance::textColor);
+	canvas.setBkColor(AppAppearance::bgColor);
 
 	dwt::Rectangle client(getClientSize());
 	long split = getSplitterPosition(client.width());
@@ -249,7 +252,7 @@ void StatsFrame::drawInfo(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 	}
 
 	auto transparent(canvas.setBkMode(true));
-	auto selectFont(canvas.select(*WinUtil::font));
+	auto selectFont(canvas.select(*UiFonts::font));
 	long fontHeight = getTextSize(_T("Ag")).y;
 	long y = rect.top() + PANEL_PADDING;
 
@@ -263,7 +266,7 @@ void StatsFrame::drawInfo(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 	dwt::Rectangle subtitleRect(rect.left() + PANEL_PADDING, y, rect.width() - PANEL_PADDING * 2, fontHeight + 3);
 	canvas.drawText(T_("Live activity, connectivity and transfer state"), subtitleRect,
 		DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
-	canvas.setTextColor(WinUtil::textColor);
+	canvas.setTextColor(AppAppearance::textColor);
 	y += fontHeight + 10;
 
 	size_t totalRows = 0;
@@ -304,12 +307,12 @@ void StatsFrame::drawInfo(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 
 		long rowY = card.top() + sectionHeaderHeight;
 		for(const auto& row: section.rows) {
-			auto selectFont(canvas.select(*WinUtil::font));
+			auto selectFont(canvas.select(*UiFonts::font));
 			canvas.setTextColor(secondaryTextColor);
 			dwt::Rectangle labelRect(textLeft, rowY, valueLeft - textLeft - 8, rowHeight);
 			canvas.drawText(row.first, labelRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
-			canvas.setTextColor(WinUtil::textColor);
+			canvas.setTextColor(AppAppearance::textColor);
 			dwt::Rectangle valueRect(valueLeft, rowY, textRight - valueLeft, rowHeight);
 			canvas.drawText(row.second, valueRect, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			rowY += rowHeight;
@@ -317,7 +320,7 @@ void StatsFrame::drawInfo(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 
 		y += sectionHeight + sectionGap;
 	}
-	canvas.setTextColor(WinUtil::textColor);
+	canvas.setTextColor(AppAppearance::textColor);
 }
 
 void StatsFrame::drawGraph(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
@@ -326,7 +329,7 @@ void StatsFrame::drawGraph(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 	}
 
 	auto transparent(canvas.setBkMode(true));
-	auto selectFont(canvas.select(*WinUtil::font));
+	auto selectFont(canvas.select(*UiFonts::font));
 	long fontHeight = getTextSize(_T("Ag")).y;
 	long titleY = rect.top() + PANEL_PADDING;
 
@@ -341,7 +344,7 @@ void StatsFrame::drawGraph(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 	dwt::Rectangle subtitleRect(rect.left() + PANEL_PADDING, subtitleY, rect.width() - PANEL_PADDING * 2, fontHeight + 3);
 	canvas.drawText(str(TF_("All socket traffic, %1%-second moving average") % AVG_SIZE), subtitleRect,
 		DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
-	canvas.setTextColor(WinUtil::textColor);
+	canvas.setTextColor(AppAppearance::textColor);
 
 	long legendY = subtitleY + fontHeight + 7;
 	auto downloadLegend = str(TF_("Download %1%") % formatSpeed(currentDown));
@@ -369,7 +372,7 @@ void StatsFrame::drawGraph(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 	canvas.setTextColor(SETTING(UPLOAD_BG_COLOR));
 	dwt::Rectangle uploadLegendRect(legendX + 26, legendY, uploadLegendSize.x, fontHeight + 2);
 	canvas.drawText(uploadLegend, uploadLegendRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
-	canvas.setTextColor(WinUtil::textColor);
+	canvas.setTextColor(AppAppearance::textColor);
 
 	const int horizontalDivisions = 4;
 	long scaleLabelWidth = 0;
@@ -420,15 +423,15 @@ void StatsFrame::drawGraph(dwt::Canvas& canvas, const dwt::Rectangle& rect) {
 	}
 	dwt::Rectangle nowRect(plot.right() - 45, plot.bottom() + 4, 45, fontHeight + 2);
 	canvas.drawText(T_("Now"), nowRect, DT_RIGHT | DT_TOP | DT_SINGLELINE);
-	canvas.setTextColor(WinUtil::textColor);
+	canvas.setTextColor(AppAppearance::textColor);
 }
 
 void StatsFrame::drawPlot(dwt::Canvas& canvas, const dwt::Rectangle& plot, int timeStep, int scale) {
 	const auto scaled = [scale](long value) { return value * scale; };
-	dwt::Pen plotBorder(blendColor(WinUtil::textColor, WinUtil::bgColor, 24), dwt::Pen::Solid, scale);
-	dwt::Pen plotGrid(blendColor(WinUtil::textColor, WinUtil::bgColor, 18), dwt::Pen::Solid, scale);
-	dwt::Pen downloadGlow(blendColor(SETTING(DOWNLOAD_BG_COLOR), WinUtil::bgColor, 38), dwt::Pen::Solid, scaled(5));
-	dwt::Pen uploadGlow(blendColor(SETTING(UPLOAD_BG_COLOR), WinUtil::bgColor, 38), dwt::Pen::Solid, scaled(5));
+	dwt::Pen plotBorder(blendColor(AppAppearance::textColor, AppAppearance::bgColor, 24), dwt::Pen::Solid, scale);
+	dwt::Pen plotGrid(blendColor(AppAppearance::textColor, AppAppearance::bgColor, 18), dwt::Pen::Solid, scale);
+	dwt::Pen downloadGlow(blendColor(SETTING(DOWNLOAD_BG_COLOR), AppAppearance::bgColor, 38), dwt::Pen::Solid, scaled(5));
+	dwt::Pen uploadGlow(blendColor(SETTING(UPLOAD_BG_COLOR), AppAppearance::bgColor, 38), dwt::Pen::Solid, scaled(5));
 	dwt::Pen downloadLine(SETTING(DOWNLOAD_BG_COLOR), dwt::Pen::Solid, scaled(2));
 	dwt::Pen uploadLine(SETTING(UPLOAD_BG_COLOR), dwt::Pen::Solid, scaled(2));
 

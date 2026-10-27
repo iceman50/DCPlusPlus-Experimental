@@ -19,6 +19,17 @@
 #define DCPLUSPLUS_WIN32_FINISHED_FRAME_BASE_H
 
 #include <dcpp/system/File.h>
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/users/UserActions.h>
+#include <win32/frames/users/UserPresentation.h>
+#include <win32/shell/ShellActions.h>
 #include <dcpp/transfer/FinishedItem.h>
 #include <dcpp/transfer/FinishedManager.h>
 #include <dcpp/system/TimerManager.h>
@@ -77,7 +88,7 @@ protected:
 		bOnlyFull(false)
 	{
 		{
-			TabView::Seed seed = WinUtil::Seeds::tabs;
+			TabView::Seed seed = ControlSeeds::tabs;
 			seed.style &= ~TCS_OWNERDRAWFIXED;
 			seed.location = dwt::Rectangle(this->getClientSize());
 			seed.widthConfig = 0;
@@ -91,28 +102,28 @@ protected:
 			filesWindow = dwt::WidgetCreator<dwt::Container>::create(tabs, cs);
 			filesWindow->setHelpId(in_UL ? IDH_FINISHED_UL : IDH_FINISHED_DL);
 			filesWindow->onClosing(&noClose);
-			tabs->add(filesWindow, WinUtil::tabIcon(IDI_GROUPED_BY_FILES));
+			tabs->add(filesWindow, IconManager::tabIcon(IDI_GROUPED_BY_FILES));
 
 			cs.style &= ~WS_VISIBLE;
 			cs.caption = T_("Grouped by users");
 			usersWindow = dwt::WidgetCreator<dwt::Container>::create(tabs, cs);
 			usersWindow->setHelpId(in_UL ? IDH_FINISHED_UL : IDH_FINISHED_DL);
 			usersWindow->onClosing(&noClose);
-			tabs->add(usersWindow, WinUtil::tabIcon(IDI_GROUPED_BY_USERS));
+			tabs->add(usersWindow, IconManager::tabIcon(IDI_GROUPED_BY_USERS));
 		}
 
 		{
-			files = filesWindow->addChild(typename WidgetFiles::Seed(WinUtil::Seeds::table));
+			files = filesWindow->addChild(typename WidgetFiles::Seed(ControlSeeds::table));
 			files->setTableStyle(LVS_EX_LABELTIP | LVS_EX_HEADERDRAGDROP | LVS_EX_FULLROWSELECT);
 			this->addWidget(files);
 
-			WinUtil::makeColumns(files, filesColumns, FILES_COLUMN_LAST,
+			TableLayout::makeColumns(files, filesColumns, FILES_COLUMN_LAST,
 				SettingsManager::getInstance()->get(in_UL ? SettingsManager::FINISHED_UL_FILES_ORDER : SettingsManager::FINISHED_DL_FILES_ORDER),
 				SettingsManager::getInstance()->get(in_UL ? SettingsManager::FINISHED_UL_FILES_WIDTHS : SettingsManager::FINISHED_DL_FILES_WIDTHS));
-			WinUtil::setTableSort(files, FILES_COLUMN_LAST,
+			TableLayout::setTableSort(files, FILES_COLUMN_LAST,
 				in_UL ? SettingsManager::FINISHED_UL_FILES_SORT : SettingsManager::FINISHED_DL_FILES_SORT, FILES_COLUMN_TIME);
 
-			files->setSmallImageList(WinUtil::fileImages);
+			files->setSmallImageList(ImageLists::fileImages);
 
 			files->onDblClicked([this] { this->handleOpenFile(); });
 			files->onKeyDown([this](int c) { return this->handleFilesKeyDown(c); });
@@ -120,17 +131,17 @@ protected:
 		}
 
 		{
-			users = usersWindow->addChild(typename WidgetUsers::Seed(WinUtil::Seeds::table));
+			users = usersWindow->addChild(typename WidgetUsers::Seed(ControlSeeds::table));
 			users->setTableStyle(LVS_EX_LABELTIP | LVS_EX_HEADERDRAGDROP | LVS_EX_FULLROWSELECT);
 			this->addWidget(users);
 
-			WinUtil::makeColumns(users, usersColumns, USERS_COLUMN_LAST,
+			TableLayout::makeColumns(users, usersColumns, USERS_COLUMN_LAST,
 				SettingsManager::getInstance()->get(in_UL ? SettingsManager::FINISHED_UL_USERS_ORDER : SettingsManager::FINISHED_DL_USERS_ORDER),
 				SettingsManager::getInstance()->get(in_UL ? SettingsManager::FINISHED_UL_USERS_WIDTHS : SettingsManager::FINISHED_DL_USERS_WIDTHS));
-			WinUtil::setTableSort(users, USERS_COLUMN_LAST,
+			TableLayout::setTableSort(users, USERS_COLUMN_LAST,
 				in_UL ? SettingsManager::FINISHED_UL_USERS_SORT : SettingsManager::FINISHED_DL_USERS_SORT, USERS_COLUMN_TIME);
 
-			users->setSmallImageList(WinUtil::userImages);
+			users->setSmallImageList(ImageLists::userImages);
 
 			users->onKeyDown([this](int c) { return this->handleUsersKeyDown(c); });
 			users->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return this->handleUsersContextMenu(sc); });
@@ -141,7 +152,7 @@ protected:
 		if(!in_UL) {
 			bOnlyFull = SETTING(FINISHED_DL_ONLY_FULL);
 			{
-				CheckBox::Seed seed = WinUtil::Seeds::checkBox;
+				CheckBox::Seed seed = ControlSeeds::checkBox;
 				seed.caption = T_("Only show fully downloaded files");
 				onlyFull = this->addChild(seed);
 				onlyFull->setHelpId(IDH_FINISHED_DL_ONLY_FULL);
@@ -154,7 +165,7 @@ protected:
 		}
 
 		this->status->onDblClicked(STATUS_STATUS, [] {
-			WinUtil::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(
+			ShellActions::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(
 				in_UL ? LogManager::UPLOAD : LogManager::DOWNLOAD))));
 		});
 
@@ -229,9 +240,9 @@ private:
 		USERS_COLUMN_LAST
 	};
 
-	static const ColumnInfo filesColumns[FILES_COLUMN_LAST];
+	static const TableLayout::ColumnInfo filesColumns[FILES_COLUMN_LAST];
 
-	static const ColumnInfo usersColumns[USERS_COLUMN_LAST];
+	static const TableLayout::ColumnInfo usersColumns[USERS_COLUMN_LAST];
 
 	class FileInfo : public FastAlloc<FileInfo> {
 	public:
@@ -270,7 +281,7 @@ private:
 			return columns[col];
 		}
 		int getImage(int col) const {
-			return col == 0 ? static_cast<int>(WinUtil::getFileIcon(file)) : -1;
+			return col == 0 ? static_cast<int>(ImageLists::getFileIcon(file)) : -1;
 		}
 
 		static int compareItems(const FileInfo* a, const FileInfo* b, int col) {
@@ -307,11 +318,11 @@ private:
 				}
 			}
 
-			WinUtil::openFile(Text::toT(file));
+			ShellActions::openFile(Text::toT(file));
 		}
 
 		void openFolder() {
-			WinUtil::openFolder(Text::toT(file));
+			ShellActions::openFolder(Text::toT(file));
 		}
 
 		void remove() {
@@ -338,7 +349,7 @@ private:
 				old = columns[sortCol];
 
 			auto lock = FinishedManager::getInstance()->lock();
-			columns[USERS_COLUMN_NICK] = WinUtil::getNicks(user);
+			columns[USERS_COLUMN_NICK] = UserPresentation::getNicks(user);
 			columns[USERS_COLUMN_HUB] = Text::toT(Util::toString(ClientManager::getInstance()->getHubNames(user)));
 			columns[USERS_COLUMN_TRANSFERRED] = Text::toT(Util::formatBytes(entry->getTransferred()));
 			columns[USERS_COLUMN_SPEED] = Text::toT(Util::formatBytes(entry->getAverageSpeed()) + "/s");
@@ -456,9 +467,9 @@ private:
 			FileChecker checker = files->forEachSelectedT(FileChecker());
 			auto selData = (sel == 1) ? files->getSelectedData() : 0;
 
-			auto menu = filesWindow->addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
+			auto menu = filesWindow->addChild(ShellMenu::Seed(ControlSeeds::menu));
 			menu->setTitle(selData ? escapeMenu(selData->getText(FILES_COLUMN_FILE)) : str(TF_("%1% files") % sel),
-				selData ? WinUtil::fileImages->getIcon(selData->getImage(0)) : tabs->getIcon(filesWindow));
+				selData ? ImageLists::fileImages->getIcon(selData->getImage(0)) : tabs->getIcon(filesWindow));
 			menu->appendItem(T_("&View as text"), [this] { this->handleViewAsText(); }, dwt::IconPtr(), checker.allFilesExist && !checker.isBz2);
 			menu->appendItem(T_("&Open"), [this] { this->handleOpenFile(); }, dwt::IconPtr(), checker.allFilesExist, true);
 			menu->appendItem(T_("Open &folder"), [this] { this->handleOpenFolder(); });
@@ -466,9 +477,9 @@ private:
 			menu->appendItem(T_("&Remove"), [this] { this->handleRemoveFiles(); });
 			menu->appendItem(T_("Remove &all"), [this] { this->handleRemoveAll(); });
 			menu->appendSeparator();
-			WinUtil::addUserItems(menu.get(), files->forEachSelectedT(UserCollector()).users, this->getParent());
+			UserActions::addUserItems(menu.get(), files->forEachSelectedT(UserCollector()).users, this->getParent());
 			menu->appendShellMenu(checker.ShellMenuPaths);
-			WinUtil::addCopyMenu(menu.get(), files);
+			TableActions::addCopyMenu(menu.get(), files);
 
 			menu->open(pt);
 			return true;
@@ -485,14 +496,14 @@ private:
 
 			auto selData = (sel == 1) ? users->getSelectedData() : 0;
 
-			auto menu = usersWindow->addChild(WinUtil::Seeds::menu);
+			auto menu = usersWindow->addChild(ControlSeeds::menu);
 			menu->setTitle(selData ? escapeMenu(selData->getText(USERS_COLUMN_NICK)) : str(TF_("%1% users") % sel),
-				selData ? WinUtil::userImages->getIcon(selData->getImage(0)) : tabs->getIcon(usersWindow));
+				selData ? ImageLists::userImages->getIcon(selData->getImage(0)) : tabs->getIcon(usersWindow));
 			menu->appendItem(T_("&Remove"), [this] { this->handleRemoveUsers(); });
 			menu->appendItem(T_("Remove &all"), [this] { this->handleRemoveAll(); });
 			menu->appendSeparator();
-			WinUtil::addUserItems(menu.get(), users->forEachSelectedT(UserCollector()).users, this->getParent());
-			WinUtil::addCopyMenu(menu.get(), users);
+			UserActions::addUserItems(menu.get(), users->forEachSelectedT(UserCollector()).users, this->getParent());
+			TableActions::addCopyMenu(menu.get(), users);
 
 			menu->open(pt);
 			return true;
@@ -609,9 +620,9 @@ private:
 
 	template<typename TableType>
 	void saveColumns(TableType table, SettingsManager::StrSetting order, SettingsManager::StrSetting widths, SettingsManager::IntSetting sort) {
-		SettingsManager::getInstance()->set(order, WinUtil::toString(table->getColumnOrder()));
-		SettingsManager::getInstance()->set(widths, WinUtil::toString(table->getColumnWidths()));
-		SettingsManager::getInstance()->set(sort, WinUtil::getTableSort(table));
+		SettingsManager::getInstance()->set(order, TableLayout::toString(table->getColumnOrder()));
+		SettingsManager::getInstance()->set(widths, TableLayout::toString(table->getColumnWidths()));
+		SettingsManager::getInstance()->set(sort, TableLayout::getTableSort(table));
 	}
 
 	template<typename TableType>
@@ -723,7 +734,7 @@ private:
 };
 
 template<class T, bool in_UL>
-const ColumnInfo FinishedFrameBase<T, in_UL>::filesColumns[] = {
+const TableLayout::ColumnInfo FinishedFrameBase<T, in_UL>::filesColumns[] = {
 	{ N_("Filename"), 125, false },
 	{ N_("Path"), 250, false },
 	{ N_("Nicks"), 250, false },
@@ -737,7 +748,7 @@ const ColumnInfo FinishedFrameBase<T, in_UL>::filesColumns[] = {
 };
 
 template<class T, bool in_UL>
-const ColumnInfo FinishedFrameBase<T, in_UL>::usersColumns[] = {
+const TableLayout::ColumnInfo FinishedFrameBase<T, in_UL>::usersColumns[] = {
 	{ N_("Nick"), 125, false },
 	{ N_("Hub"), 125, false },
 	{ N_("Transferred"), 80, true },

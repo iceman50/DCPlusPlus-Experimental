@@ -19,8 +19,8 @@
 #define DCPLUSPLUS_WIN32_LIST_FILTER_H
 
 #include <dcpp/text/StringMatch.h>
+#include <win32/controls/TableLayout.h>
 
-#include <win32/util/WinUtil.h>
 
 /** Manages controls to help filter a table. */
 class ListFilter {
@@ -37,7 +37,7 @@ public:
 	ListFilter(const ListFilter&) = delete;
 	ListFilter& operator=(const ListFilter&) = delete;
 
-	ListFilter(const ColumnInfo* columns, size_t colCount, UpdateF updateF);
+	ListFilter(const TableLayout::ColumnInfo* columns, size_t colCount, UpdateF updateF);
 
 	void createTextBox(GridPtr grid);
 	void createColumnBox(GridPtr grid);
@@ -67,7 +67,7 @@ private:
 
 	double prepareSize() const;
 
-	const ColumnInfo* const columns;
+	const TableLayout::ColumnInfo* const columns;
 	const size_t colCount;
 	const UpdateF updateF;
 

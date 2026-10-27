@@ -16,6 +16,19 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/frames/chat/ChatCommands.h>
+#include <win32/frames/chat/ChatText.h>
+#include <win32/frames/users/UserCommands.h>
+#include <win32/frames/users/UserPresentation.h>
+#include <win32/services/LinkActions.h>
+#include <win32/services/Notifications.h>
+#include <win32/shell/ShellActions.h>
 #include <win32/frames/chat/PrivateFrame.h>
 #include <win32/frames/transfers/private/PrivateSendDlg.h>
 
@@ -176,7 +189,7 @@ bool PrivateFrame::gotMessage(TabViewPtr parent, const ChatMessage& message, con
 			}
 		}
 
-		WinUtil::notify(WinUtil::NOTIFICATION_PM_WINDOW, Text::toT(message.message), [user] { activateWindow(user); });
+		Notifications::notify(Notifications::NOTIFICATION_PM_WINDOW, Text::toT(message.message), [user] { activateWindow(user); });
 
 	} else {
 		// send the message to the existing window
@@ -184,7 +197,7 @@ bool PrivateFrame::gotMessage(TabViewPtr parent, const ChatMessage& message, con
 		frame->lastMessageTime = message.timestamp;
 	}
 
-	WinUtil::notify(WinUtil::NOTIFICATION_PM, Text::toT(message.message), [user] { activateWindow(user); });
+	Notifications::notify(Notifications::NOTIFICATION_PM, Text::toT(message.message), [user] { activateWindow(user); });
 
 	return true;
 }
@@ -552,7 +565,7 @@ string PrivateFrame::getLogPath() const {
 }
 
 void PrivateFrame::openLog() {
-	WinUtil::openFile(Text::toT(getLogPath()));
+	ShellActions::openFile(Text::toT(getLogPath()));
 }
 
 void PrivateFrame::fillLogParams(ParamMap& params) const {
@@ -618,11 +631,11 @@ void PrivateFrame::updateOnlineStatus(bool newChannel) {
 			autoCCPMAttempts = 0;
 		}
 		setIcon(online ? IDI_PRIVATE : IDI_PRIVATE_OFF);
-		status->setIcon(STATUS_CHANNEL, WinUtil::statusIcon(ccReady() ? IDI_SECURE : online ? IDI_HUB : IDI_HUB_OFF));
+		status->setIcon(STATUS_CHANNEL, IconManager::statusIcon(ccReady() ? IDI_SECURE : online ? IDI_HUB : IDI_HUB_OFF));
 		newChannel = true;
 	}
 
-	setText(WinUtil::getNick(replyTo.getUser()) + _T(" - ") + WinUtil::getHubName(replyTo.getUser()));
+	setText(UserPresentation::getNick(replyTo.getUser()) + _T(" - ") + UserPresentation::getHubName(replyTo.getUser()));
 
 	if(newChannel) {
 		updateChannel();
@@ -636,7 +649,7 @@ void PrivateFrame::updateOnlineStatus(bool newChannel) {
 }
 
 void PrivateFrame::updateChannel() {
-	auto channel = ccReady() ? T_("Direct encrypted channel") : WinUtil::getHubName(replyTo.getUser());
+	auto channel = ccReady() ? T_("Direct encrypted channel") : UserPresentation::getHubName(replyTo.getUser());
 	dwt::util::cutStr(channel, 26);
 	status->setText(STATUS_CHANNEL, channel, true);
 }
@@ -959,7 +972,7 @@ void PrivateFrame::updateTypingState(bool refreshTimeout) {
 }
 
 void PrivateFrame::sendSeenIfActive() {
-	if(messageSeenPending && isActive() && WinUtil::mainWindow->onForeground()) {
+	if(messageSeenPending && isActive() && UiServices::mainWindow->onForeground()) {
 		if(sendPMI("SN", "1")) {
 			messageSeenPending = false;
 		}
@@ -981,7 +994,7 @@ void PrivateFrame::enterImpl(const tstring& s) {
 		if(PluginManager::getInstance()->onChatCommandPM(replyTo.getUser(), Text::fromT(s))) {
 			// Plugins, chat commands
 
-		} else if(WinUtil::checkCommand(cmd, param, message, status, thirdPerson)) {
+		} else if(ChatCommands::checkCommand(cmd, param, message, status, thirdPerson)) {
 			if(!message.empty()) {
 				if(!sendMessage(message, thirdPerson)) {
 					addStatus(T_("The message could not be sent because the active route changed."));
@@ -1032,15 +1045,15 @@ void PrivateFrame::enterImpl(const tstring& s) {
 
 			if(bShowBriefCommands)
 			{
-				addChat(T_("*** Keyboard commands:") + _T("\r\n") + 
-						WinUtil::commands + 
+				addChat(T_("*** Keyboard commands:") + _T("\r\n") +
+						ChatCommands::commands +
 						_T(", /direct, /encrypted, /rtf <message>, /getlist, /grant, /close, /favorite, /ignore, /unignore, /log <system, downloads, uploads>, /lastmessage")
 						);
 			}
 			else
 			{
 				addChat(T_("*** Keyboard commands:") + _T("\r\n") +
-						WinUtil::getDescriptiveCommands() +
+						ChatCommands::getDescriptiveCommands() +
 						+ _T("\r\n") _T("/direct")
 						+ _T("\r\n") _T("/encrypted")
 						+ _T("\r\n\t") + T_("Starts a direct encrypted communication channel to avoid spying on your private messages.")
@@ -1137,15 +1150,15 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 	}
 
 	tstring searchText;
-	WinUtil::getChatSelText(chat, searchText, pt);
+	ChatText::getChatSelText(chat, searchText, pt);
 
 	auto menu = chat->getMenu(searchText);
 	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
-		menu->appendItem(T_("Private Send..."), [this] { WinUtil::mainWindow->openPrivateSend(replyTo.getUser()); });
+		menu->appendItem(T_("Private Send..."), [this] { UiServices::mainWindow->openPrivateSend(replyTo.getUser()); });
 		menu->appendSeparator();
 	}
 
-	WinUtil::addSearchMenu(menu.get(), searchText);
+	LinkActions::addSearchMenu(menu.get(), searchText);
 
 	menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
 
@@ -1156,9 +1169,9 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 }
 
 void PrivateFrame::handleChannelMenu() {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
-		menu->appendItem(T_("Private Send..."), [this] { WinUtil::mainWindow->openPrivateSend(replyTo.getUser()); });
+		menu->appendItem(T_("Private Send..."), [this] { UiServices::mainWindow->openPrivateSend(replyTo.getUser()); });
 		menu->appendSeparator();
 	}
 
@@ -1188,7 +1201,7 @@ void PrivateFrame::handleChannelMenu() {
 			if(cc) {
 				menu->appendItem(T_("Disconnect the direct encrypted channel"), [this] { closeCC(); });
 			} else {
-				menu->appendItem(T_("Start a direct encrypted channel"), [this] { startCC(); }, WinUtil::menuIcon(IDI_SECURE));
+				menu->appendItem(T_("Start a direct encrypted channel"), [this] { startCC(); }, IconManager::menuIcon(IDI_SECURE));
 			}
 		}
 	}
@@ -1197,7 +1210,7 @@ void PrivateFrame::handleChannelMenu() {
 }
 
 void PrivateFrame::runUserCommand(const UserCommand& uc) {
-	if(!WinUtil::getUCParams(this, uc, ucLineParams))
+	if(!UserCommands::getUCParams(this, uc, ucLineParams))
 		return;
 
 	auto ucParams = ucLineParams;

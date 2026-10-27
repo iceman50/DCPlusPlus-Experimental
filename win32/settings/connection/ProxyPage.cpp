@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
 #include <win32/settings/connection/ProxyPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -26,7 +28,6 @@
 #include <dwt/widgets/RadioButton.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -78,13 +79,13 @@ socksSettings(0)
 
 		cur->addChild(Label::Seed(T_("Port")))->setHelpId(IDH_SETTINGS_PROXY_SOCKS_PORT);
 
-		auto box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		auto box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::SOCKS_SERVER, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_PROXY_SOCKS_SERVER);
 		box->setTextLimit(250);
-		WinUtil::preventSpaces(box);
+		DialogControls::preventSpaces(box);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::SOCKS_PORT, PropPage::T_INT);
 		box->setHelpId(IDH_SETTINGS_PROXY_SOCKS_PORT);
 		box->setTextLimit(250);
@@ -93,12 +94,12 @@ socksSettings(0)
 
 		cur->addChild(Label::Seed(T_("Password")))->setHelpId(IDH_SETTINGS_PROXY_SOCKS_PASSWORD);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::SOCKS_USER, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_PROXY_SOCKS_USER);
 		box->setTextLimit(250);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		box = cur->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(box, SettingsManager::SOCKS_PASSWORD, PropPage::T_STR);
 		box->setHelpId(IDH_SETTINGS_PROXY_SOCKS_PASSWORD);
 		box->setTextLimit(250);

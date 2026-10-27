@@ -19,8 +19,9 @@
 #define DCPLUSPLUS_WIN32_ASPECTSTATUS_H_
 
 #include <dwt/widgets/StatusBar.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/services/HelpService.h>
 
-#include <win32/util/WinUtil.h>
 
 template<class WidgetType>
 class AspectStatus {
@@ -36,9 +37,9 @@ protected:
 
 	void initStatus(bool sizeGrip = false) {
 		dwt::StatusBar::Seed cs(WidgetType::STATUS_LAST, WidgetType::STATUS_STATUS, sizeGrip);
-		cs.font = WinUtil::font;
+		cs.font = UiFonts::font;
 		status = W().addChild(cs);
-		status->onHelp(&WinUtil::help);
+		status->onHelp(&HelpService::help);
 	}
 
 	dwt::StatusBarPtr status;

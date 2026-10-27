@@ -16,6 +16,10 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/HelpService.h>
 #include <win32/dialogs/StringListDlg.h>
 
 #include <dwt/widgets/Button.h>
@@ -25,7 +29,6 @@
 
 #include <win32/controls/HoldRedraw.h>
 #include <win32/dialogs/ParamDlg.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Button;
 using dwt::Grid;
@@ -44,7 +47,7 @@ remove(0),
 unique(ensureUniqueness)
 {
 	onInitDialog([=] { return handleInitDialog(initialValues); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 }
 
 StringListDlg::~StringListDlg() {
@@ -117,7 +120,7 @@ bool StringListDlg::handleInitDialog(const TStringList& initialValues) {
 	grid->row(1).mode = GridInfo::FILL;
 	grid->row(1).align = GridInfo::STRETCH;
 
-	editBox = grid->addChild(WinUtil::Seeds::Dialog::textBox);
+	editBox = grid->addChild(ControlSeeds::Dialog::textBox);
 	editBox->setHelpId(getHelpId(HELP_EDIT_BOX));
 
 	{
@@ -129,7 +132,7 @@ bool StringListDlg::handleInitDialog(const TStringList& initialValues) {
 	}
 
 	{
-		Table::Seed seed = WinUtil::Seeds::Dialog::table;
+		Table::Seed seed = ControlSeeds::Dialog::table;
 		seed.style |= LVS_NOCOLUMNHEADER;
 		list = grid->addChild(seed);
 		list->setHelpId(getHelpId(HELP_LIST));
@@ -163,7 +166,7 @@ bool StringListDlg::handleInitDialog(const TStringList& initialValues) {
 		remove->onClicked([this] { handleRemoveClicked(); });
 
 		::SetWindowLongPtr(
-			WinUtil::addDlgButtons(cur,
+			DialogControls::addDlgButtons(cur,
 				[this] { handleOKClicked(); },
 				[this] { endDialog(IDCANCEL); })
 			.first->handle(), GWLP_ID, 0); // the def button is the "Add" button

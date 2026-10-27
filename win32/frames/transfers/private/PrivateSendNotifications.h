@@ -6,6 +6,7 @@
 #define DCPLUSPLUS_WIN32_PRIVATE_SEND_NOTIFICATIONS_H
 
 #include <dcpp/transfer/private/DirectTransferManager.h>
+#include <dcpp/user/HintedUser.h>
 
 #include <set>
 

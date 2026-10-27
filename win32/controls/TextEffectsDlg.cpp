@@ -1,9 +1,13 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "stdafx.h"
+#include <dcpp/text/SimpleXML.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/DialogControls.h>
 #include <win32/controls/TextEffectsDlg.h>
 #include <win32/controls/HtmlToRtf.h>
 #include <win32/controls/RichTextBox.h>
-#include <win32/util/WinUtil.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/GroupBox.h>
 #include <dwt/widgets/Label.h>
@@ -41,7 +45,7 @@ bool TextEffectsDlg::initDialog(const tstring& styleName) {
 	sample->row(0).mode = GridInfo::STATIC;
 	sample->row(0).size = sample->scale(105);
 	sample->row(0).align = GridInfo::STRETCH;
-	auto seed = WinUtil::Seeds::Dialog::richTextBox;
+	auto seed = ControlSeeds::Dialog::richTextBox;
 	seed.style |= ES_READONLY;
 	preview = sample->addChild(seed);
 	preview->setAccessibleName(T_("Text effects preview"));
@@ -80,7 +84,7 @@ bool TextEffectsDlg::initDialog(const tstring& styleName) {
 	auto underlineRow = lines->addChild(Grid::Seed(1, 2));
 	underlineRow->column(1).mode = GridInfo::FILL;
 	underline = checkbox(underlineRow, T_("Underline"));
-	underlineType = underlineRow->addChild(WinUtil::Seeds::Dialog::comboBox);
+	underlineType = underlineRow->addChild(ControlSeeds::Dialog::comboBox);
 	for(const auto& name : { T_("Single"), T_("Double"), T_("Dotted"), T_("Dash"), T_("Dash dot"),
 		T_("Dash dot dot"), T_("Wave"), T_("Thick"), T_("Words only"), T_("Heavy wave"), T_("Double wave") }) underlineType->addValue(name);
 	underlineType->onSelectionChanged([this] { updatePreview(); });
@@ -94,9 +98,9 @@ bool TextEffectsDlg::initDialog(const tstring& styleName) {
 	metrics->addChild(dwt::Label::Seed(T_("Character spacing (pt)")));
 	metrics->addChild(dwt::Label::Seed(T_("Baseline offset (pt)")));
 	kerning = checkbox(metrics, T_("Kerning above (pt)"));
-	spacing = metrics->addChild(WinUtil::Seeds::Dialog::textBox);
-	offset = metrics->addChild(WinUtil::Seeds::Dialog::textBox);
-	kerningSize = metrics->addChild(WinUtil::Seeds::Dialog::textBox);
+	spacing = metrics->addChild(ControlSeeds::Dialog::textBox);
+	offset = metrics->addChild(ControlSeeds::Dialog::textBox);
+	kerningSize = metrics->addChild(ControlSeeds::Dialog::textBox);
 	spacing->setAccessibleName(T_("Character spacing in points"));
 	offset->setAccessibleName(T_("Baseline offset in points"));
 	kerningSize->setAccessibleName(T_("Kerning threshold in points"));
@@ -115,7 +119,7 @@ bool TextEffectsDlg::initDialog(const tstring& styleName) {
 		fontValue.lfItalic = false;
 		loadControls();
 	});
-	ok = WinUtil::addDlgButtons(footer->addChild(Grid::Seed(1, 2)),
+	ok = DialogControls::addDlgButtons(footer->addChild(Grid::Seed(1, 2)),
 		[this] { if(ok->getEnabled()) endDialog(IDOK); },
 		[this] { endDialog(IDCANCEL); }).first;
 	loadControls();
@@ -182,7 +186,7 @@ void TextEffectsDlg::updatePreview() {
 		T_("Preview uses Windows RichEdit; support for advanced effects varies."));
 	fontValue.lfUnderline = effects.underline != 0;
 	fontValue.lfStrikeOut = effects.strike != 0;
-	const auto encoded = effects.encode(Text::fromT(WinUtil::encodeFont(fontValue)));
+	const auto encoded = effects.encode(Text::fromT(UiFonts::encodeFont(fontValue)));
 	const auto css = "font:" + Util::cssFont(encoded) + ";dc-font:" + encoded + ";color:#" + Util::cssColor(foreground) +
 		";background-color:#" + Util::cssColor(background) + ";";
 	string scratch;

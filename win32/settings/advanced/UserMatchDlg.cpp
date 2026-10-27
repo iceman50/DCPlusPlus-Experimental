@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/HelpService.h>
 #include <win32/settings/advanced/UserMatchDlg.h>
 
 #include <dcpp/version.h>
@@ -27,7 +30,6 @@
 #include <dwt/widgets/MessageBox.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Button;
 using dwt::Grid;
@@ -45,7 +47,7 @@ forceChat(0),
 ignoreChat(0)
 {
 	onInitDialog([this, initialMatcher] { return handleInitDialog(initialMatcher); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 }
 
 UserMatchDlg::~UserMatchDlg() {
@@ -58,7 +60,7 @@ bool UserMatchDlg::handleInitDialog(const UserMatch* initialMatcher) {
 	grid->column(0).mode = GridInfo::FILL;
 	grid->setSpacing(8);
 
-	name = grid->addChild(GroupBox::Seed(T_("Name")))->addChild(WinUtil::Seeds::Dialog::textBox);
+	name = grid->addChild(GroupBox::Seed(T_("Name")))->addChild(ControlSeeds::Dialog::textBox);
 	name->setHelpId(IDH_USER_MATCH_NAME);
 
 	{
@@ -106,11 +108,11 @@ bool UserMatchDlg::handleInitDialog(const UserMatch* initialMatcher) {
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
 		cur->setSpacing(grid->getSpacing());
 
-		WinUtil::addDlgButtons(cur,
+		DialogControls::addDlgButtons(cur,
 			[this] { handleOKClicked(); },
 			[this] { endDialog(IDCANCEL); });
 
-		WinUtil::addHelpButton(cur)->onClicked([this] { WinUtil::help(this); });
+		DialogControls::addHelpButton(cur)->onClicked([this] { HelpService::help(this); });
 	}
 
 	if(initialMatcher) {
@@ -198,13 +200,13 @@ void UserMatchDlg::layoutRules() {
 void UserMatchDlg::addRow(const UserMatch::Rule* rule) {
 	rules->addRow();
 
-	auto field = rules->addChild(WinUtil::Seeds::Dialog::comboBox);
+	auto field = rules->addChild(ControlSeeds::Dialog::comboBox);
 	field->setHelpId(IDH_USER_MATCH_RULE_FIELD);
 
-	auto search = rules->addChild(WinUtil::Seeds::Dialog::textBox);
+	auto search = rules->addChild(ControlSeeds::Dialog::textBox);
 	search->setHelpId(IDH_USER_MATCH_RULE_PATTERN);
 
-	auto method = rules->addChild(WinUtil::Seeds::Dialog::comboBox);
+	auto method = rules->addChild(ControlSeeds::Dialog::comboBox);
 	method->setHelpId(IDH_USER_MATCH_RULE_METHOD);
 
 	{
@@ -222,7 +224,7 @@ void UserMatchDlg::addRow(const UserMatch::Rule* rule) {
 	std::for_each(fields, fields + UserMatch::Rule::FIELD_LAST, [field](const tstring& str) { field->addValue(str); });
 	field->setSelected(rule ? rule->field : 0);
 
-	WinUtil::addFilterMethods(method);
+	DialogControls::addFilterMethods(method);
 	method->setSelected(rule ? rule->getMethod() : 0);
 
 	if(rule) {

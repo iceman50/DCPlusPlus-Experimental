@@ -17,6 +17,15 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/users/UserPresentation.h>
 #include <win32/frames/users/UsersFrame.h>
 
 #include <dcpp/favorites/FavoriteManager.h>
@@ -49,7 +58,7 @@ const string& UsersFrame::getId() const { return id; }
 
 dwt::ImageListPtr UsersFrame::userIcons;
 
-static const ColumnInfo usersColumns[] = {
+static const TableLayout::ColumnInfo usersColumns[] = {
 	{ N_("Favorite"), 25, false },
 	{ N_("Auto grant slot"), 25, false },
 	{ N_("Nick"), 125, false },
@@ -129,24 +138,24 @@ selected(-1)
 		if(!userIcons) {
 			const dwt::Point size(16, 16);
 			userIcons = dwt::ImageListPtr(new dwt::ImageList(size));
-			userIcons->add(*WinUtil::createIcon(IDI_FAVORITE_USER_OFF, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_FAVORITE_USER_ON, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_RED_BALL, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_GREEN_BALL, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_DCPP, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_WHATS_THIS, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_USER_BOT, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_TRUSTED, size.x));
-			userIcons->add(*WinUtil::createIcon(IDI_DCPP_WARNING, size.x));
+			userIcons->add(*IconManager::load(IDI_FAVORITE_USER_OFF, size.x));
+			userIcons->add(*IconManager::load(IDI_FAVORITE_USER_ON, size.x));
+			userIcons->add(*IconManager::load(IDI_RED_BALL, size.x));
+			userIcons->add(*IconManager::load(IDI_GREEN_BALL, size.x));
+			userIcons->add(*IconManager::load(IDI_DCPP, size.x));
+			userIcons->add(*IconManager::load(IDI_WHATS_THIS, size.x));
+			userIcons->add(*IconManager::load(IDI_USER_BOT, size.x));
+			userIcons->add(*IconManager::load(IDI_TRUSTED, size.x));
+			userIcons->add(*IconManager::load(IDI_DCPP_WARNING, size.x));
 		}
 
-		WidgetUsers::Seed cs(WinUtil::Seeds::table);
+		WidgetUsers::Seed cs(ControlSeeds::table);
 		cs.lvStyle |= LVS_EX_SUBITEMIMAGES;
 		users = splitter->addChild(cs);
 		addWidget(users);
 
-		WinUtil::makeColumns(users, usersColumns, COLUMN_LAST, SETTING(USERSFRAME_ORDER), SETTING(USERSFRAME_WIDTHS));
-		WinUtil::setTableSort(users, COLUMN_LAST, SettingsManager::USERSFRAME_SORT, COLUMN_NICK);
+		TableLayout::makeColumns(users, usersColumns, COLUMN_LAST, SETTING(USERSFRAME_ORDER), SETTING(USERSFRAME_WIDTHS));
+		TableLayout::setTableSort(users, COLUMN_LAST, SettingsManager::USERSFRAME_SORT, COLUMN_NICK);
 
 		// TODO check default (browse vs get)
 		users->onDblClicked([this] { handleGetList(getParent()); });
@@ -162,7 +171,7 @@ selected(-1)
 		userInfo->row(0).align = GridInfo::STRETCH;
 
 		auto group = userInfo->addChild(GroupBox::Seed(T_("User information")));
-		auto seed = WinUtil::Seeds::textBox;
+		auto seed = ControlSeeds::textBox;
 		seed.style &= ~ES_AUTOHSCROLL;
 		seed.style |= ES_MULTILINE | WS_VSCROLL | ES_READONLY;
 		infoBox = group->addChild(seed);
@@ -172,7 +181,7 @@ selected(-1)
 		auto cur = grid->addChild(Grid::Seed(1, 8));
 		cur->column(1).mode = GridInfo::FILL;
 
-		auto ls = WinUtil::Seeds::label;
+		auto ls = ControlSeeds::label;
 		ls.caption = T_("Filter:");
 		cur->addChild(ls);
 
@@ -190,7 +199,7 @@ selected(-1)
 		addWidget(filter.method);
 
 		auto addFilterBox = [this, cur](const tstring& text, SettingsManager::BoolSetting setting, unsigned helpId) {
-			auto box = cur->addChild(WinUtil::Seeds::checkBox);
+			auto box = cur->addChild(ControlSeeds::checkBox);
 			box->setHelpId(helpId);
 			addWidget(box);
 			box->setText(text);
@@ -254,9 +263,9 @@ bool UsersFrame::preClosing() {
 void UsersFrame::postClosing() {
 	SettingsManager::getInstance()->set(SettingsManager::USERS_PANED_POS, splitter->getSplitterPos(0));
 
-	SettingsManager::getInstance()->set(SettingsManager::USERSFRAME_ORDER, WinUtil::toString(users->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::USERSFRAME_WIDTHS, WinUtil::toString(users->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::USERSFRAME_SORT, WinUtil::getTableSort(users));
+	SettingsManager::getInstance()->set(SettingsManager::USERSFRAME_ORDER, TableLayout::toString(users->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::USERSFRAME_WIDTHS, TableLayout::toString(users->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::USERSFRAME_SORT, TableLayout::getTableSort(users));
 }
 
 UsersFrame::UserInfo::UserInfo(const UserPtr& u, bool visible) :
@@ -277,7 +286,7 @@ int UsersFrame::UserInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& b
 		auto style = ident[0].getStyle();
 
 		if(!style.font.empty()) {
-			auto cached = WinUtil::getUserMatchFont(style.font);
+			auto cached = UiFonts::getUserMatchFont(style.font);
 			if(cached.get()) {
 				font = cached->handle();
 			}
@@ -343,11 +352,11 @@ void UsersFrame::UserInfo::update(const UserPtr& u, bool visible) {
 		}
 		columns[COLUMN_DESCRIPTION] = Text::toT(fu->getDescription());
 		columns[COLUMN_SEEN] = isOnline ? T_("Online") : fu->getLastSeen() > 0 ? Text::toT(Util::formatTime("%Y-%m-%d %H:%M", fu->getLastSeen())) : T_("Offline");
-		columns[COLUMN_HUB] = isOnline ?  WinUtil::getHubNames(u->getCID()).first : Text::toT(fu->getUrl());
+		columns[COLUMN_HUB] = isOnline ?  UserPresentation::getHubNames(u->getCID()).first : Text::toT(fu->getUrl());
 	} else {
 		isFavorite = false;
 		grantSlot = false;
-		columns[COLUMN_NICK] = WinUtil::getNicks(u->getCID());
+		columns[COLUMN_NICK] = UserPresentation::getNicks(u->getCID());
 
 		if(!visible) {
 			return;
@@ -355,7 +364,7 @@ void UsersFrame::UserInfo::update(const UserPtr& u, bool visible) {
 
 		if(isOnline) {
 			columns[COLUMN_SEEN] = T_("Online");
-			columns[COLUMN_HUB] = WinUtil::getHubNames(u->getCID()).first;
+			columns[COLUMN_HUB] = UserPresentation::getHubNames(u->getCID()).first;
 		}  else {
 			columns[COLUMN_SEEN] = T_("Offline");
 		}
@@ -505,13 +514,13 @@ bool UsersFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 			pt = users->getContextMenuPos();
 		}
 
-		auto menu = addChild(WinUtil::Seeds::menu);
+		auto menu = addChild(ControlSeeds::menu);
 		menu->setTitle((sel == 1) ? escapeMenu(users->getSelectedData()->getText(COLUMN_NICK)) : str(TF_("%1% users") % sel));
 		appendUserItems(getParent(), menu.get());
 		menu->appendSeparator();
 		menu->appendItem(T_("&Description"), [this] { handleDescription(); });
 		menu->appendItem(T_("&Remove"), [this] { handleRemove(); });
-		WinUtil::addCopyMenu(menu.get(), users);
+		TableActions::addCopyMenu(menu.get(), users);
 
 		menu->open(pt);
 

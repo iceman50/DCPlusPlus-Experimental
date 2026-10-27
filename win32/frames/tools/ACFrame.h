@@ -19,6 +19,7 @@
 #define DCPLUSPLUS_WIN32_AC_FRAME_H
 
 #include <dcpp/forward.h>
+#include <dcpp/util/Util.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/transfer/private/DirectTransferManager.h>
 

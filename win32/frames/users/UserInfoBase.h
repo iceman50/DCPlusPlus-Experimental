@@ -19,6 +19,10 @@
 #define USERINFOBASE_H_
 
 #include <dcpp/forward.h>
+#include <win32/forward.h>
+#include <dcpp/user/HintedUser.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/shell/ClipboardActions.h>
 #include <dcpp/base/Flags.h>
 #include <dcpp/text/Text.h>
 #include <dcpp/user/User.h>
@@ -26,7 +30,6 @@
 #include <dwt/widgets/Menu.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 class UserInfoBase {
 public:
@@ -138,7 +141,7 @@ protected:
 			if(!text.empty()) { text += _T("\r\n\r\n"); }
 			text += u->getInfo(UserInfoBase::INFO_ALL);
 		});
-		WinUtil::setClipboard(text);
+		ClipboardActions::setClipboard(text);
 	}
 
 	void appendUserItems(TabViewPtr parent, Menu* menu, bool defaultIsGetList = true, bool includeSendPM = true) {
@@ -157,10 +160,10 @@ protected:
 		if(includeSendPM)
 			menu->appendItem(T_("&Send private message"), [this, parent] { this->t().handlePrivateMessage(parent); }, dwt::IconPtr(), true, !defaultIsGetList);
 		if(!traits.isSet(UserTraits::favOnly))
-			menu->appendItem(T_("Add To &Favorites"), [this] { this->t().handleAddFavorite(); }, WinUtil::menuIcon(IDI_FAVORITE_USER_ON));
+			menu->appendItem(T_("Add To &Favorites"), [this] { this->t().handleAddFavorite(); }, IconManager::menuIcon(IDI_FAVORITE_USER_ON));
 		menu->appendItem(T_("Grant &extra slot"), [this] { this->t().handleGrantSlot(); });
 		if(!traits.isSet(UserTraits::nonFavOnly))
-			menu->appendItem(T_("Connect to hub"), [this, parent] { this->t().handleConnectFav(parent); }, WinUtil::menuIcon(IDI_HUB));
+			menu->appendItem(T_("Connect to hub"), [this, parent] { this->t().handleConnectFav(parent); }, IconManager::menuIcon(IDI_HUB));
 		menu->appendSeparator();
 		menu->appendItem(T_("Remove user from queue"), [this] { this->t().handleRemoveFromQueue(); });
 

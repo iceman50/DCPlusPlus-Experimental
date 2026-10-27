@@ -17,6 +17,20 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ColorUtil.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/users/UserCommands.h>
+#include <win32/frames/users/UserPresentation.h>
+#include <win32/services/LinkActions.h>
 #include <win32/frames/transfers/TransferView.h>
 #include <win32/appearance/CountryFlags.h>
 
@@ -41,11 +55,10 @@
 #include <win32/resource.h>
 #include <win32/shell/ShellMenu.h>
 #include <win32/controls/TypedTable.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::util::escapeMenu;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ N_("File"), 200, false },
 	{ N_("Path"), 300, false },
 	{ N_("Status"), 350, false },
@@ -64,8 +77,8 @@ TransferView::TransferView(dwt::Widget* parent, TabViewPtr mdi_) :
 	dwt::Container(parent),
 	transfers(0),
 	mdi(mdi_),
-	downloadIcon(WinUtil::createIcon(IDI_DOWNLOAD, 16)),
-	uploadIcon(WinUtil::createIcon(IDI_UPLOAD, 16)),
+	downloadIcon(IconManager::load(IDI_DOWNLOAD, 16)),
+	uploadIcon(IconManager::load(IDI_UPLOAD, 16)),
 	updateList(false),
 	resortList(false),
 	resortMask(0)
@@ -73,15 +86,15 @@ TransferView::TransferView(dwt::Widget* parent, TabViewPtr mdi_) :
 	create();
 	setHelpId(IDH_TRANSFERS);
 
-	transfers = addChild(WidgetTransfers::Seed(WinUtil::Seeds::table));
+	transfers = addChild(WidgetTransfers::Seed(ControlSeeds::table));
 
-	transfers->setSmallImageList(WinUtil::fileImages);
+	transfers->setSmallImageList(ImageLists::fileImages);
 	transfers->setImageColumns({ COLUMN_IP });
 
-	WinUtil::makeColumns(transfers, columns, COLUMN_LAST, SETTING(TRANSFERS_ORDER), SETTING(TRANSFERS_WIDTHS));
-	WinUtil::setTableSort(transfers, COLUMN_LAST, SettingsManager::TRANSFERS_SORT, COLUMN_STATUS);
+	TableLayout::makeColumns(transfers, columns, COLUMN_LAST, SETTING(TRANSFERS_ORDER), SETTING(TRANSFERS_WIDTHS));
+	TableLayout::setTableSort(transfers, COLUMN_LAST, SettingsManager::TRANSFERS_SORT, COLUMN_STATUS);
 
-	WinUtil::setColor(transfers);
+	AppAppearance::setColor(transfers);
 
 	transfers->onCustomDraw([this](NMLVCUSTOMDRAW& data) { return handleCustomDraw(data); });
 	transfers->onKeyDown([this](int c) { return handleKeyDown(c); });
@@ -126,7 +139,7 @@ const tstring& TransferView::ItemInfo::getText(int col) const {
 }
 
 int TransferView::ItemInfo::getImage(int col) const {
-	return col == COLUMN_IP && SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::fileFlagOffset) : -1;
+	return col == COLUMN_IP && SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, ImageLists::fileFlagOffset) : -1;
 }
 
 int TransferView::ItemInfo::compareItems(const ItemInfo* a, const ItemInfo* b, int col) {
@@ -167,8 +180,8 @@ TransferView::ConnectionInfo::ConnectionInfo(const HintedUser& u, const string& 
 {
 	columns[COLUMN_FILE] = parent.getText(COLUMN_FILE);
 	columns[COLUMN_PATH] = parent.getText(COLUMN_PATH);
-	columns[COLUMN_USER] = WinUtil::getNicks(u);
-	columns[COLUMN_HUB] = WinUtil::getHubNames(u).first;
+	columns[COLUMN_USER] = UserPresentation::getNicks(u);
+	columns[COLUMN_HUB] = UserPresentation::getHubNames(u).first;
 	columns[COLUMN_STATUS] = T_("Idle");
 }
 
@@ -177,7 +190,7 @@ bool TransferView::ConnectionInfo::operator==(const ConnectionInfo& other) const
 }
 
 int TransferView::ConnectionInfo::getImage(int col) const {
-	return col == COLUMN_FILE ? WinUtil::TRANSFER_ICON_USER : ItemInfo::getImage(col);
+	return col == COLUMN_FILE ? ImageLists::TRANSFER_ICON_USER : ItemInfo::getImage(col);
 }
 
 void TransferView::ConnectionInfo::update(const UpdateInfo& ui) {
@@ -301,7 +314,7 @@ int TransferView::TransferInfo::getImage(int col) const {
 	if(col != COLUMN_FILE)
 		return ItemInfo::getImage(col);
 
-	return type == CONNECTION_TYPE_PM ? WinUtil::TRANSFER_ICON_PM : static_cast<int>(WinUtil::getFileIcon(path));
+	return type == CONNECTION_TYPE_PM ? ImageLists::TRANSFER_ICON_PM : static_cast<int>(ImageLists::getFileIcon(path));
 }
 
 void TransferView::TransferInfo::update() {
@@ -501,9 +514,9 @@ void TransferView::HttpInfo::disconnect() {
 }
 
 void TransferView::handleDestroy() {
-	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_ORDER, WinUtil::toString(transfers->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_WIDTHS, WinUtil::toString(transfers->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_SORT, WinUtil::getTableSort(transfers));
+	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_ORDER, TableLayout::toString(transfers->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_WIDTHS, TableLayout::toString(transfers->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_SORT, TableLayout::getTableSort(transfers));
 }
 
 bool TransferView::handleContextMenu(dwt::ScreenCoordinate pt) {
@@ -516,7 +529,7 @@ bool TransferView::handleContextMenu(dwt::ScreenCoordinate pt) {
 		auto selData = (sel.size() == 1) ? transfers->getSelectedData() : nullptr;
 		auto transfer = dynamic_cast<TransferInfo*>(selData);
 
-		auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
+		auto menu = addChild(ShellMenu::Seed(ControlSeeds::menu));
 
 		tstring title;
 		dwt::IconPtr icon;
@@ -524,9 +537,9 @@ bool TransferView::handleContextMenu(dwt::ScreenCoordinate pt) {
 			title = escapeMenu(selData->getText(transfer ? COLUMN_FILE : COLUMN_USER));
 			if(title.empty()) {
 				title = escapeMenu(selData->getText(COLUMN_USER));
-				icon = WinUtil::fileImages->getIcon(WinUtil::TRANSFER_ICON_USER);
+				icon = ImageLists::fileImages->getIcon(ImageLists::TRANSFER_ICON_USER);
 			} else {
-				icon = WinUtil::fileImages->getIcon(selData->getImage(COLUMN_FILE));
+				icon = ImageLists::fileImages->getIcon(selData->getImage(COLUMN_FILE));
 			}
 		} else {
 			title = str(TF_("%1% items") % sel.size());
@@ -554,13 +567,13 @@ bool TransferView::handleContextMenu(dwt::ScreenCoordinate pt) {
 		if(files.size() == 1) {
 			menu->appendSeparator();
 			transfer = *files.begin();
-			WinUtil::addHashItems(menu.get(), transfer->tth, transfer->getText(COLUMN_FILE), transfer->size);
+			LinkActions::addHashItems(menu.get(), transfer->tth, transfer->getText(COLUMN_FILE), transfer->size);
 		} else if(!files.empty()) {
 			menu->appendSeparator();
 			for(auto transfer: files) {
 				auto file = transfer->getText(COLUMN_FILE);
-				WinUtil::addHashItems(
-					menu->appendPopup(file, WinUtil::fileImages->getIcon(transfer->getImage(COLUMN_FILE))),
+				LinkActions::addHashItems(
+					menu->appendPopup(file, ImageLists::fileImages->getIcon(transfer->getImage(COLUMN_FILE))),
 					transfer->tth, file, transfer->size);
 			}
 		}
@@ -596,7 +609,7 @@ bool TransferView::handleContextMenu(dwt::ScreenCoordinate pt) {
 		
 		menu->appendItem(T_("&Disconnect"), [this] { handleDisconnect(); });
 
-		WinUtil::addCopyMenu(menu.get(), transfers);
+		TableActions::addCopyMenu(menu.get(), transfers);
 
 		set<string> hubs;
 		for(auto& i: selectedUsersImpl()) {
@@ -647,14 +660,14 @@ namespace { void drawProgress(HDC hdc, const dwt::Rectangle& rcItem, int item, i
 {
 	// draw something nice...
 	COLORREF barBase = download ? SETTING(DOWNLOAD_BG_COLOR) : SETTING(UPLOAD_BG_COLOR);
-	COLORREF bgBase = WinUtil::bgColor;
-	int mod = (HLS_L(RGB2HLS(bgBase)) >= 128) ? -30 : 30;
+	COLORREF bgBase = AppAppearance::bgColor;
+	int mod = (HLS_L(ColorUtil::RGB2HLS(bgBase)) >= 128) ? -30 : 30;
 
 	// Dark, medium and light shades
-	COLORREF barPal[3] { HLS_TRANSFORM(barBase, -40, 50), barBase, HLS_TRANSFORM(barBase, 40, -30) };
+	COLORREF barPal[3] { ColorUtil::HLS_TRANSFORM(barBase, -40, 50), barBase, ColorUtil::HLS_TRANSFORM(barBase, 40, -30) };
 
 	// Two shades of the background color
-	COLORREF bgPal[2] { HLS_TRANSFORM(bgBase, mod, 0), HLS_TRANSFORM(bgBase, mod/2, 0) };
+	COLORREF bgPal[2] { ColorUtil::HLS_TRANSFORM(bgBase, mod, 0), ColorUtil::HLS_TRANSFORM(bgBase, mod/2, 0) };
 
 	dwt::FreeCanvas canvas { hdc };
 
@@ -727,9 +740,9 @@ namespace { void drawProgress(HDC hdc, const dwt::Rectangle& rcItem, int item, i
 	// draw status text
 
 	auto bkMode(canvas.setBkMode(true));
-	auto& font = download ? WinUtil::downloadFont : WinUtil::uploadFont;
+	auto& font = download ? UiFonts::downloadFont : UiFonts::uploadFont;
 	if(!font.get()) {
-		font = WinUtil::font;
+		font = UiFonts::font;
 	}
 	auto selectFont(canvas.select(*font));
 
@@ -750,7 +763,7 @@ namespace { void drawProgress(HDC hdc, const dwt::Rectangle& rcItem, int item, i
 	r.left = r.right;
 	r.right = rcItem.right();
 
-	canvas.setTextColor(WinUtil::textColor);
+	canvas.setTextColor(AppAppearance::textColor);
 	::ExtTextOut(hdc, left, top, ETO_CLIPPED, &r, text.c_str(), static_cast<UINT>(text.size()), NULL);
 } }
 
@@ -793,7 +806,7 @@ bool TransferView::handleTimer() {
 }
 
 void TransferView::runUserCommand(const UserCommand& uc) {
-	if(!WinUtil::getUCParams(this, uc, ucLineParams))
+	if(!UserCommands::getUCParams(this, uc, ucLineParams))
 		return;
 
 	set<CID> users;

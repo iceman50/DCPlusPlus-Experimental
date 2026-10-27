@@ -17,6 +17,12 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/services/Notifications.h>
 
 #include <win32/settings/appearance/NotificationsPage.h>
 
@@ -32,7 +38,7 @@ using dwt::Grid;
 using dwt::GridInfo;
 using dwt::LoadDialog;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ "", 0, false },
 	{ N_("Event"), 100, false },
 	{ N_("Sound"), 100, false },
@@ -51,11 +57,11 @@ balloonBg(0)
 {
 	setHelpId(IDH_NOTIFICATIONSPAGE);
 
-	options[WinUtil::NOTIFICATION_FINISHED_DL].helpId = IDH_SETTINGS_NOTIFICATIONS_FINISHED_DL;
-	options[WinUtil::NOTIFICATION_FINISHED_FL].helpId = IDH_SETTINGS_NOTIFICATIONS_FINISHED_FL;
-	options[WinUtil::NOTIFICATION_MAIN_CHAT].helpId = IDH_SETTINGS_NOTIFICATIONS_MAIN_CHAT;
-	options[WinUtil::NOTIFICATION_PM].helpId = IDH_SETTINGS_NOTIFICATIONS_PM;
-	options[WinUtil::NOTIFICATION_PM_WINDOW].helpId = IDH_SETTINGS_NOTIFICATIONS_PM_WINDOW;
+	options[Notifications::NOTIFICATION_FINISHED_DL].helpId = IDH_SETTINGS_NOTIFICATIONS_FINISHED_DL;
+	options[Notifications::NOTIFICATION_FINISHED_FL].helpId = IDH_SETTINGS_NOTIFICATIONS_FINISHED_FL;
+	options[Notifications::NOTIFICATION_MAIN_CHAT].helpId = IDH_SETTINGS_NOTIFICATIONS_MAIN_CHAT;
+	options[Notifications::NOTIFICATION_PM].helpId = IDH_SETTINGS_NOTIFICATIONS_PM;
+	options[Notifications::NOTIFICATION_PM_WINDOW].helpId = IDH_SETTINGS_NOTIFICATIONS_PM_WINDOW;
 
 	grid->column(0).mode = GridInfo::FILL;
 	grid->row(0).mode = GridInfo::FILL;
@@ -68,16 +74,16 @@ balloonBg(0)
 		cur->row(0).align = GridInfo::STRETCH;
 		cur->setSpacing(grid->getSpacing());
 
-		auto seed = WinUtil::Seeds::Dialog::table;
+		auto seed = ControlSeeds::Dialog::table;
 		seed.style |= LVS_SINGLESEL;
 		seed.lvStyle |= LVS_EX_SUBITEMIMAGES;
 		table = cur->addChild(seed);
 
 		const dwt::Point size(16, 16);
 		dwt::ImageListPtr images(new dwt::ImageList(size));
-		images->add(*WinUtil::createIcon(IDI_CANCEL, size.x));
-		images->add(*WinUtil::createIcon(IDI_SOUND, size.x));
-		images->add(*WinUtil::createIcon(IDI_BALLOON, size.x));
+		images->add(*IconManager::load(IDI_CANCEL, size.x));
+		images->add(*IconManager::load(IDI_SOUND, size.x));
+		images->add(*IconManager::load(IDI_BALLOON, size.x));
 		table->setSmallImageList(images);
 
 		cur = cur->addChild(Grid::Seed(1, 2));
@@ -103,10 +109,10 @@ balloonBg(0)
 		cur->column(1).mode = GridInfo::FILL;
 
 		auto button = cur->addChild(Button::Seed(T_("Play")));
-		button->setImage(WinUtil::buttonIcon(IDI_SOUND));
+		button->setImage(IconManager::buttonIcon(IDI_SOUND));
 		button->onClicked([this] { handlePlayClicked(); });
 
-		soundFile = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		soundFile = cur->addChild(ControlSeeds::Dialog::textBox);
 		soundFile->onUpdated([this] { handleSoundChanged(); });
 
 		cur->addChild(Button::Seed(T_("&Browse...")))->onClicked([this] { handleBrowseClicked(); });
@@ -123,18 +129,18 @@ balloonBg(0)
 	{
 		auto button = grid->addChild(Grid::Seed(1, 1))->addChild(Button::Seed(T_("Fire a balloon popup example")));
 		button->setHelpId(IDH_SETTINGS_NOTIFICATIONS_BALLOON_EXAMPLE);
-		button->setImage(WinUtil::buttonIcon(IDI_BALLOON));
+		button->setImage(IconManager::buttonIcon(IDI_BALLOON));
 		button->onClicked([this] { handleExampleClicked(); });
 	}
 
-	WinUtil::makeColumns(table, columns, COLUMN_LAST);
+	TableLayout::makeColumns(table, columns, COLUMN_LAST);
 
-	for(size_t i = 0; i < WinUtil::NOTIFICATION_LAST; ++i) {
-		options[i].sound = Text::toT(SettingsManager::getInstance()->get((SettingsManager::StrSetting)WinUtil::notifications[i].sound));
-		options[i].balloon = SettingsManager::getInstance()->get((SettingsManager::IntSetting)WinUtil::notifications[i].balloon);
+	for(size_t i = 0; i < Notifications::NOTIFICATION_LAST; ++i) {
+		options[i].sound = Text::toT(SettingsManager::getInstance()->get((SettingsManager::StrSetting)Notifications::notifications[i].sound));
+		options[i].balloon = SettingsManager::getInstance()->get((SettingsManager::IntSetting)Notifications::notifications[i].balloon);
 
 		TStringList row(COLUMN_LAST);
-		row[COLUMN_TEXT] = T_(WinUtil::notifications[i].title);
+		row[COLUMN_TEXT] = T_(Notifications::notifications[i].title);
 		table->insert(row);
 
 		updateSound(i);
@@ -161,8 +167,8 @@ void NotificationsPage::layout() {
 void NotificationsPage::write() {
 	SettingsManager* settings = SettingsManager::getInstance();
 	for(size_t i = 0, n = sizeof(options) / sizeof(Option); i < n; ++i) {
-		settings->set((SettingsManager::StrSetting)WinUtil::notifications[i].sound, Text::fromT(options[i].sound));
-		settings->set((SettingsManager::IntSetting)WinUtil::notifications[i].balloon, options[i].balloon);
+		settings->set((SettingsManager::StrSetting)Notifications::notifications[i].sound, Text::fromT(options[i].sound));
+		settings->set((SettingsManager::IntSetting)Notifications::notifications[i].balloon, options[i].balloon);
 	}
 }
 
@@ -242,7 +248,7 @@ void NotificationsPage::handleBalloonClicked() {
 }
 
 void NotificationsPage::handlePlayClicked() {
-	WinUtil::playSound(options[table->getSelected()].sound);
+	Notifications::playSound(options[table->getSelected()].sound);
 }
 
 void NotificationsPage::handleSoundChanged() {
@@ -272,7 +278,7 @@ void NotificationsPage::handleBalloonBgClicked() {
 }
 
 void NotificationsPage::handleExampleClicked() {
-	WinUtil::mainWindow->notify(T_("Balloon popup example"), T_("This is an example of a balloon popup notification!"));
+	UiServices::mainWindow->notify(T_("Balloon popup example"), T_("This is an example of a balloon popup notification!"));
 }
 
 void NotificationsPage::updateSound(size_t row) {

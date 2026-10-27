@@ -19,6 +19,7 @@
 #define DCPLUSPLUS_WIN32_STATIC_FRAME_H_
 
 #include <dcpp/text/Text.h>
+#include <win32/app/UiServices.h>
 
 #include <win32/frames/base/MDIChildFrame.h>
 
@@ -30,12 +31,12 @@ public:
 	StaticFrame(TabViewPtr parent, const tstring& title, unsigned helpId, unsigned iconId, bool manageAccels = true) :
 		MDIChildFrame<T>(parent, title, helpId, iconId, manageAccels)
 	{
-		WinUtil::setStaticWindowState(T::id, true);
+		UiServices::setStaticWindowState(T::id, true);
 	}
 
 	virtual ~StaticFrame() {
 		frame = 0;
-		WinUtil::setStaticWindowState(T::id, false);
+		UiServices::setStaticWindowState(T::id, false);
 	}
 
 	static void openWindow(TabViewPtr parent, bool close = true, bool activate = true) {

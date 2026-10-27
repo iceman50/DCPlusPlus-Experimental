@@ -22,7 +22,6 @@
 #include <dwt/widgets/Grid.h>
 
 #include <dwt/util/GDI.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

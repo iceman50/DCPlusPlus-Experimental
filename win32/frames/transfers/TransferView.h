@@ -20,6 +20,7 @@
 #define DCPLUSPLUS_WIN32_TRANSFER_VIEW_H
 
 #include <functional>
+#include <dcpp/user/HintedUser.h>
 #include <list>
 #include <unordered_map>
 
@@ -35,7 +36,7 @@
 
 #include <dwt/widgets/Container.h>
 
-#include <win32/util/AspectUserCommand.h>
+#include <win32/frames/users/AspectUserCommand.h>
 
 #include <win32/frames/users/UserInfoBase.h>
 

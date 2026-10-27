@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/connection/CertificatesPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -26,7 +27,6 @@
 #include <dwt/widgets/MessageBox.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -38,7 +38,7 @@ PropPage::ListItem CertificatesPage::listItems[] = {
 	{ SettingsManager::ALLOW_UNTRUSTED_CLIENTS, N_("Allow TLS connections to clients without trusted certificate"), IDH_SETTINGS_CERTIFICATES_ALLOW_UNTRUSTED_CLIENTS },
 	{ SettingsManager::ENABLE_CCPM, N_("Support direct encrypted private message channels"), IDH_SETTINGS_CERTIFICATES_ENABLE_CCPM },
 	{ SettingsManager::ALWAYS_CCPM, N_("Always attempt to establish direct encrypted private message channels"), IDH_SETTINGS_CERTIFICATES_ALWAYS_CCPM },
-	{ SettingsManager::ENABLE_SUDP, N_("Enable encrypted active search results in ADCS hubs"), IDH_SETTINGS_ADVANCED_ENABLE_SUDP }, 
+	{ SettingsManager::ENABLE_SUDP, N_("Enable encrypted active search results in ADCS hubs"), IDH_SETTINGS_ADVANCED_ENABLE_SUDP },
 	{ 0, 0 }
 };
 
@@ -55,7 +55,7 @@ options(0)
 	{
 		GroupBoxPtr group = grid->addChild(GroupBox::Seed(T_("Security certificates")));
 		group->setHelpId(IDH_SETTINGS_CERTIFICATES_CERTIFICATES);
- 
+
 		GridPtr cert = group->addChild(Grid::Seed(2, 1));
 		cert->column(0).mode = GridInfo::FILL;
 
@@ -68,7 +68,7 @@ options(0)
 			dots.padding.x = 10;
 
 			cur->addChild(Label::Seed(T_("Private key file")))->setHelpId(IDH_SETTINGS_CERTIFICATES_PRIVATE_KEY_FILE);
-			TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+			TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::textBox);
 			items.emplace_back(box, SettingsManager::TLS_PRIVATE_KEY_FILE, PropPage::T_STR);
 			box->setHelpId(IDH_SETTINGS_CERTIFICATES_PRIVATE_KEY_FILE);
 			ButtonPtr button = cur->addChild(dots);
@@ -76,7 +76,7 @@ options(0)
 			button->setHelpId(IDH_SETTINGS_CERTIFICATES_PRIVATE_KEY_FILE);
 
 			cur->addChild(Label::Seed(T_("Own certificate file")))->setHelpId(IDH_SETTINGS_CERTIFICATES_CERTIFICATE_FILE);
-			box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+			box = cur->addChild(ControlSeeds::Dialog::textBox);
 			items.emplace_back(box, SettingsManager::TLS_CERTIFICATE_FILE, PropPage::T_STR);
 			box->setHelpId(IDH_SETTINGS_CERTIFICATES_CERTIFICATE_FILE);
 			button = cur->addChild(dots);
@@ -84,7 +84,7 @@ options(0)
 			button->setHelpId(IDH_SETTINGS_CERTIFICATES_CERTIFICATE_FILE);
 
 			cur->addChild(Label::Seed(T_("Trusted certificates path")))->setHelpId(IDH_SETTINGS_CERTIFICATES_TRUSTED_CERTIFICATES_PATH);
-			box = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+			box = cur->addChild(ControlSeeds::Dialog::textBox);
 			items.emplace_back(box, SettingsManager::TLS_TRUSTED_CERTIFICATES_PATH, PropPage::T_STR);
 			box->setHelpId(IDH_SETTINGS_CERTIFICATES_TRUSTED_CERTIFICATES_PATH);
 			button = cur->addChild(dots);
@@ -101,7 +101,7 @@ options(0)
 
 	}
 
-	options = grid->addChild(GroupBox::Seed(T_("Secure connection settings")))->addChild(WinUtil::Seeds::Dialog::optionsTable); 
+	options = grid->addChild(GroupBox::Seed(T_("Secure connection settings")))->addChild(ControlSeeds::Dialog::optionsTable);
 
 	grid->addChild(Label::Seed(T_("Most of these options require that you restart DC++.")));
 	grid->addChild(Label::Seed(T_("Note: TLS might not protect search results and non-keyprinted hubs.")));

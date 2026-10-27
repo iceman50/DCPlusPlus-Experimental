@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/TableLayout.h>
 
 #include <win32/resource.h>
 
@@ -29,14 +32,13 @@
 #include <dcpp/system/File.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/version.h>
-#include <win32/util/WinUtil.h>
 #include <win32/dialogs/ParamDlg.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
 using dwt::FolderDialog;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ N_("Favorite name"), 100, false },
 	{ N_("Directory"), 100, false }
 };
@@ -63,7 +65,7 @@ remove(0)
 	grid->row(0).align = dwt::GridInfo::STRETCH;
 
 	{
-		Table::Seed seed = WinUtil::Seeds::Dialog::table;
+		Table::Seed seed = ControlSeeds::Dialog::table;
 		seed.exStyle |= WS_EX_ACCEPTFILES;
 		directories = grid->addChild(seed);
 		grid->setWidget(directories, 0, 0, 1, 3);
@@ -79,7 +81,7 @@ remove(0)
 	remove->onClicked([this] { handleRemoveClicked(); });
 	remove->setHelpId(IDH_SETTINGS_FAVORITE_DIRS_REMOVE);
 
-	WinUtil::makeColumns(directories, columns, 2);
+	TableLayout::makeColumns(directories, columns, 2);
 
 	for(auto& j: FavoriteManager::getInstance()->getFavoriteDirs())
 		addRow(Text::toT(j.second), Text::toT(j.first));

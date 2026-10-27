@@ -25,7 +25,6 @@
 #include <dcpp/system/File.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::util::escapeMenu;
 

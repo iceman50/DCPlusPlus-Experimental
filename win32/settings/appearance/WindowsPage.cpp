@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/appearance/WindowsPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -23,7 +24,6 @@
 #include <dwt/widgets/Grid.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -65,8 +65,8 @@ confirm(0)
 	grid->row(1).mode = GridInfo::FILL;
 	grid->row(1).align = GridInfo::STRETCH;
 
-	options = grid->addChild(GroupBox::Seed(T_("Window options")))->addChild(WinUtil::Seeds::Dialog::optionsTable);
-	confirm = grid->addChild(GroupBox::Seed(T_("Confirm dialog options")))->addChild(WinUtil::Seeds::Dialog::optionsTable);
+	options = grid->addChild(GroupBox::Seed(T_("Window options")))->addChild(ControlSeeds::Dialog::optionsTable);
+	confirm = grid->addChild(GroupBox::Seed(T_("Confirm dialog options")))->addChild(ControlSeeds::Dialog::optionsTable);
 
 	PropPage::read(optionItems, options);
 	PropPage::read(confirmItems, confirm);

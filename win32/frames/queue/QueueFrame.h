@@ -19,6 +19,9 @@
 #define DCPLUSPLUS_WIN32_QUEUE_FRAME_H
 
 #include <memory>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ImageLists.h>
 #include <unordered_map>
 
 #include <dcpp/base/FastAlloc.h>
@@ -133,7 +136,7 @@ private:
 		}
 
 		int getImage(int col) const {
-			return col == 0 ? static_cast<int>(WinUtil::getFileIcon(getTarget())) : -1;
+			return col == 0 ? static_cast<int>(ImageLists::getFileIcon(getTarget())) : -1;
 		}
 
 		static int compareItems(QueueItemInfo* a, QueueItemInfo* b, int col) {

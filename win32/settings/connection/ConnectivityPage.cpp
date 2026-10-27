@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
 #include <win32/settings/connection/ConnectivityPage.h>
 
 #include <dcpp/text/format.h>
@@ -29,7 +32,6 @@
 #include <win32/settings/connection/ConnectivityManualPage.h>
 #include <win32/resource.h>
 #include <win32/settings/SettingsDialog.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -72,7 +74,7 @@ edit(0)
 		group = cur->addChild(GroupBox::Seed(T_("Detection log")));
 		group->setHelpId(IDH_SETTINGS_CONNECTIVITY_DETECTION_LOG);
 
-		log = group->addChild(WinUtil::Seeds::Dialog::richTextBox);
+		log = group->addChild(ControlSeeds::Dialog::richTextBox);
 
 		cur2 = cur->addChild(Grid::Seed(1, 1));
 		cur2->column(0).mode = GridInfo::FILL;
@@ -80,7 +82,7 @@ edit(0)
 
 		edit = cur2->addChild(Button::Seed(T_("Edit detected settings")));
 		edit->setHelpId(IDH_SETTINGS_CONNECTIVITY_EDIT);
-		edit->setImage(WinUtil::buttonIcon(IDI_CONN_GREY));
+		edit->setImage(IconManager::buttonIcon(IDI_CONN_GREY));
 		edit->onClicked([this] { handleEdit(); });
 	}
 

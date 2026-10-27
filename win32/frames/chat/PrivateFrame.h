@@ -19,6 +19,9 @@
 #define DCPLUSPLUS_WIN32_PRIVATE_FRAME_H
 
 #include <atomic>
+#include <dcpp/user/HintedUser.h>
+#include <unordered_map>
+#include <dcpp/util/Util.h>
 
 #include <dcpp/hub/ClientManagerListener.h>
 #include <dcpp/connection/ConnectionManagerListener.h>
@@ -29,7 +32,7 @@
 #include <win32/frames/base/IRecent.h>
 #include <win32/frames/chat/AspectChat.h>
 #include <win32/frames/users/UserInfoBase.h>
-#include <win32/util/AspectUserCommand.h>
+#include <win32/frames/users/AspectUserCommand.h>
 
 class PrivateFrame :
 	public MDIChildFrame<PrivateFrame>,

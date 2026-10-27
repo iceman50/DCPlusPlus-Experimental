@@ -17,6 +17,24 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/KeyState.h>
+#include <win32/dialogs/FilePickers.h>
+#include <win32/frames/chat/ChatText.h>
+#include <win32/frames/users/UserPresentation.h>
+#include <win32/services/HelpService.h>
+#include <win32/services/LinkActions.h>
+#include <win32/services/Notifications.h>
+#include <win32/shell/ShellActions.h>
+#include <win32/shell/ShellIntegration.h>
 
 #include <win32/app/MainWindow.h>
 
@@ -104,7 +122,7 @@ static dwt::IconPtr mainIcon;
 static dwt::IconPtr mainSmallIcon;
 
 MainWindow::MainWindow() :
-dwt::Window(0, dwt::NormalDispatcher::newClass<MainWindow>(mainIcon = WinUtil::createIcon(IDI_DCPP, 32), mainSmallIcon = WinUtil::createIcon(IDI_DCPP, 16))),
+dwt::Window(0, dwt::NormalDispatcher::newClass<MainWindow>(mainIcon = IconManager::load(IDI_DCPP, 32), mainSmallIcon = IconManager::load(IDI_DCPP, 16))),
 rebar(0),
 paned(0),
 transfers(0),
@@ -158,7 +176,7 @@ privateSendOpen(false)
 
 	onActivate([this](bool active) { handleActivate(active); });
 	onSized([this](const dwt::SizedEvent &se) { handleSized(se); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 
 	updateStatus();
 	setTimer(
@@ -231,7 +249,7 @@ privateSendOpen(false)
 	onDestroy([this] { ::WTSUnRegisterSessionNotification(handle()); });
 
 	{
-		bool skipHubCon = WinUtil::isShift();
+		bool skipHubCon = KeyState::isShift();
 
 		const auto& list = WindowManager::getInstance()->getList();
 
@@ -281,7 +299,7 @@ privateSendOpen(false)
 		callAsync([this] {
 			SystemFrame::openWindow(getTabView(), false, false);
 
-			WinUtil::helpId(this, IDH_GET_STARTED);
+			HelpService::helpId(this, IDH_GET_STARTED);
 			handleSettings();
 		});
 	}
@@ -318,7 +336,7 @@ void MainWindow::initMenu() {
 	dcdebug("initMenu\n");
 
 	{
-		Menu::Seed cs = WinUtil::Seeds::menu;
+		Menu::Seed cs = ControlSeeds::menu;
 		cs.popup = false;
 		mainMenu = addChild(cs);
 	}
@@ -326,69 +344,69 @@ void MainWindow::initMenu() {
 	{
 		auto file = mainMenu->appendPopup(T_("&File"));
 
-		file->appendItem(T_("&Quick connect...\tCtrl+Q"), [this] { handleQuickConnect(); }, WinUtil::menuIcon(IDI_HUB));
-		file->appendItem(T_("Connect to a favorite hub &group...\tCtrl+G"), [this] { handleConnectFavHubGroup(); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+		file->appendItem(T_("&Quick connect...\tCtrl+Q"), [this] { handleQuickConnect(); }, IconManager::menuIcon(IDI_HUB));
+		file->appendItem(T_("Connect to a favorite hub &group...\tCtrl+G"), [this] { handleConnectFavHubGroup(); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
 		file->appendSeparator();
 
-		file->appendItem(T_("&Reconnect\tCtrl+R"), [this] { handleReconnect(); }, WinUtil::menuIcon(IDI_RECONNECT));
+		file->appendItem(T_("&Reconnect\tCtrl+R"), [this] { handleReconnect(); }, IconManager::menuIcon(IDI_RECONNECT));
 		file->appendSeparator();
 
-		file->appendItem(T_("Open file list...\tCtrl+L"), [this] { handleOpenFileList(); }, WinUtil::menuIcon(IDI_OPEN_FILE_LIST));
-		file->appendItem(T_("Open own list"), [this] { DirectoryListingFrame::openOwnList(getTabView()); }, WinUtil::menuIcon(IDI_OPEN_OWN_FILE_LIST));
+		file->appendItem(T_("Open file list...\tCtrl+L"), [this] { handleOpenFileList(); }, IconManager::menuIcon(IDI_OPEN_FILE_LIST));
+		file->appendItem(T_("Open own list"), [this] { DirectoryListingFrame::openOwnList(getTabView()); }, IconManager::menuIcon(IDI_OPEN_OWN_FILE_LIST));
 		file->appendItem(T_("Match downloaded lists"), [this] { handleMatchAll(); });
-		file->appendItem(T_("Refresh file list\tF5"), [this] { handleRefreshFileList(); }, WinUtil::menuIcon(IDI_REFRESH));
+		file->appendItem(T_("Refresh file list\tF5"), [this] { handleRefreshFileList(); }, IconManager::menuIcon(IDI_REFRESH));
 		file->appendSeparator();
 
-		file->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, WinUtil::menuIcon(IDI_OPEN_DL_DIR));
+		file->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, IconManager::menuIcon(IDI_OPEN_DL_DIR));
 		file->appendItem(T_("Open crash log"), [this] { TextFrame::openWindow(getTabView(), Text::fromT(CrashLogger::getPath())); });
 		file->appendSeparator();
 
-		file->appendItem(T_("Settings\tCtrl+F3"), [this] { handleSettings(); }, WinUtil::menuIcon(IDI_SETTINGS));
+		file->appendItem(T_("Settings\tCtrl+F3"), [this] { handleSettings(); }, IconManager::menuIcon(IDI_SETTINGS));
 		file->appendSeparator();
 
 		file->appendItem(T_("GeoIP database update"), [this] { updateGeo(); });
 		file->appendSeparator();
 
-		pluginMenu = file->appendPopup(T_("Plugins"), WinUtil::menuIcon(IDI_PLUGINS));
+		pluginMenu = file->appendPopup(T_("Plugins"), IconManager::menuIcon(IDI_PLUGINS));
 		addPluginCommands(pluginMenu);
 		file->appendSeparator();
 
-		file->appendItem(T_("E&xit\tAlt+F4"), [this] { close(true); }, WinUtil::menuIcon(IDI_EXIT));
+		file->appendItem(T_("E&xit\tAlt+F4"), [this] { close(true); }, IconManager::menuIcon(IDI_EXIT));
 	}
 
 	{
 		viewMenu = mainMenu->appendPopup(T_("&View"));
 
 		viewIndexes[PublicHubsFrame::id] = viewMenu->appendItem(T_("&Public Hubs\tCtrl+P"),
-			[this] { PublicHubsFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_PUBLICHUBS));
+			[this] { PublicHubsFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_PUBLICHUBS));
 		viewIndexes[FavHubsFrame::id] = viewMenu->appendItem(T_("&Favorite Hubs\tCtrl+H"),
-			[this] { FavHubsFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+			[this] { FavHubsFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
 		viewIndexes[UsersFrame::id] = viewMenu->appendItem(T_("&Users\tCtrl+U"),
-			[this] { UsersFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_USERS));
+			[this] { UsersFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_USERS));
 		viewMenu->appendSeparator();
 		viewIndexes[QueueFrame::id] = viewMenu->appendItem(T_("&Download Queue\tCtrl+D"),
-			[this] { QueueFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_QUEUE));
+			[this] { QueueFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_QUEUE));
 		viewIndexes[FinishedDLFrame::id] = viewMenu->appendItem(T_("Finished Downloads"),
-			[this] { FinishedDLFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_FINISHED_DL));
+			[this] { FinishedDLFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_FINISHED_DL));
 		viewIndexes[FinishedULFrame::id] = viewMenu->appendItem(T_("Finished Uploads"),
-			[this] { FinishedULFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_FINISHED_UL));
+			[this] { FinishedULFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_FINISHED_UL));
 		viewMenu->appendSeparator();
-		viewMenu->appendItem(T_("&Search\tCtrl+S"), [this] { SearchFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_SEARCH));
+		viewMenu->appendItem(T_("&Search\tCtrl+S"), [this] { SearchFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_SEARCH));
 		viewIndexes[ADLSearchFrame::id] = viewMenu->appendItem(T_("ADL Search"),
-			[this] { ADLSearchFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_ADLSEARCH));
+			[this] { ADLSearchFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_ADLSEARCH));
 		viewMenu->appendSeparator();
 		viewIndexes[NotepadFrame::id] = viewMenu->appendItem(T_("&Notepad\tCtrl+N"),
-			[this] { NotepadFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_NOTEPAD));
+			[this] { NotepadFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_NOTEPAD));
 		viewIndexes[SystemFrame::id] = viewMenu->appendItem(T_("System Log\tCtrl+O"),
-			[this] { SystemFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_LOGS));
+			[this] { SystemFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_LOGS));
 		viewIndexes[StatsFrame::id] = viewMenu->appendItem(T_("Network Statistics"),
-			[this] { StatsFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_NET_STATS));
+			[this] { StatsFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_NET_STATS));
 #ifdef DEBUG
 		viewIndexes[ACFrame::id] = viewMenu->appendItem(T_("About:config"),
-			[this] { ACFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_DCPP));
+			[this] { ACFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_DCPP));
 #endif
 
-		viewMenu->appendItem(T_("Indexing progress"), [this] { handleHashProgress(); }, WinUtil::menuIcon(IDI_INDEXING));
+		viewMenu->appendItem(T_("Indexing progress"), [this] { handleHashProgress(); }, IconManager::menuIcon(IDI_INDEXING));
 		viewMenu->appendSeparator();
 		viewIndexes["Menu"] = viewMenu->appendItem(T_("Menu bar\tCtrl+0"), [this] { switchMenuBar(); });
 		viewIndexes["Toolbar"] = viewMenu->appendItem(T_("Toolbar\tCtrl+1"), [this] { switchToolbar(); });
@@ -399,40 +417,40 @@ void MainWindow::initMenu() {
 	{
 		auto window = mainMenu->appendPopup(T_("&Window"));
 
-		window->appendItem(T_("Reconnect disconnected hubs"), &HubFrame::reconnectDisconnected, WinUtil::menuIcon(IDI_RECONNECT));
+		window->appendItem(T_("Reconnect disconnected hubs"), &HubFrame::reconnectDisconnected, IconManager::menuIcon(IDI_RECONNECT));
 		window->appendSeparator();
 		
-		window->appendItem(T_("Close all hubs"), [] { HubFrame::closeAll(false); }, WinUtil::menuIcon(IDI_HUB));
-		window->appendItem(T_("Close disconnected hubs"), [] { HubFrame::closeAll(true); }, WinUtil::menuIcon(IDI_HUB_OFF));
-		window->appendItem(T_("Close all hubs of a favorite group"), [this] { handleCloseFavGroup(false); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
-		window->appendItem(T_("Close hubs not in a favorite group"), [this] { handleCloseFavGroup(true); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+		window->appendItem(T_("Close all hubs"), [] { HubFrame::closeAll(false); }, IconManager::menuIcon(IDI_HUB));
+		window->appendItem(T_("Close disconnected hubs"), [] { HubFrame::closeAll(true); }, IconManager::menuIcon(IDI_HUB_OFF));
+		window->appendItem(T_("Close all hubs of a favorite group"), [this] { handleCloseFavGroup(false); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
+		window->appendItem(T_("Close hubs not in a favorite group"), [this] { handleCloseFavGroup(true); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
 		window->appendSeparator();
 
-		window->appendItem(T_("Close all PM windows"), [] { PrivateFrame::closeAll(false); }, WinUtil::menuIcon(IDI_PRIVATE));
-		window->appendItem(T_("Close all offline PM windows"), [] { PrivateFrame::closeAll(true); }, WinUtil::menuIcon(IDI_PRIVATE_OFF));
+		window->appendItem(T_("Close all PM windows"), [] { PrivateFrame::closeAll(false); }, IconManager::menuIcon(IDI_PRIVATE));
+		window->appendItem(T_("Close all offline PM windows"), [] { PrivateFrame::closeAll(true); }, IconManager::menuIcon(IDI_PRIVATE_OFF));
 		window->appendSeparator();
 
-		window->appendItem(T_("Close all file list windows"), &DirectoryListingFrame::closeAll, WinUtil::menuIcon(IDI_DIRECTORY));
+		window->appendItem(T_("Close all file list windows"), &DirectoryListingFrame::closeAll, IconManager::menuIcon(IDI_DIRECTORY));
 		window->appendSeparator();
 
-		window->appendItem(T_("Close all search windows"), &SearchFrame::closeAll, WinUtil::menuIcon(IDI_SEARCH));
+		window->appendItem(T_("Close all search windows"), &SearchFrame::closeAll, IconManager::menuIcon(IDI_SEARCH));
 	}
 
 	{
 		auto help = mainMenu->appendPopup(T_("&Help"));
 
-		help->appendItem(T_("Help &Contents\tF1"), [this] { WinUtil::helpId(this, IDH_INDEX); }, WinUtil::menuIcon(IDI_HELP));
-		help->appendItem(T_("Get started"), [this] { WinUtil::helpId(this, IDH_GET_STARTED); }, WinUtil::menuIcon(IDI_GET_STARTED));
+		help->appendItem(T_("Help &Contents\tF1"), [this] { HelpService::helpId(this, IDH_INDEX); }, IconManager::menuIcon(IDI_HELP));
+		help->appendItem(T_("Get started"), [this] { HelpService::helpId(this, IDH_GET_STARTED); }, IconManager::menuIcon(IDI_GET_STARTED));
 		help->appendSeparator();
-		help->appendItem(T_("Change Log"), [this] { WinUtil::helpId(this, IDH_CHANGELOG); }, WinUtil::menuIcon(IDI_CHANGELOG));
-		help->appendItem(T_("About DC++"), [this] { handleAbout(); }, WinUtil::menuIcon(IDI_DCPP));
+		help->appendItem(T_("Change Log"), [this] { HelpService::helpId(this, IDH_CHANGELOG); }, IconManager::menuIcon(IDI_CHANGELOG));
+		help->appendItem(T_("About DC++"), [this] { handleAbout(); }, IconManager::menuIcon(IDI_DCPP));
 		help->appendSeparator();
 
-		help = help->appendPopup(T_("Links"), WinUtil::menuIcon(IDI_LINKS));
-		help->appendItem(T_("Homepage"), [this] { WinUtil::openLink(links.homepage); });
-		help->appendItem(T_("Report a bug"), [this] { WinUtil::openLink(links.bugs); });
-		help->appendItem(T_("DC Network Foundation community"), [this] { WinUtil::openLink(links.community); });
-		help->appendItem(T_("Plugin repository"), [this] { WinUtil::openLink(links.pluginrepo); });
+		help = help->appendPopup(T_("Links"), IconManager::menuIcon(IDI_LINKS));
+		help->appendItem(T_("Homepage"), [this] { ShellActions::openLink(links.homepage); });
+		help->appendItem(T_("Report a bug"), [this] { ShellActions::openLink(links.bugs); });
+		help->appendItem(T_("DC Network Foundation community"), [this] { ShellActions::openLink(links.community); });
+		help->appendItem(T_("Plugin repository"), [this] { ShellActions::openLink(links.pluginrepo); });
 	}
 
 	mainMenu->setMenu();
@@ -459,45 +477,45 @@ void MainWindow::initToolbar() {
 	dcdebug("initToolbar\n");
 	toolbar = addChild(ToolBar::Seed());
 
-	toolbar->addButton(PublicHubsFrame::id, WinUtil::toolbarIcon(IDI_PUBLICHUBS), 0, T_("Public Hubs"), false,
+	toolbar->addButton(PublicHubsFrame::id, IconManager::toolbarIcon(IDI_PUBLICHUBS), 0, T_("Public Hubs"), false,
 		IDH_TOOLBAR_PUBLIC_HUBS, [this] { PublicHubsFrame::openWindow(getTabView()); });
-	toolbar->addButton("Reconnect", WinUtil::toolbarIcon(IDI_RECONNECT), 0, T_("Reconnect"), false,
+	toolbar->addButton("Reconnect", IconManager::toolbarIcon(IDI_RECONNECT), 0, T_("Reconnect"), false,
 		IDH_TOOLBAR_RECONNECT, [this] { handleReconnect(); });
-	toolbar->addButton(FavHubsFrame::id, WinUtil::toolbarIcon(IDI_FAVORITE_HUBS), 0, T_("Favorite Hubs"), false,
+	toolbar->addButton(FavHubsFrame::id, IconManager::toolbarIcon(IDI_FAVORITE_HUBS), 0, T_("Favorite Hubs"), false,
 		IDH_TOOLBAR_FAVORITE_HUBS, [this] { FavHubsFrame::openWindow(getTabView()); },
 		[this](const dwt::ScreenCoordinate& pt) { handleFavHubsDropDown(pt); });
-	toolbar->addButton(UsersFrame::id, WinUtil::toolbarIcon(IDI_USERS), 0, T_("Users"), false,
+	toolbar->addButton(UsersFrame::id, IconManager::toolbarIcon(IDI_USERS), 0, T_("Users"), false,
 		IDH_TOOLBAR_USERS, [this] { UsersFrame::openWindow(getTabView()); });
-	toolbar->addButton(QueueFrame::id, WinUtil::toolbarIcon(IDI_QUEUE), 0, T_("Download Queue"), false,
+	toolbar->addButton(QueueFrame::id, IconManager::toolbarIcon(IDI_QUEUE), 0, T_("Download Queue"), false,
 		IDH_TOOLBAR_QUEUE, [this] { QueueFrame::openWindow(getTabView()); });
-	toolbar->addButton(FinishedDLFrame::id, WinUtil::toolbarIcon(IDI_FINISHED_DL), 0, T_("Finished Downloads"), false,
+	toolbar->addButton(FinishedDLFrame::id, IconManager::toolbarIcon(IDI_FINISHED_DL), 0, T_("Finished Downloads"), false,
 		IDH_TOOLBAR_FINISHED_DL, [this] { FinishedDLFrame::openWindow(getTabView()); });
-	toolbar->addButton(FinishedULFrame::id, WinUtil::toolbarIcon(IDI_FINISHED_UL), 0, T_("Finished Uploads"), false,
+	toolbar->addButton(FinishedULFrame::id, IconManager::toolbarIcon(IDI_FINISHED_UL), 0, T_("Finished Uploads"), false,
 		IDH_TOOLBAR_FINISHED_UL, [this] { FinishedULFrame::openWindow(getTabView()); });
-	toolbar->addButton(SearchFrame::id, WinUtil::toolbarIcon(IDI_SEARCH), 0, T_("Search"), false,
+	toolbar->addButton(SearchFrame::id, IconManager::toolbarIcon(IDI_SEARCH), 0, T_("Search"), false,
 		IDH_TOOLBAR_SEARCH, [this] { SearchFrame::openWindow(getTabView()); });
-	toolbar->addButton(ADLSearchFrame::id, WinUtil::toolbarIcon(IDI_ADLSEARCH), 0, T_("ADL Search"), false,
+	toolbar->addButton(ADLSearchFrame::id, IconManager::toolbarIcon(IDI_ADLSEARCH), 0, T_("ADL Search"), false,
 		IDH_TOOLBAR_ADL_SEARCH, [this] { ADLSearchFrame::openWindow(getTabView()); });
-	toolbar->addButton(StatsFrame::id, WinUtil::toolbarIcon(IDI_NET_STATS), 0, T_("Network Statistics"), false,
+	toolbar->addButton(StatsFrame::id, IconManager::toolbarIcon(IDI_NET_STATS), 0, T_("Network Statistics"), false,
 		IDH_TOOLBAR_NET_STATS, [this] { StatsFrame::openWindow(getTabView()); });
-	toolbar->addButton("OpenDlDir", WinUtil::toolbarIcon(IDI_OPEN_DL_DIR), 0, T_("Open downloads directory"), false,
+	toolbar->addButton("OpenDlDir", IconManager::toolbarIcon(IDI_OPEN_DL_DIR), 0, T_("Open downloads directory"), false,
 		IDH_TOOLBAR_DOWNLOADS_DIR, [this] { handleOpenDownloadsDir(); });
-	toolbar->addButton("OpenFL", WinUtil::toolbarIcon(IDI_OPEN_FILE_LIST), 0, T_("Open file list..."), false,
+	toolbar->addButton("OpenFL", IconManager::toolbarIcon(IDI_OPEN_FILE_LIST), 0, T_("Open file list..."), false,
 		IDH_TOOLBAR_FILE_LIST, [this] { handleOpenFileList(); });
-	toolbar->addButton("OpenOwnFL", WinUtil::toolbarIcon(IDI_OPEN_OWN_FILE_LIST), 0, T_("Open own list"), false,
+	toolbar->addButton("OpenOwnFL", IconManager::toolbarIcon(IDI_OPEN_OWN_FILE_LIST), 0, T_("Open own list"), false,
 		IDH_TOOLBAR_OWN_FILE_LIST, [this] { DirectoryListingFrame::openOwnList(getTabView()); });
-	toolbar->addButton("Recents", WinUtil::toolbarIcon(IDI_RECENTS), 0, T_("Recent windows"), false,
+	toolbar->addButton("Recents", IconManager::toolbarIcon(IDI_RECENTS), 0, T_("Recent windows"), false,
 		IDH_TOOLBAR_RECENT, nullptr, [this](const dwt::ScreenCoordinate& pt) { handleRecent(pt); });
-	toolbar->addButton("Settings", WinUtil::toolbarIcon(IDI_SETTINGS), 0, T_("Settings"), false,
+	toolbar->addButton("Settings", IconManager::toolbarIcon(IDI_SETTINGS), 0, T_("Settings"), false,
 		IDH_TOOLBAR_SETTINGS, [this] { handleSettings(); });
-	toolbar->addButton(NotepadFrame::id, WinUtil::toolbarIcon(IDI_NOTEPAD), 0, T_("Notepad"), false,
+	toolbar->addButton(NotepadFrame::id, IconManager::toolbarIcon(IDI_NOTEPAD), 0, T_("Notepad"), false,
 		IDH_TOOLBAR_NOTEPAD, [this] { NotepadFrame::openWindow(getTabView()); });
-	toolbar->addButton("Refresh", WinUtil::toolbarIcon(IDI_REFRESH), 0, T_("Refresh file list"), false,
+	toolbar->addButton("Refresh", IconManager::toolbarIcon(IDI_REFRESH), 0, T_("Refresh file list"), false,
 		IDH_TOOLBAR_REFRESH, [this] { handleRefreshFileList(); });
-	toolbar->addButton("Plugins", WinUtil::toolbarIcon(IDI_PLUGINS), 0, T_("Plugins"), false,
+	toolbar->addButton("Plugins", IconManager::toolbarIcon(IDI_PLUGINS), 0, T_("Plugins"), false,
 		IDH_TOOLBAR_PLUGINS, [this] { handlePluginSettings(); },
 		[this](const dwt::ScreenCoordinate& pt) { handlePlugins(pt); });
-	toolbar->addButton("CSHelp", WinUtil::toolbarIcon(IDI_WHATS_THIS), 0, T_("What's This?"), false,
+	toolbar->addButton("CSHelp", IconManager::toolbarIcon(IDI_WHATS_THIS), 0, T_("What's This?"), false,
 		IDH_TOOLBAR_WHATS_THIS, [this] { handleWhatsThis(); });
 
 	if(SettingsManager::getInstance()->isDefault(SettingsManager::TOOLBAR)) {
@@ -535,10 +553,10 @@ void MainWindow::initToolbar() {
 	}
 	toolbar->setLayout(StringTokenizer<string>(SETTING(TOOLBAR), ',').getTokens());
 	toolbar->onCustomized([this] { handleToolbarCustomized(); });
-	toolbar->onCustomizeHelp([this] { WinUtil::helpId(toolbar, IDH_CUSTOMIZE_TB); });
+	toolbar->onCustomizeHelp([this] { HelpService::helpId(toolbar, IDH_CUSTOMIZE_TB); });
 	toolbar->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return handleToolbarContextMenu(sc); });
 
-	toolbar->onHelp(&WinUtil::help);
+	toolbar->onHelp(&HelpService::help);
 
 	rebar->add(toolbar);
 	initThemeSelector();
@@ -555,8 +573,8 @@ void MainWindow::initThemeSelector() {
 	themeBand->column(1) = dwt::GridInfo(200, dwt::GridInfo::STATIC);
 	themeBand->column(1).align = dwt::GridInfo::STRETCH;
 	auto label = themeBand->addChild(dwt::Label::Seed(T_("Theme")));
-	label->setFont(WinUtil::font);
-	themeSelector = themeBand->addChild(WinUtil::Seeds::comboBox);
+	label->setFont(UiFonts::font);
+	themeSelector = themeBand->addChild(ControlSeeds::comboBox);
 	themeSelector->setAccessibleName(T_("Theme"));
 	const auto updateSelectorColors = [combo = themeSelector] {
 		const auto& appearance = dwt::Application::instance().getAppearance();
@@ -620,29 +638,29 @@ void MainWindow::initStatusBar() {
 
 	/// @todo set to resizedrag width really
 	status->setSize(STATUS_DUMMY, 32);
-	status->setIcon(STATUS_PRIVATE_SEND, WinUtil::statusIcon(IDI_FILE));
+	status->setIcon(STATUS_PRIVATE_SEND, IconManager::statusIcon(IDI_FILE));
 	status->setToolTip(STATUS_PRIVATE_SEND, T_("No pending private files"));
 	status->onClicked(STATUS_PRIVATE_SEND, [this] { handlePrivateSend(); });
 
-	status->setIcon(STATUS_COUNTS, WinUtil::statusIcon(IDI_HUB));
-	status->setIcon(STATUS_SLOTS, WinUtil::statusIcon(IDI_SLOTS));
+	status->setIcon(STATUS_COUNTS, IconManager::statusIcon(IDI_HUB));
+	status->setIcon(STATUS_SLOTS, IconManager::statusIcon(IDI_SLOTS));
 	{
-		dwt::IconPtr icon_Files(WinUtil::statusIcon(IDI_FILE));
-		dwt::IconPtr icon_Shared(WinUtil::statusIcon(IDI_UP));
+		dwt::IconPtr icon_Files(IconManager::statusIcon(IDI_FILE));
+		dwt::IconPtr icon_Shared(IconManager::statusIcon(IDI_UP));
 		status->setIcon(STATUS_SHARE_SIZE, icon_Shared);
 		status->setIcon(STATUS_FILES_SHARED, icon_Files);
 	}
 
 	{
-		dwt::IconPtr icon_DL(WinUtil::statusIcon(IDI_DOWNLOAD));
-		dwt::IconPtr icon_UL(WinUtil::statusIcon(IDI_UPLOAD));
+		dwt::IconPtr icon_DL(IconManager::statusIcon(IDI_DOWNLOAD));
+		dwt::IconPtr icon_UL(IconManager::statusIcon(IDI_UPLOAD));
 		status->setIcon(STATUS_DOWN_TOTAL, icon_DL);
 		status->setIcon(STATUS_UP_TOTAL, icon_UL);
 		status->setIcon(STATUS_DOWN_DIFF, icon_DL);
 		status->setIcon(STATUS_UP_DIFF, icon_UL);
 	}
-	status->setIcon(STATUS_DOWN_LIMIT, WinUtil::statusIcon(IDI_DLIMIT));
-	status->setIcon(STATUS_UP_LIMIT, WinUtil::statusIcon(IDI_ULIMIT));
+	status->setIcon(STATUS_DOWN_LIMIT, IconManager::statusIcon(IDI_DLIMIT));
+	status->setIcon(STATUS_UP_LIMIT, IconManager::statusIcon(IDI_ULIMIT));
 
 	{
 		auto f = [this] { handleSlotsMenu(); };
@@ -662,7 +680,7 @@ void MainWindow::initStatusBar() {
 	}
 
 	status->onDblClicked(STATUS_STATUS, [] {
-		WinUtil::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(LogManager::SYSTEM))));
+		ShellActions::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(LogManager::SYSTEM))));
 	});
 
 	status->onDblClicked(STATUS_AWAY, &Util::switchAway);
@@ -693,7 +711,7 @@ void MainWindow::initStatusBar() {
 
 void MainWindow::initTabs() {
 	dcdebug("initTabs\n");
-	TabView::Seed seed = WinUtil::Seeds::tabs;
+	TabView::Seed seed = ControlSeeds::tabs;
 	seed.widthConfig = SETTING(TAB_WIDTH);
 	if(SETTING(TAB_STYLE) & SettingsManager::TAB_STYLE_OD) {
 		if(SETTING(TAB_STYLE) & SettingsManager::TAB_STYLE_BROWSER)
@@ -704,14 +722,14 @@ void MainWindow::initTabs() {
 	}
 	if(SETTING(TAB_STYLE) & SettingsManager::TAB_STYLE_BUTTONS)
 		seed.style |= TCS_BUTTONS;
-	seed.closeIcon = WinUtil::tabIcon(IDI_EXIT);
+	seed.closeIcon = IconManager::tabIcon(IDI_EXIT);
 	seed.toggleActive = SETTING(TOGGLE_ACTIVE_WINDOW);
 	seed.ctrlTab = true;
 	tabs = paned->addChild(seed);
 	if(SETTING(ENABLE_TASKBAR_PREVIEW))
 		tabs->initTaskbar(this);
 	tabs->onTitleChanged([this](const tstring &title) { handleTabsTitleChanged(title); });
-	tabs->onHelp(&WinUtil::help);
+	tabs->onHelp(&HelpService::help);
 }
 
 void MainWindow::initTransfers() {
@@ -777,8 +795,8 @@ bool MainWindow::filter(MSG& msg) {
 void MainWindow::addPluginCommand(const string& guid, const tstring& text, function<void ()> command, const tstring& icon) {
 	pluginCommands[guid][text] = make_pair(command, icon);
 
-	if(WinUtil::mainWindow && !WinUtil::mainWindow->closing()) {
-		WinUtil::mainWindow->refreshPluginMenu();
+	if(UiServices::mainWindow && !UiServices::mainWindow->closing()) {
+		UiServices::mainWindow->refreshPluginMenu();
 	}
 }
 
@@ -795,8 +813,8 @@ void MainWindow::removePluginCommand(const string& guid, const tstring& text) {
 		pluginCommands.erase(commandIt);
 	}
 
-	if(WinUtil::mainWindow && !WinUtil::mainWindow->closing()) {
-		WinUtil::mainWindow->refreshPluginMenu();
+	if(UiServices::mainWindow && !UiServices::mainWindow->closing()) {
+		UiServices::mainWindow->refreshPluginMenu();
 	}
 }
 
@@ -818,11 +836,11 @@ void MainWindow::addPluginCommands(Menu* menu) {
 		const auto enabled = PluginManager::getInstance()->isLoaded(guid);
 		const auto name = Text::toT(PluginManager::getInstance()->getPlugin(guid).name);
 
-		auto sub = menu->appendPopup(name, WinUtil::menuIcon(enabled ? IDI_GREEN_BALL : IDI_RED_BALL), false);
+		auto sub = menu->appendPopup(name, IconManager::menuIcon(enabled ? IDI_GREEN_BALL : IDI_RED_BALL), false);
 		sub->setTitle(name); // don't want the enabled/disabled icon repeated there
 
-		sub->appendItem(T_("Enable"), [this, guid] { PluginUtils::enablePlugin(guid, this); }, WinUtil::menuIcon(IDI_GREEN_BALL), !enabled);
-		sub->appendItem(T_("Disable"), [this, guid] { PluginUtils::disablePlugin(guid, this); }, WinUtil::menuIcon(IDI_RED_BALL), enabled);
+		sub->appendItem(T_("Enable"), [this, guid] { PluginUtils::enablePlugin(guid, this); }, IconManager::menuIcon(IDI_GREEN_BALL), !enabled);
+		sub->appendItem(T_("Disable"), [this, guid] { PluginUtils::disablePlugin(guid, this); }, IconManager::menuIcon(IDI_RED_BALL), enabled);
 
 		sub->appendSeparator();
 		sub->appendItem(T_("Configure"), [this, guid] { PluginUtils::configPlugin(guid, this); }, nullptr, enabled);
@@ -858,7 +876,7 @@ void MainWindow::setStaticWindowState(const string& id, bool open) {
 
 void MainWindow::TrayPM() {
 	if(!tray_pm && notifier->isVisible() && !onForeground()) {
-		notifier->setIcon(WinUtil::createIcon(IDI_TRAY_PM, 16));
+		notifier->setIcon(IconManager::load(IDI_TRAY_PM, 16));
 		tray_pm = true;
 	}
 }
@@ -874,7 +892,7 @@ static void multiConnect(const string& group, TabViewPtr parent) {
 }
 
 void MainWindow::handleFavHubsDropDown(const dwt::ScreenCoordinate& pt) {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
 	typedef map<string, Menu*, noCaseStringLess> GroupMenus;
 	GroupMenus groupMenus;
@@ -905,9 +923,9 @@ void addActiveParam(WindowParams& params) {
 
 template<typename T, typename configureF>
 void addRecentMenu(Menu* menu, MainWindow* mainWindow, const tstring& text, unsigned iconId, unsigned favIconId, configureF f) {
-	auto popup = menu->appendPopup(text, WinUtil::menuIcon(iconId));
+	auto popup = menu->appendPopup(text, IconManager::menuIcon(iconId));
 	popup->appendItem(T_("&Configure..."), std::bind(f, mainWindow, T::id, text),
-		WinUtil::menuIcon(IDI_SETTINGS), true, true);
+		IconManager::menuIcon(IDI_SETTINGS), true, true);
 	popup->appendSeparator();
 
 	const auto& recent = WindowManager::getInstance()->getRecent();
@@ -916,7 +934,7 @@ void addRecentMenu(Menu* menu, MainWindow* mainWindow, const tstring& text, unsi
 		popup->appendItem(T_("(No recent item found)"), nullptr, nullptr, false);
 	} else {
 
-		dwt::IconPtr favIcon = WinUtil::menuIcon(favIconId);
+		dwt::IconPtr favIcon = IconManager::menuIcon(favIconId);
 
 		const auto& list = it->second;
 		for(auto& i: list) {
@@ -936,7 +954,7 @@ void addRecentMenu(Menu* menu, MainWindow* mainWindow, const tstring& text, unsi
 }
 
 void MainWindow::handleRecent(const dwt::ScreenCoordinate& pt) {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
 	auto f = &MainWindow::handleConfigureRecent;
 	addRecentMenu<HubFrame>(menu.get(), this, T_("Recent hubs"), IDI_HUB, IDI_FAVORITE_HUBS, f);
@@ -959,9 +977,9 @@ void MainWindow::handleConfigureRecent(const string& id, const tstring& title) {
 }
 
 void MainWindow::handlePlugins(const dwt::ScreenCoordinate& pt) {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
-	menu->setTitle(T_("Plugins"), WinUtil::menuIcon(IDI_PLUGINS));
+	menu->setTitle(T_("Plugins"), IconManager::menuIcon(IDI_PLUGINS));
 	addPluginCommands(menu.get());
 
 	menu->open(pt);
@@ -974,7 +992,7 @@ void MainWindow::handlePluginSettings() {
 
 void MainWindow::fillLimiterMenu(Menu* menu, bool upload) {
 	const auto title = upload ? T_("Upload limit") : T_("Download limit");
-	const auto menuIcon = WinUtil::menuIcon(upload ? IDI_ULIMIT : IDI_DLIMIT);
+	const auto menuIcon = IconManager::menuIcon(upload ? IDI_ULIMIT : IDI_DLIMIT);
 	menu->setTitle(title, menuIcon);
 
 	const auto setting = ThrottleManager::getCurSetting(
@@ -1016,7 +1034,7 @@ void MainWindow::fillLimiterMenu(Menu* menu, bool upload) {
 }
 
 void MainWindow::handleLimiterMenu(bool upload) {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	fillLimiterMenu(menu.get(), upload);
 	menu->open();
 }
@@ -1034,21 +1052,21 @@ void MainWindow::forwardHub(void (HubFrame::*f)()) {
 
 void MainWindow::handleTaskbarOverlay() {
 	if(!SETTING(ENABLE_TASKBAR_PREVIEW)) { return; }
-	tabs->setOverlayIcon(tabs->getActive(), WinUtil::createIcon(away ? IDI_RED_BALL : IDI_GREEN_BALL, 16), away ? _T("Away") : _T("Available"));
+	tabs->setOverlayIcon(tabs->getActive(), IconManager::load(away ? IDI_RED_BALL : IDI_GREEN_BALL, 16), away ? _T("Away") : _T("Available"));
 }
 
 void MainWindow::handleQuickConnect() {
-	if(!WinUtil::checkNick())
+	if(!UiServices::checkNick())
 		return;
 
 	ParamDlg dlg(this, T_("Quick Connect"), T_("Hub address or Magnet link"));
-	if(dlg.run() == IDOK && !WinUtil::parseLink(dlg.getValue(), false)) {
+	if(dlg.run() == IDOK && !LinkActions::parseLink(dlg.getValue(), false)) {
 		HubFrame::openWindow(getTabView(), Text::fromT(dlg.getValue()));
 	}
 }
 
 void MainWindow::handleConnectFavHubGroup() {
-	if(!WinUtil::checkNick())
+	if(!UiServices::checkNick())
 		return;
 
 	tstring group;
@@ -1078,7 +1096,7 @@ void MainWindow::handleMinimized() {
 	if(SETTING(AUTO_AWAY)) {
 		Util::incAway();
 	}
-	if(SETTING(MINIMIZE_TRAY) != WinUtil::isShift()) {
+	if(SETTING(MINIMIZE_TRAY) != KeyState::isShift()) {
 		if(!SETTING(ALWAYS_TRAY)) {
 			notifier->setVisible(true);
 		}
@@ -1099,7 +1117,7 @@ void MainWindow::statusMessage(time_t t, const string& m) {
 		return;
 
 	string message(m);
-	WinUtil::reducePaths(message);
+	ChatText::reducePaths(message);
 	status->setText(STATUS_STATUS, Text::toT("[" + Util::getShortTimeString(t) + "] " + message));
 }
 
@@ -1202,7 +1220,7 @@ bool MainWindow::handleClosing() {
 	::PostQuitMessage(0);
 	dcdebug("Quit message posted\n");
 
-	WinUtil::mainWindow = nullptr;
+	UiServices::mainWindow = nullptr;
 	return true;
 }
 
@@ -1247,7 +1265,7 @@ void MainWindow::updatePrivateSend() {
 	const auto pending = privateSendNotifications.pending();
 	privateSendBlink = !privateSendBlink;
 	const auto visible = pending.empty() || !privateSendNotifications.needsAttention() || privateSendBlink;
-	status->setIcon(STATUS_PRIVATE_SEND, visible ? WinUtil::statusIcon(IDI_FILE) : nullptr);
+	status->setIcon(STATUS_PRIVATE_SEND, visible ? IconManager::statusIcon(IDI_FILE) : nullptr);
 	status->setText(STATUS_PRIVATE_SEND, pending.empty() ? Util::emptyStringT : Text::toT(std::to_string(pending.size())));
 	status->setToolTip(STATUS_PRIVATE_SEND, pending.empty() ? T_("No pending private files") :
 		str(TF_("%1% private file offer(s) - click to review") % pending.size()));
@@ -1262,11 +1280,11 @@ void MainWindow::handlePrivateSend() {
 	if(pending.size() == 1) {
 		openPrivateSend(pending.front().contact, pending.front().id);
 	} else if(!pending.empty()) {
-		auto menu = addChild(WinUtil::Seeds::menu);
+		auto menu = addChild(ControlSeeds::menu);
 		for(const auto& row : pending) {
 			const auto peer = row.contact;
 			const auto transfer = row.id;
-			menu->appendItem(escapeMenu(WinUtil::getNicks(peer.user->getCID()) + _T(": ") + Text::toT(row.name)),
+			menu->appendItem(escapeMenu(UserPresentation::getNicks(peer.user->getCID()) + _T(": ") + Text::toT(row.name)),
 				[this, peer, transfer] { openPrivateSend(peer, transfer); });
 		}
 		menu->open();
@@ -1332,7 +1350,7 @@ void MainWindow::updateStatus() {
 	status->setToolTip(STATUS_SLOTS, str(TF_("%1% free slots of %2% total upload slots - Click to adjust") % freeSlots % totalSlots));
 	if(!freeSlots ^ fullSlots) {
 		fullSlots = !freeSlots;
-		status->setIcon(STATUS_SLOTS, WinUtil::statusIcon(fullSlots ? IDI_SLOTS_FULL : IDI_SLOTS));
+		status->setIcon(STATUS_SLOTS, IconManager::statusIcon(fullSlots ? IDI_SLOTS_FULL : IDI_SLOTS));
 	}
 
 	if (!lastGetShare || now > lastGetShare + (60 * 1000)) {
@@ -1372,7 +1390,7 @@ void MainWindow::updateStatus() {
 }
 
 void MainWindow::updateAwayStatus() {
-	status->setIcon(STATUS_AWAY, WinUtil::statusIcon(away ? IDI_USER_AWAY : IDI_USER));
+	status->setIcon(STATUS_AWAY, IconManager::statusIcon(away ? IDI_USER_AWAY : IDI_USER));
 	status->setToolTip(STATUS_AWAY, away ? (T_("Status: Away - Double-click to switch to Available")) :
 		(T_("Status: Available - Double-click to switch to Away")));
 
@@ -1388,7 +1406,7 @@ namespace {
 BOOL CALLBACK updateFont(HWND hwnd, LPARAM prevFont) {
 	dwt::Control* widget = dwt::hwnd_cast<dwt::Control*>(hwnd);
 	if(widget && widget->getFont()->handle() == reinterpret_cast<HFONT>(prevFont)) {
-		widget->setFont(WinUtil::font);
+		widget->setFont(UiFonts::font);
 		widget->layout();
 		if(dynamic_cast<dwt::Grid*>(widget->getParent())) {
 			widget->getParent()->layout();
@@ -1489,14 +1507,14 @@ void MainWindow::handleSettings() {
 			HubFrame::resortUsers();
 
 		if(SETTING(URL_HANDLER) != prevURLReg)
-			WinUtil::registerHubHandlers();
+			ShellIntegration::registerHubHandlers();
 		if(SETTING(MAGNET_REGISTER) != prevMagnetReg)
-			WinUtil::registerMagnetHandler();
+			ShellIntegration::registerMagnetHandler();
 		if(SETTING(DCEXT_REGISTER) != prevDcextReg)
-			WinUtil::registerDcextHandler();
+			ShellIntegration::registerDcextHandler();
 		
 		if(SETTING(REGISTER_SYSTEM_STARTUP) != prevSystemStartupReg)
-			WinUtil::setApplicationStartup();
+			ShellIntegration::setApplicationStartup();
 
 		if(SETTING(SETTINGS_SAVE_INTERVAL) != prevSettingsSave)
 			setSaveTimer();
@@ -1508,17 +1526,17 @@ void MainWindow::handleSettings() {
 
 void MainWindow::refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont) {
 	if(SETTING(MAIN_FONT) != previousFont) {
-		auto previous = WinUtil::font;
-		WinUtil::initFont();
+		auto previous = UiFonts::font;
+		UiServices::initFont();
 		::EnumChildWindows(handle(), updateFont, reinterpret_cast<LPARAM>(previous->handle()));
-		mainMenu->setFont(WinUtil::font);
+		mainMenu->setFont(UiFonts::font);
 		::DrawMenuBar(handle());
 	}
-	if(SETTING(UPLOAD_FONT) != previousUploadFont) WinUtil::updateUploadFont();
-	if(SETTING(DOWNLOAD_FONT) != previousDownloadFont) WinUtil::updateDownloadFont();
+	if(SETTING(UPLOAD_FONT) != previousUploadFont) UiFonts::updateUploadFont();
+	if(SETTING(DOWNLOAD_FONT) != previousDownloadFont) UiFonts::updateDownloadFont();
 	HubFrame::refreshRichTextSettings();
 	PrivateFrame::refreshRichTextSettings();
-	WinUtil::refreshTheme();
+	AppAppearance::refreshTheme();
 	if(themeSelector) {
 		// A theme can change the main font; keep the band at the new control height.
 		themeBand->row(0).size = themeSelector->getPreferredSize().y;
@@ -1552,7 +1570,7 @@ void MainWindow::showPortsError(const string& port) {
 
 void MainWindow::handleOpenFileList() {
 	tstring file;
-	if(WinUtil::browseFileList(this, file)) {
+	if(FilePickers::browseFileList(this, file)) {
 		auto u = DirectoryListing::getUserFromFilename(Text::fromT(file));
 		if(u) {
 			DirectoryListingFrame::openWindow(getTabView(), file, Util::emptyStringT,
@@ -1674,7 +1692,7 @@ void MainWindow::completeVersionUpdate(bool success, const string& result) {
 								str(TF_("%1%\nOpen download page?") % Text::toT(xml.getChildData())), Text::toT(title),
 								dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) == IDYES)
 							{
-								WinUtil::openLink(Text::toT(url));
+								ShellActions::openLink(Text::toT(url));
 							}
 						}
 					}
@@ -1760,7 +1778,7 @@ void MainWindow::parseCommandLine(const tstring& cmdLine) {
 		(i = cmdLine.find(_T("adcs://"))) != tstring::npos ||
 		(i = cmdLine.find(_T("magnet:?"))) != tstring::npos )
 	{
-		WinUtil::parseLink(cmdLine.substr(i), false);
+		LinkActions::parseLink(cmdLine.substr(i), false);
 
 	} else if((i = cmdLine.find(_T("dcext:"))) != tstring::npos) {
 		auto path = Text::fromT(cmdLine.substr(i + 6));
@@ -1799,7 +1817,7 @@ void MainWindow::handleOpenDownloadsDir() {
 		directory += PATH_SEPARATOR;
 
 	File::ensureDirectory(directory);
-	WinUtil::openFile(Text::toT(directory));
+	ShellActions::openFile(Text::toT(directory));
 }
 
 LRESULT MainWindow::handleEndSession() {
@@ -1834,11 +1852,11 @@ void MainWindow::handleToolbarCustomized() {
 }
 
 bool MainWindow::handleToolbarContextMenu(const dwt::ScreenCoordinate& pt) {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	menu->setTitle(T_("Toolbar"));
 
 	menu->appendItem(T_("&Customize\tDouble-click"), [this] { toolbar->customize(); },
-		WinUtil::menuIcon(IDI_SETTINGS), true, true);
+		IconManager::menuIcon(IDI_SETTINGS), true, true);
 
 	{
 		auto size = menu->appendPopup(T_("Size"));
@@ -1944,9 +1962,9 @@ void MainWindow::handleSlotsMenu() {
 		updateStatus();
 	}; };
 
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
-	menu->setTitle(T_("Upload slots"), WinUtil::menuIcon(IDI_SLOTS));
+	menu->setTitle(T_("Upload slots"), IconManager::menuIcon(IDI_SLOTS));
 
 	auto setting = SETTING(SLOTS);
 	for(decltype(setting) i = 1; i < setting + 10; ++i) {
@@ -1980,16 +1998,16 @@ bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
 }
 
 void MainWindow::handleTrayContextMenu() {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 
-	menu->appendItem(T_("Show"), [this] { handleRestore(); }, WinUtil::menuIcon(IDI_DCPP), true, true);
-	menu->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, WinUtil::menuIcon(IDI_OPEN_DL_DIR));
+	menu->appendItem(T_("Show"), [this] { handleRestore(); }, IconManager::menuIcon(IDI_DCPP), true, true);
+	menu->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, IconManager::menuIcon(IDI_OPEN_DL_DIR));
 	menu->appendSeparator();
-	menu->appendItem(T_("Settings"), [this] { handleSettings(); }, WinUtil::menuIcon(IDI_SETTINGS));
-	fillLimiterMenu(menu->appendPopup(T_("Download limit"), WinUtil::menuIcon(IDI_DLIMIT), false), false);
-	fillLimiterMenu(menu->appendPopup(T_("Upload limit"), WinUtil::menuIcon(IDI_ULIMIT), false), true);
+	menu->appendItem(T_("Settings"), [this] { handleSettings(); }, IconManager::menuIcon(IDI_SETTINGS));
+	fillLimiterMenu(menu->appendPopup(T_("Download limit"), IconManager::menuIcon(IDI_DLIMIT), false), false);
+	fillLimiterMenu(menu->appendPopup(T_("Upload limit"), IconManager::menuIcon(IDI_ULIMIT), false), true);
 	menu->appendSeparator();
-	menu->appendItem(T_("Exit"), [this] { close(true); }, WinUtil::menuIcon(IDI_EXIT));
+	menu->appendItem(T_("Exit"), [this] { close(true); }, IconManager::menuIcon(IDI_EXIT));
 
 	POINT pt;
 	::GetCursorPos(&pt);
@@ -2106,7 +2124,7 @@ void MainWindow::on(QueueManagerListener::Finished, QueueItem* qi, const string&
 			auto user = qi->getDownloads()[0]->getHintedUser();
 			callAsync([this, file, dir, user, speed] {
 				DirectoryListingFrame::openWindow(getTabView(), Text::toT(file), Text::toT(dir), user, speed);
-				WinUtil::notify(WinUtil::NOTIFICATION_FINISHED_FL, Text::toT(Util::getFileName(file)), [=] {
+				Notifications::notify(Notifications::NOTIFICATION_FINISHED_FL, Text::toT(Util::getFileName(file)), [=] {
 					DirectoryListingFrame::activateWindow(user);
 				});
 			});
@@ -2122,7 +2140,7 @@ void MainWindow::on(QueueManagerListener::Finished, QueueItem* qi, const string&
 	if(!qi->isSet(QueueItem::FLAG_USER_LIST)) {
 		auto file = qi->getTarget();
 		callAsync([this, file] {
-			WinUtil::notify(WinUtil::NOTIFICATION_FINISHED_DL, Text::toT(file), [=] {
+			Notifications::notify(Notifications::NOTIFICATION_FINISHED_DL, Text::toT(file), [=] {
 				FinishedDLFrame::focusFile(getTabView(), file);
 			});
 		});

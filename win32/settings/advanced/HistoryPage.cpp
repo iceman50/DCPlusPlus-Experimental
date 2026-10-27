@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/advanced/HistoryPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -28,7 +30,6 @@
 #include <win32/frames/filelist/DirectoryListingFrame.h>
 #include <win32/frames/hub/HubFrame.h>
 #include <win32/frames/chat/PrivateFrame.h>
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using dwt::Grid;
@@ -49,7 +50,7 @@ GridPtr addSubGrid(T parent, size_t rows) {
 TextBoxPtr addBox(GridPtr grid, const tstring& text, unsigned helpId) {
 	grid->addChild(Label::Seed(text))->setHelpId(helpId);
 
-	TextBoxPtr box = grid->addChild(WinUtil::Seeds::Dialog::intTextBox);
+	TextBoxPtr box = grid->addChild(ControlSeeds::Dialog::intTextBox);
 	box->setHelpId(helpId);
 
 	SpinnerPtr spin = grid->addChild(Spinner::Seed(0, UD_MAXVAL, box));

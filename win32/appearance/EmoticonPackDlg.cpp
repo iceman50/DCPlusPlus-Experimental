@@ -9,6 +9,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/base/Exception.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/appearance/EmoticonPackDlg.h>
 
 #include <dcpp/chat/EmoticonManager.h>
@@ -21,7 +24,6 @@
 #include <dwt/widgets/MessageBox.h>
 #include <dwt/widgets/SaveDialog.h>
 
-#include <win32/util/WinUtil.h>
 
 using dwt::Button;
 using dwt::Grid;
@@ -53,9 +55,9 @@ bool EmoticonPackDlg::handleInitDialog() {
 		auto fields = group->addChild(Grid::Seed(2, 2));
 		fields->column(1).mode = GridInfo::FILL;
 		fields->addChild(Label::Seed(T_("Name")));
-		packageName = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		packageName = fields->addChild(ControlSeeds::Dialog::textBox);
 		fields->addChild(Label::Seed(T_("Version")));
-		packageVersion = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		packageVersion = fields->addChild(ControlSeeds::Dialog::textBox);
 		packageVersion->setText(Text::toT(VERSIONSTRING));
 		packageVersion->setReadOnly();
 	}
@@ -65,13 +67,13 @@ bool EmoticonPackDlg::handleInitDialog() {
 		auto fields = group->addChild(Grid::Seed(3, 3));
 		fields->column(1).mode = GridInfo::FILL;
 		fields->addChild(Label::Seed(T_("Emoticon name")));
-		emoticonName = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		emoticonName = fields->addChild(ControlSeeds::Dialog::textBox);
 		fields->addChild(Label::Seed());
 		fields->addChild(Label::Seed(T_("Shortcut")));
-		shortcut = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		shortcut = fields->addChild(ControlSeeds::Dialog::textBox);
 		fields->addChild(Label::Seed());
 		fields->addChild(Label::Seed(T_("Image")));
-		iconPath = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		iconPath = fields->addChild(ControlSeeds::Dialog::textBox);
 		fields->addChild(Button::Seed(T_("Browse...")))->onClicked([this] { browseIcon(); });
 	}
 
@@ -88,7 +90,7 @@ bool EmoticonPackDlg::handleInitDialog() {
 	}
 
 	{
-		Table::Seed seed = WinUtil::Seeds::Dialog::table;
+		Table::Seed seed = ControlSeeds::Dialog::table;
 		seed.style |= LVS_SINGLESEL;
 		rules = grid->addChild(seed);
 		rules->addColumn(T_("Name"), 130);

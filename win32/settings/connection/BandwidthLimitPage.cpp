@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/connection/BandwidthLimitPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -26,7 +27,6 @@
 #include <dwt/widgets/Spinner.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -58,7 +58,7 @@ throttleTime(0)
 		cur->column(0).size = 70;
 		cur->column(0).mode = GridInfo::STATIC;
 
-		TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		box->setHelpId(IDH_SETTINGS_BWLIMIT_UPLOAD);
 		items.emplace_back(box, SettingsManager::MAX_UPLOAD_SPEED_MAIN, PropPage::T_INT_WITH_SPIN);
 
@@ -68,7 +68,7 @@ throttleTime(0)
 
 		cur->addChild(Label::Seed(T_("Maximum Upload Rate (KiB/s) (0 = infinite)")))->setHelpId(IDH_SETTINGS_BWLIMIT_UPLOAD);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		box->setHelpId(IDH_SETTINGS_BWLIMIT_DOWNLOAD);
 		items.emplace_back(box, SettingsManager::MAX_DOWNLOAD_SPEED_MAIN, PropPage::T_INT_WITH_SPIN);
 
@@ -95,9 +95,9 @@ throttleTime(0)
 		items.emplace_back(throttleTime, SettingsManager::TIME_DEPENDENT_THROTTLE, PropPage::T_BOOL);
 		throttleTime->onClicked([this] { fixControls(); });
 
-		timeBound[0] = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+		timeBound[0] = cur->addChild(ControlSeeds::Dialog::comboBox);
 		cur->addChild(Label::Seed(T_("to")))->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_ENABLE);
-		timeBound[1] = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+		timeBound[1] = cur->addChild(ControlSeeds::Dialog::comboBox);
 	}
 
 	for (int i = 0; i < 2; ++i) {
@@ -117,7 +117,7 @@ throttleTime(0)
 		cur->column(0).size = 70;
 		cur->column(0).mode = GridInfo::STATIC;
 
-		TextBoxPtr box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		TextBoxPtr box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		box->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_UPLOAD);
 		items.emplace_back(box, SettingsManager::MAX_UPLOAD_SPEED_ALTERNATE, PropPage::T_INT_WITH_SPIN);
 
@@ -127,7 +127,7 @@ throttleTime(0)
 
 		cur->addChild(Label::Seed(T_("Maximum Upload Rate (KiB/s) (0 = infinite)")))->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_UPLOAD);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		box->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_DOWNLOAD);
 		items.emplace_back(box, SettingsManager::MAX_DOWNLOAD_SPEED_ALTERNATE, PropPage::T_INT_WITH_SPIN);
 
@@ -137,7 +137,7 @@ throttleTime(0)
 
 		cur->addChild(Label::Seed(T_("Maximum Download Rate (KiB/s) (0 = infinite)")))->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_DOWNLOAD);
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		box->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_SLOTS);
 		items.emplace_back(box, SettingsManager::SLOTS_ALTERNATE_LIMITING, PropPage::T_INT_WITH_SPIN);
 

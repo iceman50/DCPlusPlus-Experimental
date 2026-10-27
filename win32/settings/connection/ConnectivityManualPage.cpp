@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
 #include <win32/settings/connection/ConnectivityManualPage.h>
 
 #include <dcpp/text/format.h>
@@ -25,7 +28,6 @@
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/RadioButton.h>
 
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using dwt::Control;
@@ -64,7 +66,7 @@ tlstransferBox(0)
 		boxGrid->column(0).size = 40;
 		boxGrid->column(0).mode = GridInfo::STATIC;
 
-		auto inputBox = boxGrid->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		auto inputBox = boxGrid->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(inputBox, setting, PropPage::T_INT);
 
 		return inputBox;
@@ -202,10 +204,10 @@ void PageContent::initializeUI()
 		auto cur = group->addChild(Grid::Seed(2, 1));
 		cur->column(0).mode = GridInfo::FILL;
 
-		auto externalIP = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		auto externalIP = cur->addChild(ControlSeeds::Dialog::textBox);
 		externalIP->setCue(T_("Enter your external address here"));
 		items.emplace_back(externalIP, settingExternalIP, PropPage::T_STR);
-		WinUtil::preventSpaces(externalIP);
+		DialogControls::preventSpaces(externalIP);
 
 		auto overrideIP = cur->addChild(CheckBox::Seed(T_("Don't allow hubs/NAT-PMP/UPnP to override")));
 		items.emplace_back(overrideIP, settingNoIPOverride, PropPage::T_BOOL);
@@ -221,7 +223,7 @@ void PageContent::initializeUI()
 
 			auto cur = group->addChild(Grid::Seed(2, 1));
 
-			mapper = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+			mapper = cur->addChild(ControlSeeds::Dialog::comboBox);
 			mapper->setHelpId(IDH_SETTINGS_CONNECTIVITY_MAPPER);
 
 			isBroad = cur->addChild(CheckBox::Seed(T_("Enable broad device detection")));
@@ -231,7 +233,7 @@ void PageContent::initializeUI()
 
 		auto group = cur->addChild(GroupBox::Seed(T_("Bind Address")));
 		group->setHelpId(IDH_SETTINGS_CONNECTIVITY_BIND_ADDRESS);
-		bind = group->addChild(WinUtil::Seeds::Dialog::comboBox);
+		bind = group->addChild(ControlSeeds::Dialog::comboBox);
 	}
 }
 

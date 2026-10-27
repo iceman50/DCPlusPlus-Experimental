@@ -16,6 +16,10 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/services/LinkActions.h>
+#include <win32/shell/ClipboardActions.h>
 #include <win32/controls/RichTextBox.h>
 
 #include <dwt/WidgetCreator.h>
@@ -25,7 +29,6 @@
 
 #include <win32/dialogs/ParamDlg.h>
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 #include <win32/controls/HtmlToRtf.h>
 
 RichTextBox::Seed::Seed() : 
@@ -98,9 +101,9 @@ MenuPtr RichTextBox::getMenu(const tstring& searchText) {
 	if(!currentLink.empty()) {
 		menu->appendSeparator();
 		auto text = currentLink;
-		auto linkMenu = menu->appendPopup(dwt::util::escapeMenu(text), WinUtil::menuIcon(IDI_LINKS));
-		linkMenu->appendItem(T_("&Open"), [this, text] { openLink(text); }, WinUtil::menuIcon(IDI_RIGHT), true, true);
-		linkMenu->appendItem(T_("&Copy"), [this, text] { WinUtil::setClipboard(text); });
+		auto linkMenu = menu->appendPopup(dwt::util::escapeMenu(text), IconManager::menuIcon(IDI_LINKS));
+		linkMenu->appendItem(T_("&Open"), [this, text] { openLink(text); }, IconManager::menuIcon(IDI_RIGHT), true, true);
+		linkMenu->appendItem(T_("&Copy"), [this, text] { ClipboardActions::setClipboard(text); });
 	}
 
 	return menu;
@@ -294,6 +297,6 @@ tstring RichTextBox::getLinkText(const ENLINK& link) {
 
 void RichTextBox::openLink(const tstring& text) {
 	if(!linkF || !linkF(text)) {
-		WinUtil::parseLink(text);
+		LinkActions::parseLink(text);
 	}
 }

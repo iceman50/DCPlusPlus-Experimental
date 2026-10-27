@@ -19,6 +19,7 @@
 #define DCPLUSPLUS_WIN32_USER_COMMAND_H
 
 #include <dcpp/favorites/FavoriteManager.h>
+#include <dcpp/util/Util.h>
 #include <dwt/widgets/Menu.h>
 
 #include <win32/resource.h>

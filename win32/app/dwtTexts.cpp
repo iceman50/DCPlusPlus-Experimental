@@ -16,7 +16,7 @@
  */
 
 #include "stdafx.h"
-#include <win32/util/dwtTexts.h>
+#include <win32/app/dwtTexts.h>
 
 #include <dcpp/text/Text.h>
 

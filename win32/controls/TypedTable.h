@@ -19,13 +19,13 @@
 #define DCPLUSPLUS_WIN32_TYPED_TABLE_H
 
 #include <cstdio>
+#include <dcpp/util/Util.h>
 #include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 #include <win32/forward.h>
-#include <win32/util/WinUtil.h>
 
 /** Table with an object associated to each item.
 

@@ -16,6 +16,10 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/TableLayout.h>
 #include <win32/settings/advanced/UserMatchPage.h>
 
 #include <dcpp/text/format.h>
@@ -32,12 +36,11 @@
 #include <win32/settings/SettingsDialog.h>
 #include <win32/settings/appearance/ThemePage.h>
 #include <win32/settings/advanced/UserMatchDlg.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ "", 100, false }
 };
 
@@ -64,7 +67,7 @@ dirty(false)
 		cur->row(0).align = GridInfo::STRETCH;
 		cur->setSpacing(grid->getSpacing());
 
-		Table::Seed seed = WinUtil::Seeds::Dialog::table;
+		Table::Seed seed = ControlSeeds::Dialog::table;
 		seed.style |= LVS_NOCOLUMNHEADER;
 		table = cur->addChild(seed);
 
@@ -99,11 +102,11 @@ dirty(false)
 		button = cur->addChild(Grid::Seed(1, 1))->addChild(
 			Button::Seed(T_("Edit user-match appearance in Themes")));
 		button->setHelpId(IDH_SETTINGS_USER_MATCH_STYLES);
-		button->setImage(WinUtil::buttonIcon(IDI_STYLES));
+		button->setImage(IconManager::buttonIcon(IDI_STYLES));
 		button->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->activatePage<ThemePage>(); });
 	}
 
-	WinUtil::makeColumns(table, columns, 1);
+	TableLayout::makeColumns(table, columns, 1);
 
 	list = UserMatchManager::getInstance()->getList();
 	for(auto& i: list) {
@@ -133,7 +136,7 @@ void UserMatchPage::layout() {
 void UserMatchPage::write() {
 	if(dirty) {
 		UserMatchManager::getInstance()->setList(std::move(list));
-		WinUtil::updateUserMatchFonts();
+		UiFonts::updateUserMatchFonts();
 	}
 }
 

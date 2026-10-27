@@ -19,6 +19,10 @@
 #define DCPLUSPLUS_WIN32_MDI_CHILD_FRAME_H_
 
 #include <functional>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
 #include <string>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -28,7 +32,6 @@
 #include <dwt/util/StringUtils.h>
 
 #include <win32/frames/base/AspectStatus.h>
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using std::string;
@@ -62,7 +65,7 @@ protected:
 		if(helpId)
 			setHelpId(helpId);
 
-		tabView->add(this, iconId ? WinUtil::tabIcon(iconId) : dwt::IconPtr());
+		tabView->add(this, iconId ? IconManager::tabIcon(iconId) : dwt::IconPtr());
 
 		this->onTabContextMenu([this](const dwt::ScreenCoordinate &sc) { return this->handleContextMenu(sc); });
 
@@ -136,7 +139,7 @@ protected:
 		getParent()->setIcon(this, icon);
 	}
 	void setIcon(unsigned iconId) {
-		setIcon(WinUtil::tabIcon(iconId));
+		setIcon(IconManager::tabIcon(iconId));
 	}
 
 	static bool parseActivateParam(const WindowParams& params) {
@@ -190,7 +193,7 @@ private:
 
 	template<typename A>
 	void addColor(dwt::aspects::Colorable<A>* widget) {
-		WinUtil::setColor(static_cast<dwt::Control*>(widget));
+		AppAppearance::setColor(static_cast<dwt::Control*>(widget));
 	}
 
 	// Catch-rest for the above
@@ -224,12 +227,12 @@ private:
 	}
 
 	bool handleContextMenu(const dwt::ScreenCoordinate& pt) {
-		auto menu = addChild(WinUtil::Seeds::menu);
+		auto menu = addChild(ControlSeeds::menu);
 
 		menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
 
 		tabMenuImpl(menu.get());
-		menu->appendItem(T_("&Close"), [this] { close(true); }, WinUtil::menuIcon(IDI_EXIT));
+		menu->appendItem(T_("&Close"), [this] { close(true); }, IconManager::menuIcon(IDI_EXIT));
 
 		menu->open(pt);
 		return true;

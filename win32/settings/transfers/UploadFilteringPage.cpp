@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
 
 #include <win32/resource.h>
 
@@ -33,7 +36,6 @@
 #include <dcpp/version.h>
 #include <win32/dialogs/ParamDlg.h>
 #include <win32/dialogs/HashProgressDlg.h>
-#include <win32/util/WinUtil.h>
 #include <win32/dialogs/ItemsEditDlg.h>
 
 using dwt::FolderDialog;
@@ -90,7 +92,7 @@ modifyPathsButton(0)
 		auto regexGrid = regexGroup->addChild(Grid::Seed(2, 2));
 		regexGrid->column(0).mode = GridInfo::FILL;
 
-		regexTextBox = regexGrid->addChild(WinUtil::Seeds::Dialog::textBox);
+		regexTextBox = regexGrid->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(regexTextBox, SettingsManager::SHARING_SKIPLIST_REGEX, PropPage::T_STR);
 		regexTextBox->setHelpId(IDH_SETTINGS_UPLOAD_SKIPLIST_REGEX);
 
@@ -106,7 +108,7 @@ modifyPathsButton(0)
 		auto extensionsGrid = extensionsGroup->addChild(Grid::Seed(2, 2));
 		extensionsGrid->column(0).mode = GridInfo::FILL;
 
-		extensionsTextBox = extensionsGrid->addChild(WinUtil::Seeds::Dialog::textBox);
+		extensionsTextBox = extensionsGrid->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(extensionsTextBox, SettingsManager::SHARING_SKIPLIST_EXTENSIONS, PropPage::T_STR);
 		extensionsTextBox->setHelpId(IDH_SETTINGS_UPLOAD_SKIPLIST_EXTENSIONS);
 
@@ -122,7 +124,7 @@ modifyPathsButton(0)
 		auto pathsGrid = pathsGroup->addChild(Grid::Seed(2, 2));
 		pathsGrid->column(0).mode = GridInfo::FILL;
 
-		pathsTextBox = pathsGrid->addChild(WinUtil::Seeds::Dialog::textBox);
+		pathsTextBox = pathsGrid->addChild(ControlSeeds::Dialog::textBox);
 		items.emplace_back(pathsTextBox, SettingsManager::SHARING_SKIPLIST_PATHS, PropPage::T_STR);
 		pathsTextBox->setHelpId(IDH_SETTINGS_UPLOAD_SKIPLIST_PATHS);
 
@@ -176,15 +178,15 @@ void UploadFilteringPage::addItem(dwt::Grid* parent, dwt::Control*& control, con
 
 	if((t == PropPage::T_INT) || (t == PropPage::T_INT64))
 	{
-		control = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		control = cur->addChild(ControlSeeds::Dialog::intTextBox);
 	}
 	else if(t == PropPage::T_STR)
 	{
-		control = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		control = cur->addChild(ControlSeeds::Dialog::textBox);
 	}
 	else if(t == PropPage::T_BOOL)
 	{
-		control = cur->addChild(WinUtil::Seeds::Dialog::checkBox);
+		control = cur->addChild(ControlSeeds::Dialog::checkBox);
 	}
 
 	items.emplace_back(control, setting, t);

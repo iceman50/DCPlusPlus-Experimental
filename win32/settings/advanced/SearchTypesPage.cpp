@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/TableLayout.h>
 #include <win32/settings/advanced/SearchTypesPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -28,14 +31,13 @@
 
 #include <win32/resource.h>
 #include <win32/dialogs/ParamDlg.h>
-#include <win32/util/WinUtil.h>
 #include <win32/settings/advanced/SearchTypeDlg.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
 using dwt::Label;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ N_("Search type"), 110, false },
 	{ N_("Predefined"), 70, false },
 	{ N_("Extensions"), 100, false }
@@ -65,7 +67,7 @@ modify(0)
 		cur->setSpacing(6);
 
 		{
-			Table::Seed seed = WinUtil::Seeds::Dialog::table;
+			Table::Seed seed = ControlSeeds::Dialog::table;
 			seed.style |= LVS_SINGLESEL;
 			types = cur->addChild(seed);
 		}
@@ -102,7 +104,7 @@ modify(0)
 		cur->addChild(Label::Seed(T_("Note; Custom search types will only be applied to ADC hubs!")));
 	}
 
-	WinUtil::makeColumns(types, columns, 3);
+	TableLayout::makeColumns(types, columns, 3);
 	types->setSort(0, dwt::Table::SORT_STRING);
 
 	fillList();

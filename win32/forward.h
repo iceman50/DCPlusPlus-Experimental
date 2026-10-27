@@ -21,6 +21,17 @@
 
 #include <dwt/forward.h>
 
+using dwt::Button;
+using dwt::CheckBox;
+using dwt::ComboBox;
+using dwt::GroupBox;
+using dwt::Label;
+using dwt::Menu;
+using dwt::TextBox;
+using dwt::Table;
+using dwt::TabView;
+using dwt::Tree;
+
 using dwt::ButtonPtr;
 using dwt::CheckBoxPtr;
 using dwt::ComboBoxPtr;

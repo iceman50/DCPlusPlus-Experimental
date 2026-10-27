@@ -16,6 +16,10 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/services/HelpService.h>
 #include <win32/frames/favorites/FavHubGroupsDlg.h>
 
 #include <dcpp/favorites/FavoriteManager.h>
@@ -34,7 +38,7 @@ using dwt::Grid;
 using dwt::GridInfo;
 using dwt::Label;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ N_("Group name"), 100, false }
 };
 
@@ -57,7 +61,7 @@ logMainChat(0),
 parentEntry(parentEntry_)
 {
 	onInitDialog([this] { return handleInitDialog(); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 }
 
 FavHubGroupsDlg::~FavHubGroupsDlg() {
@@ -88,7 +92,7 @@ bool FavHubGroupsDlg::handleInitDialog() {
 	grid->row(0).mode = GridInfo::FILL;
 	grid->row(0).align = GridInfo::STRETCH;
 
-	groups = grid->addChild(Groups::Seed(WinUtil::Seeds::Dialog::table));
+	groups = grid->addChild(Groups::Seed(ControlSeeds::Dialog::table));
 	groups->setHelpId(IDH_FAV_HUB_GROUPS_LIST);
 
 	{
@@ -122,7 +126,7 @@ bool FavHubGroupsDlg::handleInitDialog() {
 
 			cur2->addChild(Label::Seed(T_("Name")));
 
-			edit = cur2->addChild(WinUtil::Seeds::Dialog::textBox);
+			edit = cur2->addChild(ControlSeeds::Dialog::textBox);
 		}
 
 		{
@@ -133,27 +137,27 @@ bool FavHubGroupsDlg::handleInitDialog() {
 			cur2->column(1).mode = GridInfo::FILL;
 
 			cur2->addChild(Label::Seed(T_("Nick")))->setHelpId(IDH_FAVORITE_HUB_NICK);
-			nick = cur2->addChild(WinUtil::Seeds::Dialog::textBox);
+			nick = cur2->addChild(ControlSeeds::Dialog::textBox);
 			nick->setHelpId(IDH_FAVORITE_HUB_NICK);
-			WinUtil::preventSpaces(nick);
+			DialogControls::preventSpaces(nick);
 
 			cur2->addChild(Label::Seed(T_("Description")))->setHelpId(IDH_FAVORITE_HUB_USER_DESC);
-			description = cur2->addChild(WinUtil::Seeds::Dialog::textBox);
+			description = cur2->addChild(ControlSeeds::Dialog::textBox);
 			description->setHelpId(IDH_FAVORITE_HUB_USER_DESC);
 
 			cur2->addChild(Label::Seed(T_("Email")))->setHelpId(IDH_FAVORITE_HUB_EMAIL);
-			email = cur2->addChild(WinUtil::Seeds::Dialog::textBox);
+			email = cur2->addChild(ControlSeeds::Dialog::textBox);
 			email->setHelpId(IDH_FAVORITE_HUB_EMAIL);
 
 			cur2->addChild(Label::Seed(T_("IPv4")))->setHelpId(IDH_FAVORITE_HUB_USER_IP);
-			userIp = cur2->addChild(WinUtil::Seeds::Dialog::textBox);
+			userIp = cur2->addChild(ControlSeeds::Dialog::textBox);
 			userIp->setHelpId(IDH_FAVORITE_HUB_USER_IP);
-			WinUtil::preventSpaces(userIp);
+			DialogControls::preventSpaces(userIp);
 
 			cur2->addChild(Label::Seed(T_("IPv6")))->setHelpId(IDH_FAVORITE_HUB_USER_IP6);
-			userIp6 = cur2->addChild(WinUtil::Seeds::Dialog::textBox);
+			userIp6 = cur2->addChild(ControlSeeds::Dialog::textBox);
 			userIp6->setHelpId(IDH_FAVORITE_HUB_USER_IP6);
-			WinUtil::preventSpaces(userIp6);
+			DialogControls::preventSpaces(userIp6);
 		}
 
 		{
@@ -162,18 +166,18 @@ bool FavHubGroupsDlg::handleInitDialog() {
 			cur2->column(0).align = GridInfo::BOTTOM_RIGHT;
 
 			cur2->addChild(Label::Seed(T_("Show joins / parts in chat by default")));
-			showJoins = cur2->addChild(WinUtil::Seeds::Dialog::comboBox);
-			WinUtil::fillTriboolCombo(showJoins);
+			showJoins = cur2->addChild(ControlSeeds::Dialog::comboBox);
+			DialogControls::fillTriboolCombo(showJoins);
 			showJoins->setSelected(0);
 
 			cur2->addChild(Label::Seed(T_("Only show joins / parts for favorite users")));
-			favShowJoins = cur2->addChild(WinUtil::Seeds::Dialog::comboBox);
-			WinUtil::fillTriboolCombo(favShowJoins);
+			favShowJoins = cur2->addChild(ControlSeeds::Dialog::comboBox);
+			DialogControls::fillTriboolCombo(favShowJoins);
 			favShowJoins->setSelected(0);
 
 			cur2->addChild(Label::Seed(T_("Log main chat")));
-			logMainChat = cur2->addChild(WinUtil::Seeds::Dialog::comboBox);
-			WinUtil::fillTriboolCombo(logMainChat);
+			logMainChat = cur2->addChild(ControlSeeds::Dialog::comboBox);
+			DialogControls::fillTriboolCombo(logMainChat);
 			logMainChat->setSelected(0);
 		}
 	}
@@ -183,14 +187,14 @@ bool FavHubGroupsDlg::handleInitDialog() {
 		cur->column(0).mode = GridInfo::FILL;
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
 
-		pair<ButtonPtr, ButtonPtr> buttons = WinUtil::addDlgButtons(cur,
+		pair<ButtonPtr, ButtonPtr> buttons = DialogControls::addDlgButtons(cur,
 			[this] { handleClose(); },
 			[this] { handleClose(); });
 		buttons.first->setText(T_("&Close"));
 		buttons.second->setVisible(false);
 	}
 
-	WinUtil::makeColumns(groups, columns, COLUMN_LAST);
+	TableLayout::makeColumns(groups, columns, COLUMN_LAST);
 
 	{
 		HoldRedraw hold { groups };

@@ -22,7 +22,6 @@
 #include <vector>
 
 #include <win32/forward.h>
-#include <win32/util/WinUtil.h>
 
 /** Tree with an object associated to each item.
 

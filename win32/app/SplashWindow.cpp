@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/IconManager.h>
 #include <win32/app/SplashWindow.h>
 
 #include <dcpp/text/format.h>
@@ -26,7 +28,6 @@
 #include <dwt/widgets/ProgressBar.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 SplashWindow::SplashWindow() :
 	dwt::Window(0),
@@ -36,10 +37,10 @@ SplashWindow::SplashWindow() :
 	// 256x icons only work on >= Vista. on failure, try loading a 48x image.
 	try {
 		iconSize = 256;
-		icon = WinUtil::createIcon(IDI_DCPP, iconSize);
+		icon = IconManager::load(IDI_DCPP, iconSize);
 	} catch(const dwt::DWTException&) {
 		iconSize = 48;
-		icon = WinUtil::createIcon(IDI_DCPP, iconSize);
+		icon = IconManager::load(IDI_DCPP, iconSize);
 	}
 
 	{

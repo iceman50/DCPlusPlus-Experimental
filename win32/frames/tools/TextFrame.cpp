@@ -16,6 +16,14 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/frames/chat/ChatText.h>
+#include <win32/services/LinkActions.h>
 
 #include <win32/frames/tools/TextFrame.h>
 
@@ -27,7 +35,6 @@
 #include <dwt/widgets/Grid.h>
 
 #include <win32/app/MainWindow.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::FontDialog;
 using dwt::Grid;
@@ -64,7 +71,7 @@ pad(0),
 path(path),
 temporary(temporary)
 {
-	setIcon(WinUtil::fileImages->getIcon(static_cast<unsigned>(WinUtil::getFileIcon(path))));
+	setIcon(ImageLists::fileImages->getIcon(static_cast<unsigned>(ImageLists::getFileIcon(path))));
 
 	grid = addChild(Grid::Seed(2, 1));
 	grid->column(0).mode = GridInfo::FILL;
@@ -72,23 +79,23 @@ temporary(temporary)
 	grid->row(0).align = GridInfo::STRETCH;
 
 	{
-		TextBox::Seed cs = WinUtil::Seeds::textBox;
+		TextBox::Seed cs = ControlSeeds::textBox;
 		cs.style |= WS_VSCROLL | ES_AUTOVSCROLL | ES_MULTILINE | ES_NOHIDESEL | ES_READONLY;
 		if(!SettingsManager::getInstance()->isDefault(SettingsManager::TEXT_VIEWER_FONT)) {
 			// the user has configured a different font for text files; use it.
 			LOGFONT lf;
-			WinUtil::decodeFont(Text::toT(SETTING(TEXT_VIEWER_FONT)), lf);
+			UiFonts::decodeFont(Text::toT(SETTING(TEXT_VIEWER_FONT)), lf);
 			cs.font = dwt::FontPtr(new dwt::Font(lf));
 		}
 		pad = grid->addChild(cs);
 		addWidget(pad);
-		WinUtil::handleDblClicks(pad);
+		LinkActions::handleDblClicks(pad);
 
 		pad->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return handleMenu(sc); });
 	}
 
 	{
-		Button::Seed seed = WinUtil::Seeds::button;
+		Button::Seed seed = ControlSeeds::button;
 		seed.caption = T_("Change the text viewer font");
 		auto changeFont = grid->addChild(Grid::Seed(1, 1))->addChild(seed);
 		changeFont->setHelpId(IDH_TEXT_FONT);
@@ -120,14 +127,14 @@ void TextFrame::layout() {
 }
 
 void TextFrame::postClosing() {
-	if(temporary && !WinUtil::mainWindow->closing()) {
+	if(temporary && !UiServices::mainWindow->closing()) {
 		File::deleteFile(path);
 	}
 }
 
 void TextFrame::handleFontChange() {
 	LOGFONT logFont;
-	WinUtil::decodeFont(Text::toT(
+	UiFonts::decodeFont(Text::toT(
 		SettingsManager::getInstance()->isDefault(SettingsManager::TEXT_VIEWER_FONT) ?
 		SETTING(MAIN_FONT) : SETTING(TEXT_VIEWER_FONT)), logFont);
 	DWORD color = 0;
@@ -136,7 +143,7 @@ void TextFrame::handleFontChange() {
 	options.underline = false;
 	options.color = false;
 	if(FontDialog(this).open(logFont, color, &options)) {
-		SettingsManager::getInstance()->set(SettingsManager::TEXT_VIEWER_FONT, Text::fromT(WinUtil::encodeFont(logFont)));
+		SettingsManager::getInstance()->set(SettingsManager::TEXT_VIEWER_FONT, Text::fromT(UiFonts::encodeFont(logFont)));
 		pad->setFont(new dwt::Font(logFont));
 	}
 }
@@ -155,8 +162,8 @@ MenuPtr TextFrame::makeMenu(dwt::ScreenCoordinate pt) {
 	auto menu = pad->getMenu();
 
 	tstring searchText;
-	WinUtil::getChatSelText(pad, searchText, pt);
-	WinUtil::addSearchMenu(menu.get(), searchText);
+	ChatText::getChatSelText(pad, searchText, pt);
+	LinkActions::addSearchMenu(menu.get(), searchText);
 
 	return menu;
 }

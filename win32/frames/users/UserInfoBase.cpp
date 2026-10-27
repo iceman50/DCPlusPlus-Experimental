@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/util/Util.h>
+#include <win32/frames/users/UserPresentation.h>
 
 #include <win32/frames/users/UserInfoBase.h>
 
@@ -95,7 +98,7 @@ void UserInfoBase::ignoreChat(bool ignore) {
 tstring UserInfoBase::getInfo(int flags) const {
 	static const size_t maxChars = 100; // max chars per tooltip line
 
-	tstring ret(WinUtil::getNicks(user));
+	tstring ret(UserPresentation::getNicks(user));
 	dwt::util::cutStr(ret, maxChars);
 
 	auto addLine = [&ret](tstring line) {
@@ -103,7 +106,7 @@ tstring UserInfoBase::getInfo(int flags) const {
 		ret += _T("\r\n") + line;
 	};
 
-	addLine(str(TF_("Hubs: %1%") % WinUtil::getHubNames(user).first));
+	addLine(str(TF_("Hubs: %1%") % UserPresentation::getHubNames(user).first));
 
 	auto lock = ClientManager::getInstance()->lock();
 	auto ou = ClientManager::getInstance()->findOnlineUser(user);

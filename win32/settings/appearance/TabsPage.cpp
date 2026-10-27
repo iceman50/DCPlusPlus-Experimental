@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
 #include <win32/settings/appearance/TabsPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -25,7 +27,6 @@
 #include <dwt/widgets/Slider.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -134,7 +135,7 @@ options(0)
 		createPreview();
 	}
 
-	options = grid->addChild(GroupBox::Seed(T_("Tab highlight on content change")))->addChild(WinUtil::Seeds::Dialog::optionsTable);
+	options = grid->addChild(GroupBox::Seed(T_("Tab highlight on content change")))->addChild(ControlSeeds::Dialog::optionsTable);
 
 	PropPage::read(listItems, options);
 }
@@ -162,7 +163,7 @@ void TabsPage::createPreview() {
 	if(previous)
 		previous->close();
 
-	TabView::Seed seed = WinUtil::Seeds::tabs;
+	TabView::Seed seed = ControlSeeds::tabs;
 	seed.style &= ~TCS_TOOLTIPS;
 	seed.widthConfig = tabWidth->getPosition();
 	seed.style |= WS_DISABLED;
@@ -175,7 +176,7 @@ void TabsPage::createPreview() {
 	}
 	if(buttonStyle->getChecked())
 		seed.style |= TCS_BUTTONS;
-	seed.closeIcon = WinUtil::tabIcon(IDI_EXIT);
+	seed.closeIcon = IconManager::tabIcon(IDI_EXIT);
 	TabViewPtr tabs = previewGrid->addChild(seed);
 
 	Container::Seed cs;
@@ -187,8 +188,8 @@ void TabsPage::createPreview() {
 		return ret;
 	};
 
-	tabs->add(makeTab(T_("Example hub tab")), WinUtil::tabIcon(IDI_HUB));
-	dwt::IconPtr icon = WinUtil::tabIcon(IDI_DCPP);
+	tabs->add(makeTab(T_("Example hub tab")), IconManager::tabIcon(IDI_HUB));
+	dwt::IconPtr icon = IconManager::tabIcon(IDI_DCPP);
 	tabs->add(makeTab(T_("Selected tab")), icon);
 	ContainerPtr highlighted = makeTab(T_("Highlighted tab"));
 	tabs->add(highlighted, icon);

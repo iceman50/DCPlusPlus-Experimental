@@ -1,6 +1,9 @@
 /* Copyright (C) 2026 iceman50. GPL-3.0-or-later. */
 
 #include "stdafx.h"
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/ImageLists.h>
 
 #include <win32/appearance/CountryFlags.h>
 #include <win32/resource.h>
@@ -127,14 +130,14 @@ void verifyPrivateSendIndicator(dwt::Window* window, dwt::Application& app) {
 		app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
 		auto status = window->addChild(dwt::StatusBar::Seed(3, 0, false));
 		status->setText(0, L"Ready");
-		status->setIcon(1, WinUtil::statusIcon(IDI_FILE));
+		status->setIcon(1, IconManager::statusIcon(IDI_FILE));
 		status->setText(1, L"2");
 		status->setText(2, L"Other status");
 		status->refresh();
 		RECT original {};
 		SendMessage(status->handle(), SB_GETRECT, 1, reinterpret_cast<LPARAM>(&original));
 		for(unsigned i = 0; i < 6; ++i) {
-			status->setIcon(1, i % 2 ? WinUtil::statusIcon(IDI_FILE) : nullptr);
+			status->setIcon(1, i % 2 ? IconManager::statusIcon(IDI_FILE) : nullptr);
 			RECT current {};
 			SendMessage(status->handle(), SB_GETRECT, 1, reinterpret_cast<LPARAM>(&current));
 			check(EqualRect(&original, &current), "Flashing the private offer icon moved status fields");
@@ -198,10 +201,10 @@ void verifyPrivateSendPM(dwt::Window* window, dwt::Application& app) {
 }
 
 void verifyTransferIcons(dwt::Window* window, dwt::Application& app, const std::string& directory) {
-	WinUtil::fileImages = dwt::ImageListPtr(new dwt::ImageList(dwt::Point(16, 16)));
+	ImageLists::fileImages = dwt::ImageListPtr(new dwt::ImageList(dwt::Point(16, 16)));
 	for(auto resource : { IDI_DIRECTORY, IDI_DIRECTORY, IDI_FILE, IDI_USER, IDI_PRIVATE })
-		WinUtil::fileImages->add(*WinUtil::createIcon(resource, 16));
-	WinUtil::fileFlagOffset = CountryFlags::append(*WinUtil::fileImages);
+		ImageLists::fileImages->add(*IconManager::load(resource, 16));
+	ImageLists::fileFlagOffset = CountryFlags::append(*ImageLists::fileImages);
 
 	for(auto mode : { dwt::Appearance::Mode::Light, dwt::Appearance::Mode::Dark }) {
 		app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
@@ -251,18 +254,18 @@ void verifyTransferIcons(dwt::Window* window, dwt::Application& app, const std::
 		ConnectionQueueItem second(peer, CONNECTION_TYPE_PM, "icon-test-second");
 		ConnectionManager::getInstance()->fire(ConnectionManagerListener::Added(), &first);
 		waitRows(1);
-		verifyRow(0, WinUtil::TRANSFER_ICON_PM);
+		verifyRow(0, ImageLists::TRANSFER_ICON_PM);
 
 		ConnectionManager::getInstance()->fire(ConnectionManagerListener::Added(), &second);
 		waitRows(3);
 		LVITEM parent { LVIF_PARAM, 0 };
 		check(ListView_GetItem(table->handle(), &parent) != FALSE, "Cannot retrieve expanded transfer group");
 		for(int iteration = 0; iteration < 3; ++iteration) {
-			verifyRow(0, WinUtil::TRANSFER_ICON_PM);
-			verifyRow(1, WinUtil::TRANSFER_ICON_USER);
-			verifyRow(2, WinUtil::TRANSFER_ICON_USER);
+			verifyRow(0, ImageLists::TRANSFER_ICON_PM);
+			verifyRow(1, ImageLists::TRANSFER_ICON_USER);
+			verifyRow(2, ImageLists::TRANSFER_ICON_USER);
 			table->collapse(parent.lParam);
-			verifyRow(0, WinUtil::TRANSFER_ICON_PM);
+			verifyRow(0, ImageLists::TRANSFER_ICON_PM);
 			table->expand(parent.lParam);
 		}
 
@@ -310,8 +313,8 @@ int dwtMain(dwt::Application& app) {
 				!GeoIPUpdate::validHostedUrl("https://user:secret@example.test/data.mmdb") &&
 				!GeoIPUpdate::validHostedUrl("https://example.test/\r\nAuthorization: secret"),
 			"Unsafe hosted URL was accepted");
-		WinUtil::initFont();
-		WinUtil::initSeeds();
+		UiServices::initFont();
+		ControlSeeds::init();
 		const std::string key = "synthetic-test-key-not-a-MaxMind-credential";
 		const auto encrypted = GeoIPUpdate::protectKey(key);
 		check(encrypted != key && encrypted.find(key) == std::string::npos, "License key was not protected");

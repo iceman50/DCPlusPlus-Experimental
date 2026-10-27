@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/appearance/AppearancePage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -25,7 +27,6 @@
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/Spinner.h>
 
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using dwt::Grid;
@@ -57,7 +58,7 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 	grid->row(0).mode = GridInfo::FILL;
 	grid->row(0).align = GridInfo::STRETCH;
 
-	options = grid->addChild(GroupBox::Seed(T_("Options")))->addChild(WinUtil::Seeds::Dialog::optionsTable);
+	options = grid->addChild(GroupBox::Seed(T_("Options")))->addChild(ControlSeeds::Dialog::optionsTable);
 
 	{
 		auto cur = grid->addChild(Grid::Seed(1, 2));
@@ -66,12 +67,12 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 		auto group = cur->addChild(GroupBox::Seed(T_("Timestamp format")));
 		group->setHelpId(IDH_SETTINGS_APPEARANCE_TIMESTAMP_FORMAT);
 
-		items.emplace_back(group->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::TIME_STAMPS_FORMAT, PropPage::T_STR);
+		items.emplace_back(group->addChild(ControlSeeds::Dialog::textBox), SettingsManager::TIME_STAMPS_FORMAT, PropPage::T_STR);
 
 		group = cur->addChild(GroupBox::Seed(T_("Country format")));
 		group->setHelpId(IDH_SETTINGS_APPEARANCE_COUNTRY_FORMAT);
 
-		items.emplace_back(group->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::COUNTRY_FORMAT, PropPage::T_STR);
+		items.emplace_back(group->addChild(ControlSeeds::Dialog::textBox), SettingsManager::COUNTRY_FORMAT, PropPage::T_STR);
 	}
 
 	{
@@ -86,14 +87,14 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 
 		cur->addChild(Label::Seed(T_("Keep it between")));
 
-		auto box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		auto box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::MIN_MESSAGE_LINES, PropPage::T_INT_WITH_SPIN);
 		auto spin = cur->addChild(Spinner::Seed(1, UD_MAXVAL, box));
 		cur->setWidget(spin);
 
 		cur->addChild(Label::Seed(T_("and")));
 
-		box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+		box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 		items.emplace_back(box, SettingsManager::MAX_MESSAGE_LINES, PropPage::T_INT_WITH_SPIN);
 		spin = cur->addChild(Spinner::Seed(1, UD_MAXVAL, box));
 		cur->setWidget(spin);
@@ -106,7 +107,7 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 		auto fields = group->addChild(Grid::Seed(2, 2));
 		fields->column(1).mode = GridInfo::FILL;
 		fields->addChild(Label::Seed(T_("Download URL")));
-		items.emplace_back(fields->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::GEOIP_DOWNLOAD_URL, PropPage::T_STR);
+		items.emplace_back(fields->addChild(ControlSeeds::Dialog::textBox), SettingsManager::GEOIP_DOWNLOAD_URL, PropPage::T_STR);
 		auto note =
 			fields->addChild(Label::Seed(T_("HTTPS link to a Country .mmdb or .tar.gz file. GitHub release assets are supported.")));
 		fields->setWidget(note, 1, 0, 1, 2);
@@ -116,7 +117,7 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 		auto group = grid->addChild(GroupBox::Seed(T_("Language")));
 		group->setHelpId(IDH_SETTINGS_APPEARANCE_LANGUAGE);
 
-		languages = group->addChild(WinUtil::Seeds::Dialog::comboBox);
+		languages = group->addChild(ControlSeeds::Dialog::comboBox);
 		languages->setHelpId(IDH_SETTINGS_APPEARANCE_LANGUAGE);
 	}
 

@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
 
 #include <win32/services/GeoIPUpdate.h>
 

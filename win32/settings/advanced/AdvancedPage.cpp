@@ -16,13 +16,13 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
 #include <win32/settings/advanced/AdvancedPage.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dcpp/settings/SettingsManager.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -70,7 +70,7 @@ AdvancedPage::AdvancedPage(dwt::Widget* parent) : PropPage(parent, 1, 1) {
 	grid->row(0).mode = GridInfo::FILL;
 	grid->row(0).align = GridInfo::STRETCH;
 
-	options = grid->addChild(WinUtil::Seeds::Dialog::optionsTable);
+	options = grid->addChild(ControlSeeds::Dialog::optionsTable);
 	PropPage::read(listItems, options);
 }
 

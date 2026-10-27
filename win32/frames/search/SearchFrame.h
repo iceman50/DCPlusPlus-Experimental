@@ -19,6 +19,7 @@
 #define DCPLUSPLUS_WIN32_SEARCH_FRAME_H
 
 #include <list>
+#include <dcpp/util/Util.h>
 #include <set>
 
 #include <dcpp/hub/Client.h>
@@ -26,7 +27,7 @@
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
 
-#include <win32/util/AspectUserCommand.h>
+#include <win32/frames/users/AspectUserCommand.h>
 #include <win32/controls/ListFilter.h>
 #include <win32/frames/base/MDIChildFrame.h>
 

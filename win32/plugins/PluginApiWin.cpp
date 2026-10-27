@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <win32/app/UiServices.h>
+#include <win32/services/Notifications.h>
 #include <win32/plugins/PluginApiWin.h>
 
 #include <dcpp/text/format.h>
@@ -29,7 +31,6 @@
 
 #include <win32/app/MainWindow.h>
 #include <win32/plugins/PluginInfoDlg.h>
-#include <win32/util/WinUtil.h>
 
 DCUI PluginApiWin::dcUI = {
 	DCINTF_DCPP_UI_VER,
@@ -55,12 +56,12 @@ void PluginApiWin::removeCommand(const char* guid, const char* name) {
 }
 
 void PluginApiWin::playSound(const char* path) {
-	WinUtil::playSound(Text::toT(path));
+	Notifications::playSound(Text::toT(path));
 }
 
 void PluginApiWin::notify(const char* title, const char* message) {
-	if(WinUtil::mainWindow) {
-		WinUtil::mainWindow->notify(Text::toT(title), Text::toT(message));
+	if(UiServices::mainWindow) {
+		UiServices::mainWindow->notify(Text::toT(title), Text::toT(message));
 	}
 }
 
@@ -74,7 +75,7 @@ void PluginUtils::addPlugin(dwt::Widget* w) {
 		auto path = Text::fromT(path_t);
 		if(Util::getFileExt(path) == ".dcext") {
 			PluginInfoDlg(w, path).run();
-			WinUtil::mainWindow->refreshPluginMenu();
+			UiServices::mainWindow->refreshPluginMenu();
 		} else {
 			try {
 				PluginManager::getInstance()->addPlugin(path);
@@ -93,13 +94,13 @@ void PluginUtils::configPlugin(const string& guid, dwt::Widget* w) {
 			_T(APPNAME) _T(" ") _T(VERSIONSTRING), dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONINFORMATION);
 		return;
 	}
-	WinUtil::mainWindow->refreshPluginMenu();
+	UiServices::mainWindow->refreshPluginMenu();
 }
 
 void PluginUtils::enablePlugin(const string& guid, dwt::Widget* w) {
 	try {
 		PluginManager::getInstance()->enablePlugin(guid);
-		WinUtil::mainWindow->refreshPluginMenu();
+		UiServices::mainWindow->refreshPluginMenu();
 	} catch(const Exception& e) {
 		dwt::MessageBox(w).show(tstring(T_("Cannot enable the plugin:")) + _T("\r\n\r\n") + Text::toT(e.getError()),
 			Text::toT(PluginManager::getInstance()->getPlugin(guid).name), dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONSTOP);
@@ -108,5 +109,5 @@ void PluginUtils::enablePlugin(const string& guid, dwt::Widget* w) {
 
 void PluginUtils::disablePlugin(const string& guid, dwt::Widget*) {
 	PluginManager::getInstance()->disablePlugin(guid);
-	WinUtil::mainWindow->refreshPluginMenu();
+	UiServices::mainWindow->refreshPluginMenu();
 }

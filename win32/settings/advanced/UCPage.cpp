@@ -16,6 +16,8 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/TableLayout.h>
 #include <win32/settings/advanced/UCPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -27,12 +29,11 @@
 
 #include <win32/settings/advanced/CommandDlg.h>
 #include <win32/controls/HoldRedraw.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
 
-static const ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo columns[] = {
 	{ N_("Name"), 100, false },
 	{ N_("Command"), 100, false },
 	{ N_("Hub"), 100, false }
@@ -53,7 +54,7 @@ commands(0)
 	grid->row(0).align = GridInfo::STRETCH;
 	grid->setHelpId(IDH_SETTINGS_UC_LIST);
 
-	commands = grid->addChild(WinUtil::Seeds::Dialog::table);
+	commands = grid->addChild(ControlSeeds::Dialog::table);
 	grid->setWidget(commands, 0, 0, 1, 5);
 
 	auto button = grid->addChild(Button::Seed(T_("&Add")));
@@ -76,7 +77,7 @@ commands(0)
 	button->onClicked([this] { handleRemoveClicked(); });
 	button->setHelpId(IDH_SETTINGS_UC_REMOVE);
 
-	WinUtil::makeColumns(commands, columns, 3);
+	TableLayout::makeColumns(commands, columns, 3);
 
 	for(const auto& uc: FavoriteManager::getInstance()->getUserCommands()) {
 		if(!uc.isSet(UserCommand::FLAG_NOSAVE))

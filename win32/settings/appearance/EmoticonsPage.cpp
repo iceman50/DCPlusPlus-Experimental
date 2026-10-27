@@ -9,6 +9,10 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
 #include <win32/settings/appearance/EmoticonsPage.h>
 
 #include <dcpp/chat/EmoticonManager.h>
@@ -28,7 +32,6 @@
 #include <win32/appearance/EmoticonPackDlg.h>
 #include <win32/appearance/Emoticons.h>
 #include <win32/controls/RichTextBox.h>
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using dwt::Button;
@@ -112,7 +115,7 @@ EmoticonsPage::EmoticonsPage(dwt::Widget* parent) : PropPage(parent, 1, 1), pack
 	grid->row(0).mode = GridInfo::FILL;
 	grid->row(0).align = GridInfo::STRETCH;
 
-	auto tabSeed = WinUtil::Seeds::tabs;
+	auto tabSeed = ControlSeeds::tabs;
 	tabSeed.style &= ~(TCS_OWNERDRAWFIXED | TCS_MULTILINE | TCS_RAGGEDRIGHT | TCS_TOOLTIPS);
 	tabSeed.exStyle |= WS_EX_CONTROLPARENT;
 	tabSeed.widthConfig = 0;
@@ -133,7 +136,7 @@ EmoticonsPage::EmoticonsPage(dwt::Widget* parent) : PropPage(parent, 1, 1), pack
 		auto row = content->addChild(Grid::Seed(1, 5));
 		row->column(0).mode = GridInfo::FILL;
 
-		packageBox = row->addChild(WinUtil::Seeds::Dialog::comboBox);
+		packageBox = row->addChild(ControlSeeds::Dialog::comboBox);
 		packageBox->onSelectionChanged([this] { handlePackageSelection(); });
 		row->addChild(Button::Seed(T_("Browse...")))->onClicked([this] {
 			const auto current = selectedPackagePath();
@@ -166,7 +169,7 @@ EmoticonsPage::EmoticonsPage(dwt::Widget* parent) : PropPage(parent, 1, 1), pack
 		auto sizeRow = content->addChild(Grid::Seed(1, 2));
 		sizeRow->column(1).mode = GridInfo::FILL;
 		sizeRow->addChild(Label::Seed(T_("Display size")));
-		sizeBox = sizeRow->addChild(WinUtil::Seeds::Dialog::comboBox);
+		sizeBox = sizeRow->addChild(ControlSeeds::Dialog::comboBox);
 		static const int sizes[] = { 20, 24, 28, 32 };
 		int selected = 1;
 		for(size_t i = 0; i < std::size(sizes); ++i) {
@@ -178,7 +181,7 @@ EmoticonsPage::EmoticonsPage(dwt::Widget* parent) : PropPage(parent, 1, 1), pack
 		auto depthRow = content->addChild(Grid::Seed(1, 2));
 		depthRow->column(1).mode = GridInfo::FILL;
 		depthRow->addChild(Label::Seed(T_("Preferred emoticon bit depth")));
-		bitDepthBox = depthRow->addChild(WinUtil::Seeds::Dialog::comboBox);
+		bitDepthBox = depthRow->addChild(ControlSeeds::Dialog::comboBox);
 		static const int bitDepths[] = { 16, 24, 32 };
 		selected = 0;
 		for(size_t i = 0; i < std::size(bitDepths); ++i) {
@@ -194,10 +197,10 @@ EmoticonsPage::EmoticonsPage(dwt::Widget* parent) : PropPage(parent, 1, 1), pack
 		content->column(0).mode = GridInfo::FILL;
 		content->row(0).mode = GridInfo::FILL;
 		content->row(0).align = GridInfo::STRETCH;
-		RichTextBox::Seed seed = WinUtil::Seeds::Dialog::richTextBox;
+		RichTextBox::Seed seed = ControlSeeds::Dialog::richTextBox;
 		seed.style |= ES_READONLY | WS_VSCROLL;
 		preview = dwt::WidgetCreator<RichTextBox>::create(content, seed);
-		WinUtil::setColor(preview);
+		AppAppearance::setColor(preview);
 		previewStatus = content->addChild(Label::Seed());
 	}
 
@@ -210,7 +213,7 @@ EmoticonsPage::EmoticonsPage(dwt::Widget* parent) : PropPage(parent, 1, 1), pack
 		content->column(0).mode = GridInfo::FILL;
 		auto row = content->addChild(Grid::Seed(1, 2));
 		row->column(0).mode = GridInfo::FILL;
-		iconPackageBox = row->addChild(WinUtil::Seeds::Dialog::comboBox);
+		iconPackageBox = row->addChild(ControlSeeds::Dialog::comboBox);
 		iconPackageBox->onSelectionChanged([this] { updateIconPackageStatus(); });
 		row->addChild(Button::Seed(T_("Browse...")))->onClicked([this] {
 			const auto selected = selectedIconPackagePath();

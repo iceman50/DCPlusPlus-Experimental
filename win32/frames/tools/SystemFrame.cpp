@@ -16,6 +16,14 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/frames/chat/ChatText.h>
+#include <win32/services/LinkActions.h>
+#include <win32/shell/ShellActions.h>
 
 #include <win32/frames/tools/SystemFrame.h>
 
@@ -31,7 +39,6 @@
 #include <win32/controls/HtmlToRtf.h>
 #include <win32/controls/RichTextBox.h>
 #include <win32/shell/ShellMenu.h>
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 const string SystemFrame::id = "SystemLog";
@@ -44,7 +51,7 @@ SystemFrame::SystemFrame(TabViewPtr parent) :
 	logAlive(std::make_shared<std::atomic_bool>(true))
 {
 	{
-		RichTextBox::Seed cs = WinUtil::Seeds::richTextBox;
+		RichTextBox::Seed cs = ControlSeeds::richTextBox;
 		cs.style |= WS_VSCROLL | ES_MULTILINE | ES_NOHIDESEL | ES_READONLY;
 		log = dwt::WidgetCreator<RichTextBox>::create(this, cs);
 		log->setColor(SETTING(LOG_COLOR), SETTING(LOG_BG_COLOR));
@@ -52,13 +59,13 @@ SystemFrame::SystemFrame(TabViewPtr parent) :
 		addWidget(log);
 		log->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return handleContextMenu(sc); });
 		log->onLeftMouseDblClick([this](const dwt::MouseEvent &me) { return handleDoubleClick(me); });
-		WinUtil::handleDblClicks(log);
+		LinkActions::handleDblClicks(log);
 	}
 
 	initStatus();
 
 	status->onDblClicked(STATUS_STATUS, [] {
-		WinUtil::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(LogManager::SYSTEM))));
+		ShellActions::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(LogManager::SYSTEM))));
 	});
 
 	layout();
@@ -174,8 +181,8 @@ void SystemFrame::refreshLog() {
 	log->setText(Util::emptyStringT);
 	log->clearMessageMetadata();
 	dwt::FontPtr font;
-	WinUtil::updateFont(font, SettingsManager::LOG_FONT);
-	log->setFont(font ? font : WinUtil::Seeds::richTextBox.font);
+	UiFonts::updateFont(font, SettingsManager::LOG_FONT);
+	log->setFont(font ? font : ControlSeeds::richTextBox.font);
 	log->setColor(SETTING(LOG_COLOR), SETTING(LOG_BG_COLOR));
 	addLines(messages, false);
 }
@@ -195,7 +202,7 @@ void SystemFrame::openFile(const string& path) const {
 		return;
 	}
 
-	WinUtil::openFile(Text::toT(path));
+	ShellActions::openFile(Text::toT(path));
 }
 
 void SystemFrame::layout() {
@@ -222,23 +229,23 @@ bool SystemFrame::handleContextMenu(const dwt::ScreenCoordinate& pt) {
 	tstring text = log->textUnderCursor(pt, true);
 	string path_a = Text::fromT(text);
 	if(File::getSize(path_a) != -1) {
-		auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
-		menu->setTitle(escapeMenu(text), WinUtil::fileImages->getIcon(static_cast<unsigned>(WinUtil::getFileIcon(path_a))));
+		auto menu = addChild(ShellMenu::Seed(ControlSeeds::menu));
+		menu->setTitle(escapeMenu(text), ImageLists::fileImages->getIcon(static_cast<unsigned>(ImageLists::getFileIcon(path_a))));
 
 		auto tth = ShareManager::getInstance()->getTTHFromReal(path_a);
 		if (tth) {
-			WinUtil::addHashItems(menu.get(), tth.value(), Util::getFileName(text), File::getSize(path_a));
+			LinkActions::addHashItems(menu.get(), tth.value(), Util::getFileName(text), File::getSize(path_a));
 		} 
 
 		menu->appendItem(T_("&Open"), [this, path_a] { openFile(path_a); }, dwt::IconPtr(), true, true);
-		menu->appendItem(T_("Open &folder"), [text] { WinUtil::openFolder(text); });
+		menu->appendItem(T_("Open &folder"), [text] { ShellActions::openFolder(text); });
 		
 		menu->appendShellMenu(StringList(1, path_a));
 		menu->open(pt);
 	} else {
-		WinUtil::getChatSelText(log, text, pt);
+		ChatText::getChatSelText(log, text, pt);
 		auto menu = log->getMenu();
-		WinUtil::addSearchMenu(menu.get(), text);
+		LinkActions::addSearchMenu(menu.get(), text);
 		menu->open(pt);
 	}
 	

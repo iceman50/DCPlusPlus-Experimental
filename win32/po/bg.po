@@ -81,7 +81,7 @@ msgid "%1% dropped"
 msgstr "%1% отпаднали"
 
 #: win32\plugins\PluginApiWin.cpp:70 win32\plugins\PluginApiWin.cpp:71 win32\frames\queue\QueueFrame.cpp:948
-#: win32\util\WinUtil.cpp:853 win32\frames\transfers\FinishedFrameBase.h:460
+#: win32\dialogs\FilePickers.cpp:55 win32\frames\transfers\FinishedFrameBase.h:460
 #, boost-format
 msgid "%1% files"
 msgstr "%1% файлове"
@@ -183,7 +183,7 @@ msgid "%1%/s, %2% left"
 msgstr "Скорост: %1%/в секунда;   Оставащ размер: %2%"
 
 #: win32\frames\filelist\DirectoryListingFrame.cpp:832 win32\frames\users\UserInfoBase.cpp:116
-#: win32\frames\users\UserInfoBase.cpp:141 win32\util\WinUtil.cpp:1714
+#: win32\frames\users\UserInfoBase.cpp:141 win32\controls\TableActions.cpp:58
 #, boost-format
 msgid "%1%: %2%"
 msgstr "%1%: %2%"
@@ -198,7 +198,7 @@ msgstr "&Добави"
 msgid "&Add folder"
 msgstr "&Добави папка"
 
-#: win32\util\WinUtil.cpp:1646 win32\frames\users\UserInfoBase.h:155
+#: win32\frames\users\UserActions.cpp:97 win32\frames\users\UserInfoBase.h:155
 msgid "&Browse file list"
 msgstr "&Прегледай списъка с файлове"
 
@@ -234,7 +234,7 @@ msgstr "&Свържи"
 msgid "&Copy"
 msgstr "&Копирай"
 
-#: win32\util\dwtTexts.cpp:32
+#: win32\app\dwtTexts.cpp:32
 msgid "&Copy\tCtrl+C"
 msgstr "&Копирай \t Ctrl+C"
 
@@ -246,7 +246,7 @@ msgstr "&Персонализирай\tДвойно щракване"
 msgid "&Defaults"
 msgstr "&По подразбиране"
 
-#: win32\util\dwtTexts.cpp:34
+#: win32\app\dwtTexts.cpp:34
 msgid "&Delete\tDel"
 msgstr "&Изтрий\tDel"
 
@@ -287,7 +287,7 @@ msgstr "&Търсене...\tCtrl+F"
 msgid "&Force attempt"
 msgstr "&Форсирай задачата"
 
-#: win32\frames\queue\QueueFrame.cpp:1002 win32\util\WinUtil.cpp:1643 win32\frames\users\UserInfoBase.h:154
+#: win32\frames\queue\QueueFrame.cpp:1002 win32\frames\users\UserActions.cpp:94 win32\frames\users\UserInfoBase.h:154
 msgid "&Get file list"
 msgstr "&Извлечи списъка с файлове"
 
@@ -303,7 +303,7 @@ msgstr "&Помощ"
 msgid "&Hide\tCtrl+1"
 msgstr "&Скрий\tCtrl+1"
 
-#: win32\util\WinUtil.cpp:1649 win32\frames\users\UserInfoBase.h:156
+#: win32\frames\users\UserActions.cpp:100 win32\frames\users\UserInfoBase.h:156
 msgid "&Match queue"
 msgstr "&Сравни с опашката"
 
@@ -335,7 +335,7 @@ msgstr "&Бележник\tCtrl+N"
 msgid "&Open"
 msgstr "&Отвори"
 
-#: win32\util\dwtTexts.cpp:33
+#: win32\app\dwtTexts.cpp:33
 msgid "&Paste\tCtrl+V"
 msgstr "&Постави\tCtrl+V"
 
@@ -383,7 +383,7 @@ msgstr "&Търсене\tCtrl+S"
 msgid "&Search hub"
 msgstr "&Търси в хъба"
 
-#: win32\frames\queue\QueueFrame.cpp:1009 win32\util\WinUtil.cpp:1652 win32\frames\users\UserInfoBase.h:158
+#: win32\frames\queue\QueueFrame.cpp:1009 win32\frames\users\UserActions.cpp:103 win32\frames\users\UserInfoBase.h:158
 msgid "&Send private message"
 msgstr "&Изпрати лично съобщение"
 
@@ -395,7 +395,7 @@ msgstr ""
 msgid "&Toggle"
 msgstr ""
 
-#: win32\util\dwtTexts.cpp:30
+#: win32\app\dwtTexts.cpp:30
 msgid "&Undo\tCtrl+Z"
 msgstr "&Стъпка назад\tCtrl+Z"
 
@@ -458,7 +458,7 @@ msgstr "-:--:--"
 msgid "<Information unavailable>"
 msgstr "<недостъпна информация>"
 
-#: win32\util\WinUtil.cpp:1547
+#: win32\services\LinkActions.cpp:102
 msgid ""
 "A MAGNET link was given to DC++, but it didn't contain a valid file hash for "
 "use on the Direct Connect network.  No action will be taken."
@@ -529,7 +529,7 @@ msgstr "Активен режим (нека DC++ конфигурира моя �
 msgid "Add"
 msgstr "Добави"
 
-#: win32\frames\hub\HubFrame.cpp:1314 win32\frames\hub\PublicHubsFrame.cpp:402 win32\util\WinUtil.cpp:1655
+#: win32\frames\hub\HubFrame.cpp:1314 win32\frames\hub\PublicHubsFrame.cpp:402 win32\frames\users\UserActions.cpp:106
 #: win32\frames\users\UserInfoBase.h:160
 msgid "Add To &Favorites"
 msgstr "Прибави Към &Любими"
@@ -620,7 +620,7 @@ msgstr ""
 msgid "Advanced"
 msgstr "Разширени"
 
-#: win32\frames\queue\QueueFrame.cpp:1017 win32\frames\queue\QueueFrame.cpp:1026 win32\util\WinUtil.cpp:1610
+#: win32\frames\queue\QueueFrame.cpp:1017 win32\frames\queue\QueueFrame.cpp:1026 win32\frames\users\UserActions.cpp:61
 msgid "All"
 msgstr "Всички"
 
@@ -629,11 +629,11 @@ msgstr "Всички"
 msgid "All %1% users offline"
 msgstr "Всички %1% потребители са извън линия"
 
-#: win32\util\WinUtil.cpp:1708
+#: win32\controls\TableActions.cpp:52
 msgid "All columns"
 msgstr "Всички колони"
 
-#: win32\util\WinUtil.cpp:856 win32\util\WinUtil.cpp:863
+#: win32\dialogs\FilePickers.cpp:58 win32\dialogs\FilePickers.cpp:65
 msgid "All files"
 msgstr "Всички файлове"
 
@@ -670,7 +670,7 @@ msgstr "Друга група с име \"%1%\" вече съществува"
 msgid "Any"
 msgstr "Което и де е"
 
-#: win32\util\WinUtil.cpp:1571
+#: win32\services\LinkActions.cpp:126
 msgid "Any program that is launched will have the same access rights as DC++."
 msgstr ""
 
@@ -794,11 +794,11 @@ msgstr "Съобщение при отсъствие (празно = без съ
 msgid "Away mode"
 msgstr "Режим \"Отсъстващ\""
 
-#: win32\util\WinUtil.cpp:639 win32\util\WinUtil.cpp:648
+#: win32\frames\chat\ChatCommands.cpp:162 win32\frames\chat\ChatCommands.cpp:171
 msgid "Away mode off"
 msgstr "Режим \"Отсъстващ\" е изключен"
 
-#: win32\util\WinUtil.cpp:644
+#: win32\frames\chat\ChatCommands.cpp:167
 #, boost-format
 msgid "Away mode on: %1%"
 msgstr "Режим \"Отсъстващ\" е включен: %1%"
@@ -888,7 +888,7 @@ msgstr "CRC32 грешка (SFV-Проверка)"
 msgid "Cached hub list is corrupted or unsupported"
 msgstr "Кешираният списък с хъбове е повреден или не се поддържа"
 
-#: win32\util\WinUtil.cpp:1128
+#: win32\controls\DialogControls.cpp:50
 msgid "Cancel"
 msgstr "Отказ"
 
@@ -948,7 +948,7 @@ msgstr ""
 msgid "Clear search box after each search"
 msgstr "Изчисти полето за търсене след всяко търсене"
 
-#: win32\util\WinUtil.cpp:550
+#: win32\frames\chat\ChatCommands.cpp:71
 msgid ""
 "Clears the current window of all text. Optionally, you can specify how many "
 "of the latest (most recent) lines should be kept."
@@ -956,7 +956,7 @@ msgstr ""
 "Изчиства целия текст на текущия прозорец. Ако желаете, можете да зададете "
 "колко от последните редове трябва да останат."
 
-#: win32\util\dwtTexts.cpp:36
+#: win32\app\dwtTexts.cpp:36
 msgid "Click and drag to resize"
 msgstr "Щракнете и плъзнете, за да преоразмерите"
 
@@ -972,7 +972,7 @@ msgstr ""
 msgid "Client type"
 msgstr "Тип клиент"
 
-#: win32\util\dwtTexts.cpp:37
+#: win32\app\dwtTexts.cpp:37
 msgid "Close"
 msgstr "Затвори"
 
@@ -1008,7 +1008,7 @@ msgstr "Затвори изключените хъбове"
 msgid "Close hubs not in a favorite group"
 msgstr "Затвори хъбовете, които не са от любима група"
 
-#: win32\util\WinUtil.cpp:564
+#: win32\frames\chat\ChatCommands.cpp:85
 #, fuzzy
 msgid "Closes the current window."
 msgstr "Затвори всички прозорци с лични съобщения"
@@ -1095,7 +1095,7 @@ msgstr "Свържи се към всички хъбове в тази груп�
 msgid "Connect to hub"
 msgstr "Свързване с Хъб"
 
-#: win32\frames\hub\HubFrame.cpp:680 win32\util\WinUtil.cpp:1803
+#: win32\frames\hub\HubFrame.cpp:680 win32\frames\users\UserPresentation.cpp:67
 msgid "Connected"
 msgstr "Свързан"
 
@@ -1125,7 +1125,7 @@ msgstr "Контекстно меню"
 msgid "Contribute"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1690
+#: win32\controls\TableActions.cpp:34
 msgid "Copy"
 msgstr "Копирай"
 
@@ -1147,7 +1147,7 @@ msgstr "Копирай &Адреса към клипборда"
 msgid "Copy address with &keyprint to clipboard"
 msgstr "Копирай &Адреса към клипборда"
 
-#: win32\util\WinUtil.cpp:806
+#: win32\services\LinkActions.cpp:49
 msgid "Copy magnet link to clipboard"
 msgstr "Копирай Magnet-хипервръзката в клипборда..."
 
@@ -1172,7 +1172,7 @@ msgstr "Създай / Модифицирай потребителска ком�
 msgid "Creating file index..."
 msgstr "Създаване на индекс с файловете..."
 
-#: win32\util\dwtTexts.cpp:31
+#: win32\app\dwtTexts.cpp:31
 msgid "Cu&t\tCtrl+X"
 msgstr "&Изрежи\tCtrl+X"
 
@@ -1248,7 +1248,7 @@ msgstr "Сложи приоритет"
 
 #: win32\settings\appearance\AppearancePage.cpp:142 win32\settings\appearance\AppearancePage.cpp:175
 #: win32\settings\connection\ConnectivityManualPage.cpp:268 win32\frames\favorites\FavHubProperties.cpp:268
-#: win32\util\WinUtil.cpp:1172 win32\frames\tools\ACFrame.h:140
+#: win32\controls\DialogControls.cpp:94 win32\frames\tools\ACFrame.h:140
 msgid "Default"
 msgstr "По подразбиране"
 
@@ -1331,7 +1331,7 @@ msgstr "Изключено"
 msgid "Disconnect the direct encrypted channel"
 msgstr "Изключи директния криптиран канал"
 
-#: win32\util\WinUtil.cpp:1808
+#: win32\frames\users\UserPresentation.cpp:72
 #, fuzzy
 msgid "Disconnected"
 msgstr "&Разкачване"
@@ -1352,7 +1352,7 @@ msgstr "Показвай в изскачащия балон"
 msgid "Display the balloon only when DC++ is in the background"
 msgstr "Покажи балона само когато DC ++ е на заден план"
 
-#: win32\util\WinUtil.cpp:559
+#: win32\frames\chat\ChatCommands.cpp:80
 msgid ""
 "Displays available commands. (The ones listed on this page.) Optionally, you "
 "can specify \"brief\" to have a brief listing."
@@ -1386,7 +1386,7 @@ msgstr ""
 msgid "Do you really want to delete this search type?"
 msgstr "Найстина ли желаете да изтриете този вид търсене?"
 
-#: win32\util\WinUtil.cpp:1573
+#: win32\services\LinkActions.cpp:128
 msgid "Do you still want to allow to open a program on your computer?"
 msgstr ""
 
@@ -1455,7 +1455,7 @@ msgstr ""
 msgid "Download failed: %1%"
 msgstr "Свалянето провалено: %1%"
 
-#: win32\frames\transfers\TransferView.cpp:1134 win32\util\WinUtil.cpp:93
+#: win32\frames\transfers\TransferView.cpp:1134 win32\services\Notifications.cpp:35
 msgid "Download finished"
 msgstr "Изтеглянето приключи"
 
@@ -1467,11 +1467,11 @@ msgstr "Изтеглете пълния списък"
 msgid "Download limit"
 msgstr "Ограничение за Download"
 
-#: win32\util\WinUtil.cpp:687
+#: win32\frames\chat\ChatCommands.cpp:212
 msgid "Download limit disabled"
 msgstr "Лимитът за сваляне е деактивиран"
 
-#: win32\util\WinUtil.cpp:687
+#: win32\frames\chat\ChatCommands.cpp:212
 #, boost-format
 msgid "Download limit set to %1% KiB/s"
 msgstr "Ограничението за Download е настроено на %1% KiB/s"
@@ -1481,7 +1481,7 @@ msgstr "Ограничението за Download е настроено на %1% 
 msgid "Download limit: %1%/s - Click to adjust"
 msgstr "Ограничение за Download: %1%/s - Щракни за настройка"
 
-#: win32\util\WinUtil.cpp:624
+#: win32\frames\chat\ChatCommands.cpp:147
 msgid "Download slots set"
 msgstr "Даунлоуд слотовете са зададени"
 
@@ -1665,21 +1665,21 @@ msgstr "Грешка при зареждане на бележниковия ф�
 msgid "Error processing version information"
 msgstr "Грешка при обработка на информацията с версия"
 
-#: win32\util\WinUtil.cpp:1453
+#: win32\shell\ShellIntegration.cpp:177
 msgid ""
 "Error registering DC++ for automatic startup (could not find or create key)"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1463
+#: win32\shell\ShellIntegration.cpp:188
 msgid "Error registering DC++ for automatic startup (could not set key value)"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1393
+#: win32\shell\ShellIntegration.cpp:116
 #, fuzzy, boost-format
 msgid "Error registering the %1% handler"
 msgstr "Грешка при регистриране на %1%:// манипулатор на връзката"
 
-#: win32\util\WinUtil.cpp:1498
+#: win32\shell\ShellIntegration.cpp:218
 msgid ""
 "Error unregistering DC++ for automatic startup (could not delete key value)"
 msgstr ""
@@ -1706,7 +1706,7 @@ msgid ""
 "DC++ is licenced under GPL."
 msgstr ""
 
-#: win32\settings\advanced\UserMatchPage.cpp:216 win32\util\WinUtil.cpp:1167
+#: win32\settings\advanced\UserMatchPage.cpp:216 win32\controls\DialogControls.cpp:89
 msgid "Exact match"
 msgstr "Пълно съвпадение"
 
@@ -1758,7 +1758,7 @@ msgstr "Външно IP/WAN IP"
 msgid "External / WAN IP address"
 msgstr "Външно IP/WAN IP"
 
-#: win32\util\WinUtil.cpp:1574
+#: win32\services\LinkActions.cpp:129
 msgid "External protocol request"
 msgstr ""
 
@@ -1811,7 +1811,7 @@ msgstr "Име на любимата папка"
 msgid "Favorite user added"
 msgstr "Добавен към \"Любими Потребители\""
 
-#: win32\util\WinUtil.cpp:451
+#: win32\appearance\UiFonts.cpp:115
 #, boost-format
 msgid "Favorite users (added by %1%)"
 msgstr "Любими потребители (добавено от %1%)"
@@ -1841,7 +1841,7 @@ msgstr "Файл (хеш)"
 msgid "File List"
 msgstr "Списък с файлове"
 
-#: win32\frames\queue\QueueFrame.cpp:506 win32\util\WinUtil.cpp:863
+#: win32\frames\queue\QueueFrame.cpp:506 win32\dialogs\FilePickers.cpp:65
 msgid "File Lists"
 msgstr "Файлови списъци"
 
@@ -1857,7 +1857,7 @@ msgstr "Файлови разширения"
 msgid "File is already finished"
 msgstr "Файлът вече е свален"
 
-#: win32\util\WinUtil.cpp:94
+#: win32\services\Notifications.cpp:36
 msgid "File list downloaded"
 msgstr "Списъкът с файлове е изтеглен"
 
@@ -2042,7 +2042,7 @@ msgstr "ГБ"
 msgid "Global application style"
 msgstr "Общ стил на програмата"
 
-#: win32\util\WinUtil.cpp:1658 win32\frames\users\UserInfoBase.h:161
+#: win32\frames\users\UserActions.cpp:109 win32\frames\users\UserInfoBase.h:161
 msgid "Grant &extra slot"
 msgstr "Дай допълнителен слот"
 
@@ -2090,7 +2090,7 @@ msgstr "HTTP Прокси (само за списък с хъбове)"
 msgid "Height of the message editing box"
 msgstr "Височина на прозореца на съобщения за редактиране"
 
-#: win32\util\WinUtil.cpp:1140
+#: win32\controls\DialogControls.cpp:62
 msgid "Help"
 msgstr "Помощ"
 
@@ -2130,7 +2130,7 @@ msgstr "Най-голям приоритет"
 msgid "Highlighted tab"
 msgstr "Маркирана секция"
 
-#: win32\util\WinUtil.cpp:561
+#: win32\frames\chat\ChatCommands.cpp:82
 msgid ""
 "Highlights the last occourrence of the specified search string in the chat "
 "window."
@@ -2290,7 +2290,7 @@ msgstr "Идентификация (оставете празно за подр�
 msgid "Idle"
 msgstr "Свободен"
 
-#: win32\util\WinUtil.cpp:558
+#: win32\frames\chat\ChatCommands.cpp:79
 msgid ""
 "If no parameter is specified, it launches the log for the hub or private "
 "chat with the associated application in Windows. If one of the parameters is "
@@ -2366,11 +2366,11 @@ msgstr "Невалидно име на списъка с файлове."
 msgid "Invalid input value for TTH search"
 msgstr "Въведена е невалидна стойност за търсене по TTH"
 
-#: win32\util\WinUtil.cpp:618 win32\util\WinUtil.cpp:626
+#: win32\frames\chat\ChatCommands.cpp:141 win32\frames\chat\ChatCommands.cpp:149
 msgid "Invalid number of slots"
 msgstr "Невалиден брой слотове"
 
-#: win32\util\WinUtil.cpp:681 win32\util\WinUtil.cpp:689
+#: win32\frames\chat\ChatCommands.cpp:201 win32\frames\chat\ChatCommands.cpp:209
 #, fuzzy
 msgid "Invalid speed value"
 msgstr "Невалидна стойност"
@@ -2458,19 +2458,19 @@ msgstr "Лично съобщение от %1%: %2%"
 msgid "Latest stable version"
 msgstr "Последната стандартна версия"
 
-#: win32\util\WinUtil.cpp:554
+#: win32\frames\chat\ChatCommands.cpp:75
 msgid ""
 "Launches your default web browser to the DuckDuckGo search engine with the "
 "specified search."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:555
+#: win32\frames\chat\ChatCommands.cpp:76
 msgid ""
 "Launches your default web browser to the Google search engine with the "
 "specified search."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:556
+#: win32\frames\chat\ChatCommands.cpp:77
 msgid ""
 "Launches your default web browser to the Internet Movie Database (imdb) with "
 "the specified query."
@@ -2478,7 +2478,7 @@ msgstr ""
 "Стартира вашия уеб браузър по подразбиране с Internet Movie Database (imdb) "
 "с определена заявка."
 
-#: win32\util\WinUtil.cpp:560
+#: win32\frames\chat\ChatCommands.cpp:81
 msgid "Launches your default web browser with the given URL."
 msgstr "Стартира Вашия уеб браузър, по подразбиране, с дадения URL адрес."
 
@@ -2594,7 +2594,7 @@ msgstr "Най-нисък"
 msgid "M&odify"
 msgstr "&Модифицирай"
 
-#: win32\dialogs\MagnetDlg.cpp:121 win32\util\WinUtil.cpp:1548
+#: win32\dialogs\MagnetDlg.cpp:121 win32\services\LinkActions.cpp:103
 msgid "MAGNET Link detected"
 msgstr "Засечена MAGNET хипервръзка"
 
@@ -2602,7 +2602,7 @@ msgstr "Засечена MAGNET хипервръзка"
 msgid "MB"
 msgstr "MB"
 
-#: win32\util\WinUtil.cpp:95
+#: win32\services\Notifications.cpp:37
 msgid "Main chat message received"
 msgstr "Получено съобщение в главния чат"
 
@@ -2615,7 +2615,7 @@ msgstr "&Организиране на групи"
 msgid "Manual configuration"
 msgstr "Ръчно конфигуриране"
 
-#: win32\util\WinUtil.cpp:545
+#: win32\frames\chat\ChatCommands.cpp:66
 msgid ""
 "Manually refreshes DC++'s share list by going through the shared directories "
 "and adding new folders and files. DC++ automatically refreshes once an hour "
@@ -2870,12 +2870,12 @@ msgid "Nicks"
 msgstr "Псевдоними"
 
 #: win32\frames\search\ADLSearchFrame.cpp:330 win32\settings\appearance\NotificationsPage.cpp:280
-#: win32\settings\appearance\NotificationsPage.cpp:286 win32\util\WinUtil.cpp:1174
+#: win32\settings\appearance\NotificationsPage.cpp:286 win32\controls\DialogControls.cpp:96
 #: win32\frames\transfers\FinishedFrameBase.h:262
 msgid "No"
 msgstr "Не"
 
-#: win32\util\WinUtil.cpp:644
+#: win32\frames\chat\ChatCommands.cpp:167
 msgid "No away message"
 msgstr "Без съобщение при отсъствие"
 
@@ -2899,7 +2899,7 @@ msgstr ""
 msgid "No full tree available"
 msgstr "Няма налично пълно дърво"
 
-#: win32\util\WinUtil.cpp:1105
+#: win32\services\HelpService.cpp:257
 msgid "No help information available"
 msgstr "Няма помощна информация на разположение"
 
@@ -2977,11 +2977,11 @@ msgstr "Бележник"
 msgid "Notifications"
 msgstr "Съобщения"
 
-#: win32\util\WinUtil.cpp:1120
+#: win32\controls\DialogControls.cpp:42
 msgid "OK"
 msgstr "OK"
 
-#: win32\frames\users\UsersFrame.cpp:344 win32\frames\users\UsersFrame.cpp:359 win32\util\WinUtil.cpp:742
+#: win32\frames\users\UsersFrame.cpp:344 win32\frames\users\UsersFrame.cpp:359 win32\frames\users\UserPresentation.cpp:37
 msgid "Offline"
 msgstr "Офлайн"
 
@@ -3063,7 +3063,7 @@ msgstr "Отваряй личните съобщения в отделен пр�
 msgid "OpenSSL version"
 msgstr ""
 
-#: win32\util\WinUtil.cpp:549
+#: win32\frames\chat\ChatCommands.cpp:70
 msgid ""
 "Opens a new search window with the specified search string. It does not "
 "automatically send the search."
@@ -3079,11 +3079,11 @@ msgstr ""
 "Отваря се прозорец за лично съобщение към потребителя и по желание се "
 "изпраща съобщение, ако има конкретизирано такова."
 
-#: win32\util\WinUtil.cpp:565
+#: win32\frames\chat\ChatCommands.cpp:86
 msgid "Opens the internal settings list debugging tool window."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:462
+#: win32\appearance\UiFonts.cpp:126
 #, boost-format
 msgid "Operators (added by %1%)"
 msgstr "Оператори (добавено от %1%)"
@@ -3117,7 +3117,7 @@ msgstr "Параметри:"
 msgid "Partial file list loaded"
 msgstr "Частично зареден файлов списък"
 
-#: win32\settings\advanced\UserMatchPage.cpp:216 win32\util\WinUtil.cpp:1167
+#: win32\settings\advanced\UserMatchPage.cpp:216 win32\controls\DialogControls.cpp:89
 msgid "Partial match"
 msgstr "Частично съвпадение"
 
@@ -3194,7 +3194,7 @@ msgstr "Възпроизведи"
 msgid "Play a sound"
 msgstr "Възпроизведи звук"
 
-#: win32\util\WinUtil.cpp:506
+#: win32\app\UiServices.cpp:65
 msgid "Please enter a nickname in the settings dialog!"
 msgstr "Моля, въведете псевдоним в прозореца с настройки!"
 
@@ -3271,11 +3271,11 @@ msgstr "Лично Съобщение"
 msgid "Private message from %1%: %2%"
 msgstr "Лично съобщение от %1%: %2%"
 
-#: win32\util\WinUtil.cpp:96
+#: win32\services\Notifications.cpp:38
 msgid "Private message received"
 msgstr "Получено лично съобщение"
 
-#: win32\util\WinUtil.cpp:97
+#: win32\services\Notifications.cpp:39
 msgid "Private message window opened"
 msgstr "Лично съобщение в отворен прозорец"
 
@@ -3383,7 +3383,6 @@ msgstr "Наистина ли излизате от програмата?"
 msgid "Really remove?"
 msgstr "Наистина ли да се изтрие?"
 
-#: win32\util\WinUtil.cpp:557
 msgid ""
 "Rebuilds the HashIndex.xml and HashData.dat files, removing entries to files "
 "that are no longer shared, or old hashes for files that have since changed. "
@@ -3468,7 +3467,7 @@ msgid "Register with Windows to handle magnet: URI links"
 msgstr "Регистрирай се в Windows за поддръжка на magnet: URL връзки"
 
 #: win32\frames\search\ADLSearchFrame.cpp:44 win32\frames\search\ADLSProperties.cpp:67
-#: win32\settings\advanced\UserMatchPage.cpp:216 win32\util\WinUtil.cpp:1167
+#: win32\settings\advanced\UserMatchPage.cpp:216 win32\controls\DialogControls.cpp:89
 msgid "Regular Expression"
 msgstr "Регулярен израз"
 
@@ -3505,7 +3504,7 @@ msgstr "Премахни бавните списъци с файлове"
 msgid "Remove source"
 msgstr "Премахни източника"
 
-#: win32\frames\queue\QueueFrame.cpp:1034 win32\util\WinUtil.cpp:1661 win32\frames\users\UserInfoBase.h:165
+#: win32\frames\queue\QueueFrame.cpp:1034 win32\frames\users\UserActions.cpp:112 win32\frames\users\UserInfoBase.h:165
 msgid "Remove user from queue"
 msgstr "Премахни потребителя от опашката"
 
@@ -3576,7 +3575,7 @@ msgstr "Търсене - %1%"
 msgid "Search - Ready to search..."
 msgstr "Търсене - Готови за търсене"
 
-#: win32\util\WinUtil.cpp:1732
+#: win32\services\LinkActions.cpp:150
 #, fuzzy, boost-format
 msgid "Search Hubs for \"%1%\""
 msgstr "Търсене на: %1%"
@@ -3589,7 +3588,7 @@ msgstr "в прозорец за търсене"
 msgid "Search String"
 msgstr "Низ за търсене"
 
-#: win32\util\WinUtil.cpp:1738
+#: win32\services\LinkActions.cpp:156
 #, fuzzy
 msgid "Search by TTH"
 msgstr "&Търси в хъба"
@@ -3598,7 +3597,7 @@ msgstr "&Търси в хъба"
 msgid "Search for"
 msgstr "Търси за"
 
-#: win32\util\WinUtil.cpp:805
+#: win32\services\LinkActions.cpp:48
 msgid "Search for alternates"
 msgstr "Търси подобни"
 
@@ -3670,7 +3669,7 @@ msgstr "Сертификати за сигурност"
 msgid "Security certificates"
 msgstr "Сертификати за сигурност"
 
-#: win32\util\dwtTexts.cpp:35
+#: win32\app\dwtTexts.cpp:35
 msgid "Select &All\tCtrl+A"
 msgstr "&Избери всичко\tCtrl+A"
 
@@ -3698,7 +3697,7 @@ msgstr "Изпращай по веднъж на име"
 msgid "Send unknown /commands to the hub"
 msgstr "Изпращай непознати /commands на хъба"
 
-#: win32\util\WinUtil.cpp:551
+#: win32\frames\chat\ChatCommands.cpp:72
 msgid ""
 "Sends a random DC++ advertising message to the chat, including a link to the "
 "DC++ homepage and the version number."
@@ -3728,25 +3727,25 @@ msgstr ""
 msgid "Set priority"
 msgstr "Сложи приоритет"
 
-#: win32\util\WinUtil.cpp:562
+#: win32\frames\chat\ChatCommands.cpp:83
 msgid ""
 "Set the download speed limit in KiBs. Zero or omitted value disables the "
 "limit."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:563
+#: win32\frames\chat\ChatCommands.cpp:84
 msgid ""
 "Set the upload speed limit in KiBs. Zero or omitted value disables the limit."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:552
+#: win32\frames\chat\ChatCommands.cpp:73
 msgid ""
 "Sets Away status. New private message windows will be responded to, once, "
 "with the message you specified, or the default away message configured in "
 "the Personal information settings page."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:548
+#: win32\frames\chat\ChatCommands.cpp:69
 msgid ""
 "Sets the current number of download slots to the number you specify. If this "
 "is less than the current number of slots, no downloads are cancelled."
@@ -3754,7 +3753,7 @@ msgstr ""
 "Настройва броя на текущите даунлоуд слотове до специфичен брой. Ако те са по-"
 "малко от текущите, няма да бъдат затворени текущо отворените."
 
-#: win32\util\WinUtil.cpp:547
+#: win32\frames\chat\ChatCommands.cpp:68
 msgid ""
 "Sets the current number of upload slots to the number you specify. If this "
 "is less than the current number of slots, no uploads are cancelled."
@@ -3881,7 +3880,7 @@ msgstr "Даден е допълнителен слот"
 msgid "Slots"
 msgstr "Слотове"
 
-#: win32\util\WinUtil.cpp:616
+#: win32\frames\chat\ChatCommands.cpp:139
 msgid "Slots set"
 msgstr "Слотовете са зададени"
 
@@ -3918,11 +3917,11 @@ msgstr "Тип на източника"
 msgid "Source too slow"
 msgstr "Източникът е прекалено бавен"
 
-#: win32\util\WinUtil.cpp:546
+#: win32\frames\chat\ChatCommands.cpp:67
 msgid "Speak as a third person."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:669
+#: win32\frames\chat\ChatCommands.cpp:192
 msgid "Specify a URL"
 msgstr "Въведи URL"
 
@@ -3930,8 +3929,7 @@ msgstr "Въведи URL"
 msgid "Specify a name for this user matching definition"
 msgstr "Задайте име на  дефиницията"
 
-#: win32\util\WinUtil.cpp:632 win32\util\WinUtil.cpp:651 win32\util\WinUtil.cpp:657
-#: win32\util\WinUtil.cpp:663
+#: win32\frames\chat\ChatCommands.cpp:155 win32\frames\chat\ChatCommands.cpp:174 win32\frames\chat\ChatCommands.cpp:180 win32\frames\chat\ChatCommands.cpp:186
 msgid "Specify a search string"
 msgstr "Въведи ключова фраза?"
 
@@ -4129,7 +4127,7 @@ msgstr "Съобщението не може да бъде доставено, �
 msgid "The message cannot be delivered because the user is offline."
 msgstr "Съобщението не може да бъде доставено, защото потребителят е офлайн"
 
-#: win32\util\WinUtil.cpp:1572
+#: win32\services\LinkActions.cpp:127
 msgid "The requested link is "
 msgstr ""
 
@@ -4281,7 +4279,7 @@ msgstr "Скорост на качване: %1%/s (%2%)"
 msgid "Un-ignore chat"
 msgstr "Не игнорирай чата"
 
-#: win32\util\WinUtil.cpp:553
+#: win32\frames\chat\ChatCommands.cpp:74
 msgid "Un-sets Away status."
 msgstr "Отмяна на режим \"Отсъстващ\"."
 
@@ -4347,11 +4345,11 @@ msgstr "Слотове за качване"
 msgid "Upload limit"
 msgstr "Ограничение за upload"
 
-#: win32\util\WinUtil.cpp:679
+#: win32\frames\chat\ChatCommands.cpp:204
 msgid "Upload limit disabled"
 msgstr "Лимитът на качване е деактивиран"
 
-#: win32\util\WinUtil.cpp:679
+#: win32\frames\chat\ChatCommands.cpp:204
 #, boost-format
 msgid "Upload limit set to %1% KiB/s"
 msgstr "Лимитът за upload е ограничен до %1% KiB/s"
@@ -4545,7 +4543,7 @@ msgid ""
 "Click here to proceed."
 msgstr ""
 
-#: win32\util\WinUtil.cpp:1569
+#: win32\services\LinkActions.cpp:123
 msgid ""
 "Warning: Allowing content to open a program can be useful, but it can "
 "potentially harm your computer. Do not allow it unless you trust the source "
@@ -4602,7 +4600,7 @@ msgid "Write buffer size"
 msgstr "Големина на буфера за запис"
 
 #: win32\frames\search\ADLSearchFrame.cpp:330 win32\settings\appearance\NotificationsPage.cpp:287
-#: win32\util\WinUtil.cpp:1173 win32\frames\transfers\FinishedFrameBase.h:262
+#: win32\controls\DialogControls.cpp:95 win32\frames\transfers\FinishedFrameBase.h:262
 msgid "Yes"
 msgstr "Да"
 

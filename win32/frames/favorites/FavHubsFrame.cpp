@@ -17,6 +17,13 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/users/UserPresentation.h>
 #include <win32/frames/favorites/FavHubsFrame.h>
 
 #include <set>
@@ -45,7 +52,7 @@ const string& FavHubsFrame::getId() const { return id; }
 
 dwt::ImageListPtr FavHubsFrame::hubIcons;
 
-static const ColumnInfo hubsColumns[] = {
+static const TableLayout::ColumnInfo hubsColumns[] = {
 	{ N_("Status"), 25, false },
 	{ N_("Name"), 200, false },
 	{ N_("Description"), 290, false },
@@ -75,19 +82,19 @@ hubs(0)
 	grid->row(0).align = GridInfo::STRETCH;
 
 	{
-		Table::Seed cs = WinUtil::Seeds::table;
+		Table::Seed cs = ControlSeeds::table;
 		cs.style |= LVS_NOSORTHEADER;
 		hubs = grid->addChild(cs);
 		grid->setWidget(hubs, 0, 0, 1, 9);
 		addWidget(hubs);
 
-		WinUtil::makeColumns(hubs, hubsColumns, COLUMN_LAST, SETTING(FAVHUBSFRAME_ORDER), SETTING(FAVHUBSFRAME_WIDTHS));
+		TableLayout::makeColumns(hubs, hubsColumns, COLUMN_LAST, SETTING(FAVHUBSFRAME_ORDER), SETTING(FAVHUBSFRAME_WIDTHS));
 
 		if(!hubIcons) {
 			const dwt::Point size(16, 16);
 			hubIcons = dwt::ImageListPtr(new dwt::ImageList(size));
-			hubIcons->add(*WinUtil::createIcon(IDI_HUB, size.x));
-			hubIcons->add(*WinUtil::createIcon(IDI_HUB_OFF, size.x));
+			hubIcons->add(*IconManager::load(IDI_HUB, size.x));
+			hubIcons->add(*IconManager::load(IDI_HUB_OFF, size.x));
 		}
 		hubs->setSmallImageList(hubIcons);
 
@@ -98,7 +105,7 @@ hubs(0)
 
 	{
 		ButtonPtr button;
-		Button::Seed cs = WinUtil::Seeds::button;
+		Button::Seed cs = ControlSeeds::button;
 		cs.style |= WS_DISABLED;
 
 		cs.caption = T_("&Connect");
@@ -188,8 +195,8 @@ bool FavHubsFrame::preClosing() {
 }
 
 void FavHubsFrame::postClosing() {
-	SettingsManager::getInstance()->set(SettingsManager::FAVHUBSFRAME_ORDER, WinUtil::toString(hubs->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::FAVHUBSFRAME_WIDTHS, WinUtil::toString(hubs->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::FAVHUBSFRAME_ORDER, TableLayout::toString(hubs->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::FAVHUBSFRAME_WIDTHS, TableLayout::toString(hubs->getColumnWidths()));
 }
 
 FavHubsFrame::StateKeeper::StateKeeper(TablePtr hubs_, bool ensureVisible_) :
@@ -308,7 +315,7 @@ void FavHubsFrame::handleRemove() {
 }
 
 void FavHubsFrame::handleGroup() {
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	fillGroupMenu(menu.get());
 	menu->open();
 }
@@ -359,7 +366,7 @@ bool FavHubsFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 
 	size_t sel = hubs->countSelected();
 
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	menu->setTitle((sel == 0) ? getText() : (sel == 1) ? escapeMenu(hubs->getText(hubs->getSelected(), COLUMN_NAME)) :
 		str(TF_("%1% hubs") % sel), getParent()->getIcon(this));
 	menu->appendItem(T_("&Connect"), [this] { openSelected(); }, dwt::IconPtr(), sel, true);
@@ -377,7 +384,7 @@ bool FavHubsFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 		menu->appendItem(T_("&Move to group"), nullptr, dwt::IconPtr(), false);
 	}
 	menu->appendItem(T_("Manage &groups"), [this] { handleGroups(); });
-	WinUtil::addCopyMenu(menu.get(), hubs);
+	TableActions::addCopyMenu(menu.get(), hubs);
 
 	menu->open(pt);
 	return true;
@@ -422,7 +429,7 @@ void FavHubsFrame::fillList() {
 
 		tstring statusText;
 		int statusIcon;
-		WinUtil::getHubStatus(entry->getServer(), statusText, statusIcon);
+		UserPresentation::getHubStatus(entry->getServer(), statusText, statusIcon);
 
 		auto row = hubs->insert({
 			statusText,
@@ -448,7 +455,7 @@ void FavHubsFrame::openSelected() {
 	if(!hubs->hasSelected())
 		return;
 
-	if(!WinUtil::checkNick())
+	if(!UiServices::checkNick())
 		return;
 
 	for(auto i: hubs->getSelection()) {

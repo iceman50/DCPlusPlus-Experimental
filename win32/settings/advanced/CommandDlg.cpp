@@ -16,6 +16,9 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/HelpService.h>
 #include <win32/settings/advanced/CommandDlg.h>
 
 #include <dcpp/chat/UserCommand.h>
@@ -29,7 +32,6 @@
 #include <dwt/widgets/RadioButton.h>
 
 #include <win32/resource.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -61,7 +63,7 @@ to(to_),
 hub(hub_)
 {
 	onInitDialog([this] { return handleInitDialog(); });
-	onHelp(&WinUtil::help);
+	onHelp(&HelpService::help);
 }
 
 CommandDlg::~CommandDlg() {
@@ -130,23 +132,23 @@ bool CommandDlg::handleInitDialog() {
 		cur->column(0).mode = GridInfo::FILL;
 
 		cur->addChild(Label::Seed(T_("Name")))->setHelpId(IDH_USER_COMMAND_NAME);
-		nameBox = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		nameBox = cur->addChild(ControlSeeds::Dialog::textBox);
 		nameBox->setHelpId(IDH_USER_COMMAND_NAME);
 
 		cur->addChild(Label::Seed(T_("Command")))->setHelpId(IDH_USER_COMMAND_COMMAND);
-		TextBox::Seed seed = WinUtil::Seeds::Dialog::textBox;
+		TextBox::Seed seed = ControlSeeds::Dialog::textBox;
 		seed.style |= ES_MULTILINE | WS_VSCROLL | ES_WANTRETURN;
 		commandBox = cur->addChild(seed);
 		commandBox->setHelpId(IDH_USER_COMMAND_COMMAND);
 		commandBox->onUpdated([this] { updateCommand(); });
 
 		cur->addChild(Label::Seed(T_("Hub address (see help for usage)")))->setHelpId(IDH_USER_COMMAND_HUB);
-		hubBox = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		hubBox = cur->addChild(ControlSeeds::Dialog::textBox);
 		hubBox->setHelpId(IDH_USER_COMMAND_HUB);
 		hubBox->onUpdated([this] { updateHub(); });
 
 		cur->addChild(Label::Seed(T_("To")))->setHelpId(IDH_USER_COMMAND_NICK);
-		nick = cur->addChild(WinUtil::Seeds::Dialog::textBox);
+		nick = cur->addChild(ControlSeeds::Dialog::textBox);
 		nick->setHelpId(IDH_USER_COMMAND_NICK);
 		nick->onUpdated([this] { updateCommand(); });
 
@@ -159,15 +161,15 @@ bool CommandDlg::handleInitDialog() {
 	bool bOpenHelp = SETTING(OPEN_USER_CMD_HELP);
 	openHelp->setChecked(bOpenHelp);
 
-	WinUtil::addDlgButtons(grid,
+	DialogControls::addDlgButtons(grid,
 		[this] { handleOKClicked(); },
 		[this] { endDialog(IDCANCEL); });
 
-	WinUtil::addHelpButton(grid)->onClicked([this] { WinUtil::help(this); });
+	DialogControls::addHelpButton(grid)->onClicked([this] { HelpService::help(this); });
 
 	if(bOpenHelp) {
 		// launch the help file, instead of having the help in the dialog
-		WinUtil::help(this);
+		HelpService::help(this);
 	}
 
 	int newType = -1;

@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
 
 #include <win32/resource.h>
 

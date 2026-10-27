@@ -19,6 +19,8 @@
 #define DCPLUSPLUS_WIN32_USERS_FRAME_H
 
 #include <dcpp/hub/ClientManagerListener.h>
+#include <dcpp/user/HintedUser.h>
+#include <unordered_map>
 #include <dcpp/favorites/FavoriteManagerListener.h>
 #include <dcpp/queue/QueueManagerListener.h>
 #include <dcpp/transfer/UploadManagerListener.h>

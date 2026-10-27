@@ -8,6 +8,11 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/services/LinkActions.h>
 #include <dcpp/transfer/private/DirectTransferManager.h>
 #include <win32/settings/advanced/ExperimentalPage.h>
 #include <win32/services/GeoIPUpdate.h>
@@ -38,7 +43,6 @@
 #include <win32/resource.h>
 #include <win32/settings/appearance/ThemePage.h>
 #include <win32/settings/SettingsDialog.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::ColorDialog;
 using dwt::Grid;
@@ -52,7 +56,7 @@ constexpr int BYTES_PER_KIB = 1024;
 constexpr int MAX_KIB_SETTING = static_cast<int>(
 	(static_cast<int64_t>(std::numeric_limits<int>::max()) + BYTES_PER_KIB - 1) / BYTES_PER_KIB);
 
-const ColumnInfo tempColumns[] = {
+const TableLayout::ColumnInfo tempColumns[] = {
 	{ N_("File"), 130, false },
 	{ N_("Size"), 75, true },
 	{ N_("Route"), 140, false },
@@ -158,7 +162,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 	grid->row(0).align = GridInfo::STRETCH;
 	grid->column(0).mode = GridInfo::FILL;
 
-	auto tabSeed = WinUtil::Seeds::tabs;
+	auto tabSeed = ControlSeeds::tabs;
 	tabSeed.style &= ~(TCS_OWNERDRAWFIXED | TCS_MULTILINE | TCS_RAGGEDRIGHT | TCS_TOOLTIPS);
 	tabSeed.exStyle |= WS_EX_CONTROLPARENT;
 	tabSeed.widthConfig = 0;
@@ -209,11 +213,11 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		cur->row(0).align = GridInfo::STRETCH;
 		// The group box supplies the themed frame. A native sunken edge inside
 		// the composited settings page can retain stale pixels after tab/layout changes.
-		auto tableSeed = WinUtil::Seeds::Dialog::table;
+		auto tableSeed = ControlSeeds::Dialog::table;
 		tableSeed.exStyle &= ~WS_EX_CLIENTEDGE;
 		tempShares = cur->addChild(tableSeed);
 		tempShares->setHelpId(IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES);
-		WinUtil::makeColumns(tempShares, tempColumns, 5);
+		TableLayout::makeColumns(tempShares, tempColumns, 5);
 		tempShares->onGetEmptyText([] { return T_("No temporary attachment shares are active"); });
 		tempShares->onSelectionChanged([this] { handleTempSelectionChanged(); });
 		tempShares->onContextMenu([this](dwt::ScreenCoordinate pt) { return handleTempContextMenu(pt); });
@@ -362,7 +366,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		auto cur = group->addChild(Grid::Seed(2, 2));
 		cur->column(0).mode = GridInfo::FILL;
 		cur->addChild(Label::Seed(T_("Default user icon size")));
-		hubUserIconSize = cur->addChild(WinUtil::Seeds::Dialog::comboBox);
+		hubUserIconSize = cur->addChild(ControlSeeds::Dialog::comboBox);
 		hubUserIconSize->setAccessibleName(T_("Default hub user icon size"));
 		int selected = 0;
 		for(size_t i = 0; i < std::size(HubSettings::userIconSizes); ++i) {
@@ -392,9 +396,9 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		fields->setWidget(enabled, 0, 0, 1, 2);
 		items.emplace_back(enabled, SettingsManager::GEOIP_USE_MAXMIND, PropPage::T_BOOL);
 		fields->addChild(Label::Seed(T_("MaxMind account ID")));
-		items.emplace_back(fields->addChild(WinUtil::Seeds::Dialog::textBox), SettingsManager::MAXMIND_ACCOUNT_ID, PropPage::T_STR);
+		items.emplace_back(fields->addChild(ControlSeeds::Dialog::textBox), SettingsManager::MAXMIND_ACCOUNT_ID, PropPage::T_STR);
 		fields->addChild(Label::Seed(T_("License key")));
-		maxmindKey = fields->addChild(WinUtil::Seeds::Dialog::textBox);
+		maxmindKey = fields->addChild(ControlSeeds::Dialog::textBox);
 		maxmindKey->setPassword();
 		maxmindKey->setText(Text::toT(GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY))));
 		auto note = fields->addChild(Label::Seed(T_("Overrides the hosted URL. Key protected for this Windows account.")));
@@ -496,7 +500,7 @@ void ExperimentalPage::addIntItem(GridPtr target, const tstring& text, int setti
 	row->column(1).size = 72;
 	row->column(1).mode = GridInfo::STATIC;
 	row->addChild(Label::Seed(text))->setHelpId(helpId);
-	auto box = row->addChild(WinUtil::Seeds::Dialog::intTextBox);
+	auto box = row->addChild(ControlSeeds::Dialog::intTextBox);
 	box->setHelpId(helpId);
 	if(multiplier == 1) {
 		items.emplace_back(box, setting, PropPage::T_INT_WITH_SPIN);
@@ -578,12 +582,12 @@ bool ExperimentalPage::handleTempContextMenu(dwt::ScreenCoordinate pt) {
 	}
 
 	const auto selected = tempShares->countSelected();
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	menu->setTitle(selected == 1 ?
 		dwt::util::escapeMenu(tempShares->getText(tempShares->getSelected(), 0)) :
-		T_("Active temporary shares"), WinUtil::menuIcon(IDI_MAGNET));
+		T_("Active temporary shares"), IconManager::menuIcon(IDI_MAGNET));
 	menu->appendItem(T_("Copy magnet link to clipboard"), [this] { handleCopyTempMagnet(); },
-		WinUtil::menuIcon(IDI_MAGNET), selected == 1);
+		IconManager::menuIcon(IDI_MAGNET), selected == 1);
 	menu->appendItem(T_("&Remove"), [this] { handleRemoveTemps(); }, dwt::IconPtr(), selected != 0);
 	menu->open(pt);
 	return true;
@@ -603,7 +607,7 @@ void ExperimentalPage::handleCopyTempMagnet() {
 				Util::stricmp(item.hubUrl, data->route) == 0;
 		});
 		if(share != shares.end()) {
-			WinUtil::copyMagnet(share->tth, Text::toT(Util::getFileName(share->realPath)), share->size);
+			LinkActions::copyMagnet(share->tth, Text::toT(Util::getFileName(share->realPath)), share->size);
 		}
 	} catch(...) {
 	}

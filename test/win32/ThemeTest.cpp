@@ -1,5 +1,8 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "stdafx.h"
+#include <win32/app/UiServices.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/UiFonts.h>
 #include <win32/appearance/ThemeManager.h>
 #include <win32/settings/appearance/ThemePage.h>
 #include <win32/controls/TextEffectsDlg.h>
@@ -11,7 +14,6 @@
 #include <win32/settings/connection/CertificatesPage.h>
 #include <win32/settings/advanced/SearchTypesPage.h>
 #include <win32/controls/HtmlToRtf.h>
-#include <win32/util/WinUtil.h>
 #include <win32/controls/RichTextBox.h>
 #include <win32/resource.h>
 #include <dcpp/chat/FontStyle.h>
@@ -153,9 +155,9 @@ int dwtMain(dwt::Application& app) {
 		auto settings = SettingsManager::getInstance();
 		settings->setDefault(SettingsManager::MAIN_FONT, "Segoe UI,-12,400,0,1");
 		settings->set(SettingsManager::NICK, "Theme test");
-		WinUtil::initFont();
-		WinUtil::textColor = RGB(0, 0, 0);
-		WinUtil::bgColor = RGB(255, 255, 255);
+		UiServices::initFont();
+		AppAppearance::textColor = RGB(0, 0, 0);
+		AppAppearance::bgColor = RGB(255, 255, 255);
 		File::ensureDirectory(directory);
 
 		UserMatch alice, bob;
@@ -238,9 +240,9 @@ int dwtMain(dwt::Application& app) {
 		check(FontStyle::decode(font).encode(font) == font, "Font effects did not round-trip");
 		check(FontStyle::decode("Segoe UI,-12,400,0,1").underline == 0, "Legacy font gained effects");
 		LOGFONT nativeFont;
-		WinUtil::decodeFont(Text::toT(font), nativeFont);
+		UiFonts::decodeFont(Text::toT(font), nativeFont);
 		check(nativeFont.lfUnderline && nativeFont.lfStrikeOut, "Native font lost underline/strikeout");
-		check(FontStyle::decode(Text::fromT(WinUtil::encodeFont(nativeFont))).strike == 1, "Native font serializer dropped strikeout");
+		check(FontStyle::decode(Text::fromT(UiFonts::encodeFont(nativeFont))).strike == 1, "Native font serializer dropped strikeout");
 
 		auto theme = ThemeManager::capture();
 		theme.fonts[SettingsManager::CHAT_TEXT_FONT] = font;
@@ -279,7 +281,7 @@ int dwtMain(dwt::Application& app) {
 		window->create();
 		auto box = window->addChild(dwt::RichTextBox::Seed());
 		box->resize(dwt::Rectangle(0, 0, 700, 200));
-		box->setFont(WinUtil::font);
+		box->setFont(UiFonts::font);
 		const auto originalColor = SETTING(CHAT_TEXT_COLOR);
 		render(box, loaded, "<span id=\"text\">Hello</span>");
 		const auto format = formatAt(box, 0);
@@ -312,11 +314,11 @@ int dwtMain(dwt::Application& app) {
 
 		auto chat = new RichTextBox(window);
 		chat->create(RichTextBox::Seed());
-		chat->setFont(WinUtil::font);
+		chat->setFont(UiFonts::font);
 		chat->setTextLimit(128 * 1024);
 		chat->resize(dwt::Rectangle(0, 0, 700, 200));
 		chat->setReadOnly();
-		WinUtil::setColor(chat);
+		AppAppearance::setColor(chat);
 		UserMatchManager::getInstance()->setList({ alice, bob }, false);
 		const auto bobHtml = "<span id=\"nick\" themeFontStyle=\"" + bob.styleId + "\" themeTextStyle=\"" + bob.styleId +
 			"\" themeBgStyle=\"" + alice.styleId + "\">Bob</span>";

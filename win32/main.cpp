@@ -16,16 +16,17 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
 
 #include <exception>
 
 #include <win32/app/CrashLogger.h>
-#include <win32/util/dwtTexts.h>
+#include <win32/app/dwtTexts.h>
 #include <win32/app/MainWindow.h>
 #include <win32/plugins/PluginApiWin.h>
 #include <win32/app/SingleInstance.h>
 #include <win32/app/SplashWindow.h>
-#include <win32/util/WinUtil.h>
 
 #include <dcpp/app/DCPlusPlus.h>
 #include <dcpp/hash/MerkleTree.h>
@@ -126,7 +127,7 @@ int dwtMain(dwt::Application& app) {
 		TigerTree tth(TigerTree::calcBlockSize(module.size(), 1));
 		tth.update(module.data(), module.size());
 		tth.finalize();
-		WinUtil::tth = Text::toT(tth.getRoot().toBase32());
+		UiServices::tth = Text::toT(tth.getRoot().toBase32());
 	} catch(const FileException&) {
 		dcdebug("Failed reading exe\n");
 	}
@@ -155,11 +156,10 @@ int dwtMain(dwt::Application& app) {
 
 					dwtTexts::init();
 
-					WinUtil::init();
+					UiServices::init();
 
 					MainWindow* wnd = new MainWindow;
-					WinUtil::mainWindow = wnd;
-					//WinUtil::mdiParent = wnd->getMDIParent();
+					UiServices::mainWindow = wnd;
 
 					this->splash.close();
 				});
@@ -176,7 +176,7 @@ int dwtMain(dwt::Application& app) {
 	} catch(...) {
 		dcdebug("Unknown exception");
 	}
-	WinUtil::uninit();
+	UiServices::uninit();
 
 	shutdown();
 

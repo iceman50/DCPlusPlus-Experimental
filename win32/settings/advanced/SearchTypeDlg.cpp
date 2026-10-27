@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
 #include <win32/settings/advanced/SearchTypeDlg.h>
 
 #include <dcpp/favorites/FavoriteManager.h>

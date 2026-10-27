@@ -16,6 +16,12 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/shell/ClipboardActions.h>
 
 #include <win32/dialogs/AboutDlg.h>
 
@@ -53,7 +59,6 @@
 
 #include <win32/resource.h>
 #include <win32/appearance/IconManager.h>
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -253,8 +258,8 @@ void addAppearanceInfo(string& info) {
 	addInfoLine(info, "Cached icons (resource/size variants)", std::to_string(icons.cachedPackageIcons + icons.cachedEmbeddedIcons));
 	addInfoLine(info, "Cached icons from pack", std::to_string(icons.cachedPackageIcons));
 	addInfoLine(info, "Cached icons from embedded resources", std::to_string(icons.cachedEmbeddedIcons));
-	addInfoLine(info, "File image list entries", WinUtil::fileImages ? std::to_string(WinUtil::fileImages->size()) : "0");
-	addInfoLine(info, "User image list entries", WinUtil::userImages ? std::to_string(WinUtil::userImages->size()) : "0");
+	addInfoLine(info, "File image list entries", ImageLists::fileImages ? std::to_string(ImageLists::fileImages->size()) : "0");
+	addInfoLine(info, "User image list entries", ImageLists::userImages ? std::to_string(ImageLists::userImages->size()) : "0");
 }
 
 string getAboutInfo() {
@@ -354,7 +359,7 @@ bool AboutDlg::handleInitDialog() {
 		cur->column(0).mode = GridInfo::FILL;
 		cur->column(0).align = GridInfo::CENTER;
 
-		cur->addChild(Label::Seed(WinUtil::createIcon(IDI_DCPP, 48)));
+		cur->addChild(Label::Seed(IconManager::load(IDI_DCPP, 48)));
 
 		ls.caption = _T(FULL_APPNAME) _T(" v") _T(VERSIONSTRING) _T(" ") + Text::toT(buildLabel) + _T("\n(c) Copyright 2026 iceman50\n");
 		ls.caption += T_("Based on DC++");
@@ -362,18 +367,18 @@ bool AboutDlg::handleInitDialog() {
 
 		cur->addChild(Link::Seed(_T("https://github.com/iceman50/DCPlusPlus-No-MDI"), true));
 
-		auto ts = WinUtil::Seeds::Dialog::textBox;
+		auto ts = ControlSeeds::Dialog::textBox;
 		ts.style |= ES_READONLY;
 		ts.exStyle &= ~WS_EX_CLIENTEDGE;
 
 		gs.caption = T_("TTH");
-		ts.caption = WinUtil::tth;
+		ts.caption = UiServices::tth;
 		cur->addChild(gs)->addChild(ts);
 	}
 
 	{
 		gs.caption = T_("Build and Runtime Information");
-		auto seed = WinUtil::Seeds::Dialog::textBox;
+		auto seed = ControlSeeds::Dialog::textBox;
 		seed.style &= ~ES_AUTOHSCROLL;
 		seed.style |= ES_MULTILINE | WS_VSCROLL | ES_READONLY;
 		runtimeInfo = grid->addChild(gs)->addChild(seed);
@@ -384,7 +389,7 @@ bool AboutDlg::handleInitDialog() {
 		actions->column(0).mode = GridInfo::FILL;
 		actions->column(1).mode = GridInfo::FILL;
 		actions->addChild(Button::Seed(T_("Refresh")))->onClicked([this] { runtimeInfo->setText(Text::toT(getAboutInfo())); });
-		actions->addChild(Button::Seed(T_("Copy information")))->onClicked([this] { WinUtil::setClipboard(runtimeInfo->getText()); });
+		actions->addChild(Button::Seed(T_("Copy information")))->onClicked([this] { ClipboardActions::setClipboard(runtimeInfo->getText()); });
 	}
 
 	{
@@ -405,15 +410,15 @@ bool AboutDlg::handleInitDialog() {
 	ls.caption = T_("Downloading...");
 	version = grid->addChild(gs)->addChild(ls);
 
-	auto buttons = WinUtil::addDlgButtons(grid,
+	auto buttons = DialogControls::addDlgButtons(grid,
 		[this] { endDialog(IDOK); },
 		[this] { endDialog(IDCANCEL); });
 	buttons.first->setFocus();
 	buttons.second->setVisible(false);
 
 	setText(T_("About DC++"));
-	setSmallIcon(WinUtil::createIcon(IDI_DCPP, 16));
-	setLargeIcon(WinUtil::createIcon(IDI_DCPP, 32));
+	setSmallIcon(IconManager::load(IDI_DCPP, 16));
+	setLargeIcon(IconManager::load(IDI_DCPP, 32));
 	runtimeInfo->setText(Text::toT(getAboutInfo()));
 
 	layout();

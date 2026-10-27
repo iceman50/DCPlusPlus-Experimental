@@ -16,13 +16,16 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/services/LinkActions.h>
 #include <win32/dialogs/MagnetDlg.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/RadioButton.h>
 
-#include <win32/util/WinUtil.h>
 #include <win32/resource.h>
 
 using dwt::Grid;
@@ -65,7 +68,7 @@ bool MagnetDlg::handleInitDialog() {
 		cur->row(0).align = GridInfo::STRETCH;
 		cur->setSpacing(10);
 
-		cur->addChild(Grid::Seed(1, 1))->addChild(Label::Seed(WinUtil::createIcon(IDI_MAGNET, 32)));
+		cur->addChild(Grid::Seed(1, 1))->addChild(Label::Seed(IconManager::load(IDI_MAGNET, 32)));
 
 		cur->addChild(Label::Seed(T_("DC++ has detected a MAGNET link with a file hash that can be searched for on the Direct Connect network.  What would you like to do?")));
 	}
@@ -75,7 +78,7 @@ bool MagnetDlg::handleInitDialog() {
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
 		cur->column(1).mode = GridInfo::FILL;
 
-		auto seed = WinUtil::Seeds::Dialog::textBox;
+		auto seed = ControlSeeds::Dialog::textBox;
 		seed.style |= ES_READONLY;
 
 		if (!mHash.empty()) {
@@ -113,14 +116,14 @@ bool MagnetDlg::handleInitDialog() {
 
 		//remember = cur->addChild(CheckBox::Seed(T_("Do the same action next time without asking")));
 
-		WinUtil::addDlgButtons(bottom->addChild(Grid::Seed(2, 1)),
+		DialogControls::addDlgButtons(bottom->addChild(Grid::Seed(2, 1)),
 			[this] { handleOKClicked(); },
 			[this] { endDialog(IDCANCEL); });
 	}
 
 	setText(T_("MAGNET Link detected"));
-	setSmallIcon(WinUtil::createIcon(IDI_MAGNET, 16));
-	setLargeIcon(WinUtil::createIcon(IDI_MAGNET, 32));
+	setSmallIcon(IconManager::load(IDI_MAGNET, 16));
+	setLargeIcon(IconManager::load(IDI_MAGNET, 32));
 
 	layout();
 	centerWindow();
@@ -150,9 +153,9 @@ void MagnetDlg::handleOKClicked() {
 	if(search->getChecked()) {
 		if (!mHash.empty()) {
 			TTHValue tmphash(Text::fromT(mHash));
-			WinUtil::searchHash(tmphash);
+			LinkActions::searchHash(tmphash);
 		}else if (!mKeySearch.empty()) {
-			WinUtil::searchAny(mKeySearch);
+			LinkActions::searchAny(mKeySearch);
 		}
 	} //else if(queue->getChecked()) {
 		// FIXME: Write this code when the queue is more tth-centric

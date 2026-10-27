@@ -16,6 +16,12 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/shell/ClipboardActions.h>
 
 #include <win32/frames/tools/ACFrame.h>
 
@@ -33,7 +39,7 @@ using dwt::SaveDialog;
 const string ACFrame::id = "AboutConfig";
 const string& ACFrame::getId() const { return id; }
 
-static const ColumnInfo settingColumns[] = {
+static const TableLayout::ColumnInfo settingColumns[] = {
 	{ N_("Setting name"), 150, false },
 	{ N_("Status"), 50, false },
 	{ N_("Type"), 40, false },
@@ -81,7 +87,7 @@ ACFrame::ACFrame(TabViewPtr parent) :
 		upper->row(1).align = GridInfo::STRETCH;
 
 		{
-			Label::Seed seed = WinUtil::Seeds::label;
+			Label::Seed seed = ControlSeeds::label;
 			seed.style &= ~WS_VISIBLE;
 			seed.style |= WS_DISABLED | SS_CENTER;
 			disclaimer = upper->addChild(seed);
@@ -90,17 +96,17 @@ ACFrame::ACFrame(TabViewPtr parent) :
 		}
 
 		{
-			WidgetSettings::Seed seed = WinUtil::Seeds::table;
+			WidgetSettings::Seed seed = ControlSeeds::table;
 			seed.style |= LVS_SINGLESEL;
 			settings = upper->addChild(seed);
 			addWidget(settings);
 			settings->onContextMenu([this](const dwt::ScreenCoordinate& sc) { return handleSettingsContextMenu(sc); });
 		}
 
-		WinUtil::makeColumns(settings, settingColumns, COLUMN_LAST, SETTING(ACFRAME_ORDER), SETTING(ACFRAME_WIDTHS));
+		TableLayout::makeColumns(settings, settingColumns, COLUMN_LAST, SETTING(ACFRAME_ORDER), SETTING(ACFRAME_WIDTHS));
 		settings->setSort(COLUMN_NAME, true);
 		settings->onDblClicked([this] { modify(); });
-		WinUtil::setColor(settings);
+		AppAppearance::setColor(settings);
 	}
 
 	{
@@ -116,7 +122,7 @@ ACFrame::ACFrame(TabViewPtr parent) :
 		lower->row(1).mode = GridInfo::STATIC;
 		lower->setSpacing(6);
 
-		GroupBox::Seed gs = WinUtil::Seeds::group;
+		GroupBox::Seed gs = ControlSeeds::group;
 
 		gs.caption = T_("F&ilter");
 		filterGroup = lower->addChild(gs);
@@ -151,7 +157,7 @@ ACFrame::ACFrame(TabViewPtr parent) :
 		options->column(4).mode = GridInfo::FILL;
 
 		ButtonPtr modify, setDefault, saveFull, saveChanged, refresh;
-		Button::Seed cs = WinUtil::Seeds::button;
+		Button::Seed cs = ControlSeeds::button;
 
 		cs.caption = T_("Modify value");
 		modify = options->addChild(cs);
@@ -217,8 +223,8 @@ bool ACFrame::preClosing() {
 }
 
 void ACFrame::postClosing() {
-	SettingsManager::getInstance()->set(SettingsManager::ACFRAME_ORDER, WinUtil::toString(settings->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::ACFRAME_WIDTHS, WinUtil::toString(settings->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::ACFRAME_ORDER, TableLayout::toString(settings->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::ACFRAME_WIDTHS, TableLayout::toString(settings->getColumnWidths()));
 }
 
 void ACFrame::updateStatus(tstring text) {
@@ -334,7 +340,7 @@ int ACFrame::SettingInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& b
 
 	if(!isDefault) {
 		LOGFONT lf;
-		WinUtil::decodeFont(Text::toT(SETTING(MAIN_FONT)), lf);
+		UiFonts::decodeFont(Text::toT(SETTING(MAIN_FONT)), lf);
 		//set FW_BOLD while we already have a LOGFONT rather than firing off dwt::Font::makeBold() which just calls getLogFont() anyways...
 		lf.lfWeight = FW_BOLD;
 		auto boldFont = new dwt::Font(lf);
@@ -368,7 +374,7 @@ bool ACFrame::handleSettingsContextMenu(dwt::ScreenCoordinate pt) {
 
 	auto setting = settings->getSelectedData();
 	auto& name = setting->getName();
-	auto menu = addChild(WinUtil::Seeds::menu);
+	auto menu = addChild(ControlSeeds::menu);
 	menu->setTitle(name, getParent()->getIcon(this));
 
 	if(setting->type == SettingsManager::TYPE_BOOL) {
@@ -378,8 +384,8 @@ bool ACFrame::handleSettingsContextMenu(dwt::ScreenCoordinate pt) {
 	}
 
 	menu->appendSeparator();
-	menu->appendItem(T_("Copy &Name"), [this] { WinUtil::setClipboard(settings->getSelectedData()->getName()); });
-	menu->appendItem(T_("Copy &Value"), [this] { WinUtil::setClipboard(settings->getSelectedData()->getValue()); });
+	menu->appendItem(T_("Copy &Name"), [this] { ClipboardActions::setClipboard(settings->getSelectedData()->getName()); });
+	menu->appendItem(T_("Copy &Value"), [this] { ClipboardActions::setClipboard(settings->getSelectedData()->getValue()); });
 	menu->appendItem(T_("&Set Default Value"), [this] { setDefaultValue(); });
 
 	menu->open(pt);

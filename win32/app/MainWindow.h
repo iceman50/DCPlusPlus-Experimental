@@ -19,6 +19,9 @@
 #define DCPLUSPLUS_WIN32_MAIN_WINDOW_H
 
 #include <win32/services/GeoIPUpdate.h>
+#include <dcpp/user/HintedUser.h>
+#include <unordered_map>
+#include <dcpp/util/Util.h>
 #include <win32/frames/transfers/private/PrivateSendNotifications.h>
 #include <win32/appearance/ThemeManager.h>
 #include <atomic>

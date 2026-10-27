@@ -1,6 +1,8 @@
 /* Copyright (C) 2026 iceman50. GPL-3.0-or-later. */
 
 #include "stdafx.h"
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
 
 #include <win32/frames/chat/AspectChat.h>
 #include <win32/app/SingleInstance.h>
@@ -200,8 +202,8 @@ int dwtMain(dwt::Application& app) {
 		HttpManager::newInstance();
 		FavoriteManager::newInstance();
 		HashManager::getInstance()->startup([](float) {});
-		WinUtil::initFont();
-		WinUtil::initSeeds();
+		UiServices::initFont();
+		ControlSeeds::init();
 		auto window = new ChatWindow;
 		const auto path = directory + "dropped.txt";
 		{

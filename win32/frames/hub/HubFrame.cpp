@@ -17,6 +17,24 @@
  */
 
 #include "stdafx.h"
+#include <dcpp/text/format.h>
+#include <dcpp/user/HintedUser.h>
+#include <dcpp/util/Util.h>
+#include <win32/app/UiServices.h>
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/appearance/IconManager.h>
+#include <win32/appearance/ImageLists.h>
+#include <win32/appearance/UiFonts.h>
+#include <win32/controls/DialogControls.h>
+#include <win32/controls/KeyState.h>
+#include <win32/controls/TableActions.h>
+#include <win32/controls/TableLayout.h>
+#include <win32/frames/chat/ChatCommands.h>
+#include <win32/frames/users/UserCommands.h>
+#include <win32/services/LinkActions.h>
+#include <win32/services/Notifications.h>
+#include <win32/shell/ClipboardActions.h>
+#include <win32/shell/ShellActions.h>
 
 #include <win32/frames/hub/HubFrame.h>
 #include <win32/appearance/CountryFlags.h>
@@ -63,7 +81,7 @@ using dwt::SplitterContainer;
 const string HubFrame::id = WindowManager::hub();
 const string& HubFrame::getId() const { return id; }
 
-static const ColumnInfo usersColumns[] = {
+static const TableLayout::ColumnInfo usersColumns[] = {
 	{ N_("Nick"), 100, false },
 	{ N_("Shared"), 80, true },
 	{ N_("Description"), 75, false },
@@ -81,7 +99,7 @@ void HubFrame::openWindow(TabViewPtr parent, string url, bool activate, bool con
 	Util::sanitizeUrl(url);
 
 	if(url.empty()) {
-		dwt::MessageBox(WinUtil::mainWindow).show(T_("Empty hub address specified"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
+		dwt::MessageBox(UiServices::mainWindow).show(T_("Empty hub address specified"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
 			dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONSTOP);
 		return;
 	}
@@ -124,7 +142,7 @@ void HubFrame::refreshUserIconSizes() {
 }
 
 void HubFrame::closeAll(ClosePred f) {
-	if(!WinUtil::mainWindow->getEnabled())
+	if(!UiServices::mainWindow->getEnabled())
 		return;
 
 	auto toClose = frames;
@@ -132,7 +150,7 @@ void HubFrame::closeAll(ClosePred f) {
 		toClose.erase(std::remove_if(toClose.begin(), toClose.end(), f), toClose.end());
 	}
 
-	if(!toClose.empty() && (!SETTING(CONFIRM_HUB_CLOSING) || dwt::MessageBox(WinUtil::mainWindow).show(
+	if(!toClose.empty() && (!SETTING(CONFIRM_HUB_CLOSING) || dwt::MessageBox(UiServices::mainWindow).show(
 		str(TF_("Really close %1% hub windows?") % toClose.size()), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
 		dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) == IDYES))
 	{
@@ -235,12 +253,12 @@ tabIcon(IDI_HUB)
 		userGrid->row(0).mode = GridInfo::FILL;
 		userGrid->row(0).align = GridInfo::STRETCH;
 
-		users = userGrid->addChild(WidgetUsers::Seed(WinUtil::Seeds::table));
+		users = userGrid->addChild(WidgetUsers::Seed(ControlSeeds::table));
 		users->setImageColumns({ COLUMN_IP });
 		addWidget(users);
 
-		WinUtil::makeColumns(users, usersColumns, COLUMN_LAST, SETTING(HUBFRAME_ORDER), SETTING(HUBFRAME_WIDTHS));
-		WinUtil::setTableSort(users, COLUMN_LAST, SettingsManager::HUBFRAME_SORT, COLUMN_NICK);
+		TableLayout::makeColumns(users, usersColumns, COLUMN_LAST, SETTING(HUBFRAME_ORDER), SETTING(HUBFRAME_WIDTHS));
+		TableLayout::setTableSort(users, COLUMN_LAST, SettingsManager::HUBFRAME_SORT, COLUMN_NICK);
 
 		users->onDblClicked([this] { handleDoubleClickUsers(); });
 		users->onKeyDown([this](int c) { return handleUsersKeyDown(c); });
@@ -254,7 +272,7 @@ tabIcon(IDI_HUB)
 		addWidget(filter.text);
 
 		controls->addChild(Label::Seed(T_("Icons")));
-		userIconSize = controls->addChild(WinUtil::Seeds::comboBox);
+		userIconSize = controls->addChild(ControlSeeds::comboBox);
 		userIconSize->setAccessibleName(T_("Hub user icon size"));
 		userIconSize->addValue(T_("Default"));
 		for(auto size: HubSettings::userIconSizes) {
@@ -320,19 +338,19 @@ tabIcon(IDI_HUB)
 
 		auto nickLabel = loginOverlay->addChild(Label::Seed(T_("Nick")));
 		loginOverlay->setWidget(nickLabel, 2, 1);
-		loginNick = loginOverlay->addChild(WinUtil::Seeds::textBox);
+		loginNick = loginOverlay->addChild(ControlSeeds::textBox);
 		loginOverlay->setWidget(loginNick, 2, 2);
-		WinUtil::preventSpaces(loginNick);
+		DialogControls::preventSpaces(loginNick);
 		addWidget(loginNick, NO_FOCUS);
 
 		auto passwordLabel = loginOverlay->addChild(Label::Seed(T_("Password")));
 		loginOverlay->setWidget(passwordLabel, 3, 1);
-		loginPassword = loginOverlay->addChild(WinUtil::Seeds::textBox);
+		loginPassword = loginOverlay->addChild(ControlSeeds::textBox);
 		loginOverlay->setWidget(loginPassword, 3, 2);
 		loginPassword->setPassword();
 		addWidget(loginPassword, NO_FOCUS);
 
-		auto sendSeed = WinUtil::Seeds::button;
+		auto sendSeed = ControlSeeds::button;
 		sendSeed.caption = T_("&Send");
 		loginSend = loginOverlay->addChild(sendSeed);
 		loginOverlay->setWidget(loginSend, 4, 2);
@@ -349,9 +367,9 @@ tabIcon(IDI_HUB)
 
 	status->onDblClicked(STATUS_STATUS, [this] { openLog(false); });
 
-	status->setIcon(STATUS_USERS, WinUtil::statusIcon(IDI_USERS));
+	status->setIcon(STATUS_USERS, IconManager::statusIcon(IDI_USERS));
 
-	showUsers = addChild(WinUtil::Seeds::splitCheckBox);
+	showUsers = addChild(ControlSeeds::splitCheckBox);
 	showUsers->setHelpId(IDH_HUB_SHOW_USERS);
 	showUsers->setChecked(SETTING(GET_USER_INFO));
 	status->setWidget(STATUS_SHOW_USERS, showUsers);
@@ -398,7 +416,7 @@ HubFrame::~HubFrame() {
 }
 
 bool HubFrame::preClosing() {
-	if(SETTING(CONFIRM_HUB_CLOSING) && confirmClose && !WinUtil::mainWindow->closing() &&
+	if(SETTING(CONFIRM_HUB_CLOSING) && confirmClose && !UiServices::mainWindow->closing() &&
 		dwt::MessageBox(this).show(getText() + _T("\n\n") + T_("Really close?"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
 		dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) != IDYES)
 	{
@@ -423,9 +441,9 @@ void HubFrame::postClosing() {
 
 	SettingsManager::getInstance()->set(SettingsManager::HUB_PANED_POS, paned->getSplitterPos(0));
 
-	SettingsManager::getInstance()->set(SettingsManager::HUBFRAME_ORDER, WinUtil::toString(users->getColumnOrder()));
-	SettingsManager::getInstance()->set(SettingsManager::HUBFRAME_WIDTHS, WinUtil::toString(users->getColumnWidths()));
-	SettingsManager::getInstance()->set(SettingsManager::HUBFRAME_SORT, WinUtil::getTableSort(users));
+	SettingsManager::getInstance()->set(SettingsManager::HUBFRAME_ORDER, TableLayout::toString(users->getColumnOrder()));
+	SettingsManager::getInstance()->set(SettingsManager::HUBFRAME_WIDTHS, TableLayout::toString(users->getColumnWidths()));
+	SettingsManager::getInstance()->set(SettingsManager::HUBFRAME_SORT, TableLayout::getTableSort(users));
 }
 
 void HubFrame::layout() {
@@ -505,10 +523,10 @@ void HubFrame::updateSecureStatus() {
 	tstring text;
 	if(client) {
 		if(client->isTrusted()) {
-			icon = WinUtil::statusIcon(IDI_TRUSTED);
+			icon = IconManager::statusIcon(IDI_TRUSTED);
 			text = _T("[T] ");
 		} else if(client->isSecure()) {
-			icon = WinUtil::statusIcon(IDI_SECURE);
+			icon = IconManager::statusIcon(IDI_SECURE);
 			text = _T("[U] ");
 		}
 		text += Text::toT(client->getCipherName());
@@ -529,7 +547,7 @@ void HubFrame::updateBBSAvailability() {
 	const auto cached = !BBSManager::getInstance()->getBoards(url).empty();
 	const auto available = supported || cached;
 	status->setText(STATUS_BBS, available ? _T("BBS") : Util::emptyStringT, true);
-	status->setIcon(STATUS_BBS, available ? WinUtil::statusIcon(IDI_CHAT) : dwt::IconPtr(), true);
+	status->setIcon(STATUS_BBS, available ? IconManager::statusIcon(IDI_CHAT) : dwt::IconPtr(), true);
 	status->setToolTip(STATUS_BBS, supported ? T_("Open bulletin boards") : cached ? T_("Open cached bulletin boards") : T_("Bulletin boards are unavailable"));
 	BBSFrame::hubStateChanged(this);
 }
@@ -577,7 +595,7 @@ void HubFrame::enterImpl(const tstring& s) {
 		if(PluginManager::getInstance()->onChatCommand(client, Text::fromT(s))) {
 			// Plugins, chat commands
 
-		} else if(WinUtil::checkCommand(cmd, param, msg, status, thirdPerson)) {
+		} else if(ChatCommands::checkCommand(cmd, param, msg, status, thirdPerson)) {
 			if(!msg.empty()) {
 				if(!client->hubMessage(Text::fromT(msg), thirdPerson)) {
 					addStatus(T_("The message could not be sent because the hub connection changed."));
@@ -700,7 +718,7 @@ void HubFrame::enterImpl(const tstring& s) {
 			if(bShowBriefCommands)
 			{
 				addChat(T_("*** Keyboard commands:") + _T("\r\n") + 
-						WinUtil::commands +
+						ChatCommands::commands +
 						_T(", /join <hub-ip>, /showjoins, /favshowjoins, /close, /userlist, ")
 						_T("/conn[ection], /fav[orite], /removefav[orite], /info, ")
 						_T("/pm <user> [message], /getlist <user>, /ignore <user>, /unignore <user>, ")
@@ -710,7 +728,7 @@ void HubFrame::enterImpl(const tstring& s) {
 			else
 			{
 				addChat(T_("*** Keyboard commands:") + _T("\r\n") + 
-						WinUtil::getDescriptiveCommands()
+						ChatCommands::getDescriptiveCommands()
 						+ _T("\r\n") _T("/join <hub-ip>")
 						+ _T("\r\n\t") + T_("Joins <hub-ip>. See also Open new window when using /join.")
 						+ _T("\r\n") _T("/showjoins")
@@ -1044,7 +1062,7 @@ void HubFrame::clearTaskList() {
 void HubFrame::addedChat(const tstring& message) {
 	{
 		auto u = url;
-		WinUtil::notify(WinUtil::NOTIFICATION_MAIN_CHAT, message, [this, u] { activateWindow(u); });
+		Notifications::notify(Notifications::NOTIFICATION_MAIN_CHAT, message, [this, u] { activateWindow(u); });
 	}
 	setDirty(SettingsManager::BOLD_HUB);
 
@@ -1185,7 +1203,7 @@ void HubFrame::sendLogin() {
 }
 
 bool HubFrame::handleLoginKeyDown(int c) {
-	if(c == VK_RETURN && !(WinUtil::isShift() || WinUtil::isCtrl() || WinUtil::isAlt())) {
+	if(c == VK_RETURN && !(KeyState::isShift() || KeyState::isCtrl() || KeyState::isAlt())) {
 		sendLogin();
 		return true;
 	}
@@ -1232,7 +1250,7 @@ void HubFrame::onPrivateMessage(const ChatMessage& message) {
 			/// @todo add formatting here (for PMs in main chat)
 			addChat(str(TF_("Private message from %1%: %2%") % getNick(message.from) % Text::toT(message.message)));
 		}
-		WinUtil::mainWindow->TrayPM();
+		UiServices::mainWindow->TrayPM();
 	}
 }
 
@@ -1351,28 +1369,28 @@ bool HubFrame::handleMessageKeyDown(int c) {
 
 int HubFrame::UserInfo::getImage(int col) const {
 	if(col == COLUMN_IP)
-		return SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, WinUtil::userFlagOffset) : -1;
+		return SETTING(GET_USER_COUNTRY) ? CountryFlags::index(countryCode, ImageLists::userFlagOffset) : -1;
 	if(col != 0) {
 		return -1;
 	}
 
-	int image = identity.isBot() ? WinUtil::USER_ICON_BOT : identity.isAway() ? WinUtil::USER_ICON_AWAY : WinUtil::USER_ICON;
-	image *= WinUtil::USER_ICON_MOD_START * WinUtil::USER_ICON_MOD_START;
+	int image = identity.isBot() ? ImageLists::USER_ICON_BOT : identity.isAway() ? ImageLists::USER_ICON_AWAY : ImageLists::USER_ICON;
+	image *= ImageLists::USER_ICON_MOD_START * ImageLists::USER_ICON_MOD_START;
 
 	if(CONNSETTING(INCOMING_CONNECTIONS) == SettingsManager::INCOMING_PASSIVE &&
 		!identity.isBot() && !identity.isTcpActive() && !identity.supports(AdcHub::NAT0_FEATURE))
 	{
 		// Users we can't connect to
-		image += 1 << (WinUtil::USER_ICON_NOCON - WinUtil::USER_ICON_MOD_START);
+		image += 1 << (ImageLists::USER_ICON_NOCON - ImageLists::USER_ICON_MOD_START);
 	}
 
 	string freeSlots = identity.get("FS");
 	if(!freeSlots.empty() && Util::toUInt(freeSlots) == 0) {
-		image += 1 << (WinUtil::USER_ICON_NOSLOT - WinUtil::USER_ICON_MOD_START);
+		image += 1 << (ImageLists::USER_ICON_NOSLOT - ImageLists::USER_ICON_MOD_START);
 	}
 
 	if(identity.isOp()) {
-		image += 1 << (WinUtil::USER_ICON_OP - WinUtil::USER_ICON_MOD_START);
+		image += 1 << (ImageLists::USER_ICON_OP - ImageLists::USER_ICON_MOD_START);
 	}
 
 	return image;
@@ -1382,7 +1400,7 @@ int HubFrame::UserInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgC
 	auto style = identity.getStyle();
 
 	if(!style.font.empty()) {
-		auto cached = WinUtil::getUserMatchFont(style.font);
+		auto cached = UiFonts::getUserMatchFont(style.font);
 		if(cached.get()) {
 			font = cached->handle();
 		}
@@ -1815,7 +1833,7 @@ bool HubFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 
 	auto menu = chat->getMenu(searchText);
 	
-	WinUtil::addSearchMenu(menu.get(), searchText);
+	LinkActions::addSearchMenu(menu.get(), searchText);
 	
 	menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
 
@@ -1833,14 +1851,14 @@ bool HubFrame::handleUsersContextMenu(dwt::ScreenCoordinate pt) {
 			pt = users->getContextMenuPos();
 		}
 
-		auto menu = addChild(WinUtil::Seeds::menu);
+		auto menu = addChild(ControlSeeds::menu);
 
 		menu->setTitle((sel.size() == 1) ? escapeMenu(getNick(sel[0]->getUser())) : str(TF_("%1% users") % sel.size()),
-			WinUtil::userImages->getIcon(0));
+			ImageLists::userImages->getIcon(0));
 
 		appendUserItems(getParent(), menu.get());
 
-		WinUtil::addCopyMenu(menu.get(), users);
+		TableActions::addCopyMenu(menu.get(), users);
 
 		prepareMenu(menu.get(), UserCommand::CONTEXT_USER, url);
 
@@ -1853,18 +1871,18 @@ bool HubFrame::handleUsersContextMenu(dwt::ScreenCoordinate pt) {
 
 void HubFrame::tabMenuImpl(dwt::Menu* menu) {
 	if(!FavoriteManager::getInstance()->isFavoriteHub(url)) {
-		menu->appendItem(T_("Add To &Favorites"), [this] { addAsFavorite(); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+		menu->appendItem(T_("Add To &Favorites"), [this] { addAsFavorite(); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
 	}
 
-	menu->appendItem(T_("&Reconnect\tCtrl+R"), [this] { reconnect(); }, WinUtil::menuIcon(IDI_RECONNECT));
+	menu->appendItem(T_("&Reconnect\tCtrl+R"), [this] { reconnect(); }, IconManager::menuIcon(IDI_RECONNECT));
 	menu->appendItem(T_("Copy &address to clipboard"), [this] { handleCopyHub(false); });
 	if (client->isSecure() && Util::isAdcsUrl(client->getHubUrl()) && client->getHubUrl().find("?kp=") == string::npos)
 		menu->appendItem(T_("Copy address with &keyprint to clipboard"), [this] { handleCopyHub(true); });
-	menu->appendItem(T_("&Search hub"), [this] { handleSearchHub(); }, WinUtil::menuIcon(IDI_SEARCH));
+	menu->appendItem(T_("&Search hub"), [this] { handleSearchHub(); }, IconManager::menuIcon(IDI_SEARCH));
 	auto adc = dynamic_cast<AdcHub*>(client);
 	const auto hasBBS = (adc && adc->supportsBBS()) || !BBSManager::getInstance()->getBoards(url).empty();
-	menu->appendItem(T_("&Bulletin boards"), [this] { openBBS(); }, WinUtil::menuIcon(IDI_CHAT), hasBBS);
-	menu->appendItem(T_("&Disconnect"), [this] { disconnect(false); }, WinUtil::menuIcon(IDI_HUB_OFF));
+	menu->appendItem(T_("&Bulletin boards"), [this] { openBBS(); }, IconManager::menuIcon(IDI_CHAT), hasBBS);
+	menu->appendItem(T_("&Disconnect"), [this] { disconnect(false); }, IconManager::menuIcon(IDI_HUB_OFF));
 
 	prepareMenu(menu, UserCommand::CONTEXT_HUB, url);
 
@@ -1891,11 +1909,11 @@ void HubFrame::handleShowUsersClicked() {
 
 void HubFrame::handleCopyHub(bool keyprinted) {
 	auto address = keyprinted ? url + "/?kp=" + CryptoManager::getInstance()->keyprintToString(client->getKeyprint()) : url;
-	WinUtil::setClipboard(Text::toT(address));
+	ClipboardActions::setClipboard(Text::toT(address));
 }
 
 void HubFrame::handleSearchHub() {
-	WinUtil::searchHub(Text::toT(url));
+	LinkActions::searchHub(Text::toT(url));
 }
 
 void HubFrame::handleDoubleClickUsers() {
@@ -1905,7 +1923,7 @@ void HubFrame::handleDoubleClickUsers() {
 }
 
 void HubFrame::runUserCommand(const UserCommand& uc) {
-	if(!WinUtil::getUCParams(this, uc, ucLineParams))
+	if(!UserCommands::getUCParams(this, uc, ucLineParams))
 		return;
 
 	auto ucParams = ucLineParams;
@@ -1936,7 +1954,7 @@ string HubFrame::getLogPath(bool status) const {
 }
 
 void HubFrame::openLog(bool status) {
-	WinUtil::openFile(Text::toT(getLogPath(status)));
+	ShellActions::openFile(Text::toT(getLogPath(status)));
 }
 
 string HubFrame::stripNick(const string& nick) const {
@@ -2126,7 +2144,7 @@ void HubFrame::updateUserIconSize() {
 	}
 	const auto overrideSize = getUserIconSizeOverride();
 	const auto logicalSize = HubSettings::isUserIconSize(overrideSize) ? overrideSize : settings.get(HubSettings::UserIconSize);
-	users->setSmallImageList(WinUtil::createUserImages(users->scale(logicalSize)));
+	users->setSmallImageList(ImageLists::createUserImages(users->scale(logicalSize)));
 	users->redrawWindow();
 }
 
@@ -2165,7 +2183,7 @@ void HubFrame::setTabIcon()
 
 	if(setTabIcon)
 	{
-		setIcon(WinUtil::mergeIcons({ IDI_HUB, tabIcon }));
+		setIcon(ImageLists::mergeIcons({ IDI_HUB, tabIcon }));
 	}
 }
 

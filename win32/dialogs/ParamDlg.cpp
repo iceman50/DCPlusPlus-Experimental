@@ -16,13 +16,14 @@
  */
 
 #include "stdafx.h"
+#include <win32/appearance/ControlSeeds.h>
+#include <win32/controls/DialogControls.h>
 #include <win32/dialogs/ParamDlg.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/ToolTip.h>
 
-#include <win32/util/WinUtil.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -64,7 +65,7 @@ void ParamDlg::addComboBox(const tstring& name, const TStringList& choices, size
 }
 
 void ParamDlg::initTextBox(const tstring& name, const tstring& value, bool password) {
-	auto box = left->addChild(GroupBox::Seed(name))->addChild(WinUtil::Seeds::Dialog::textBox);
+	auto box = left->addChild(GroupBox::Seed(name))->addChild(ControlSeeds::Dialog::textBox);
 	if(password) {
 		box->setPassword();
 	}
@@ -78,7 +79,7 @@ void ParamDlg::initIntTextBox(const tstring& name, const tstring& value, const i
 	auto cur = left->addChild(GroupBox::Seed(name))->addChild(Grid::Seed(1, 1));
 	cur->column(0).mode = GridInfo::FILL;
 
-	auto box = cur->addChild(WinUtil::Seeds::Dialog::intTextBox);
+	auto box = cur->addChild(ControlSeeds::Dialog::intTextBox);
 	box->setText(value);
 
 	cur->setWidget(cur->addChild(Spinner::Seed(min, max, box)));
@@ -89,7 +90,7 @@ void ParamDlg::initIntTextBox(const tstring& name, const tstring& value, const i
 }
 
 void ParamDlg::initComboBox(const tstring& name, const TStringList& choices, size_t sel, bool edit) {
-	auto box = left->addChild(GroupBox::Seed(name))->addChild(edit ? WinUtil::Seeds::Dialog::comboBoxEdit : WinUtil::Seeds::Dialog::comboBox);
+	auto box = left->addChild(GroupBox::Seed(name))->addChild(edit ? ControlSeeds::Dialog::comboBoxEdit : ControlSeeds::Dialog::comboBox);
 	for(auto& i: choices)
 		box->addValue(i);
 	box->setSelected(static_cast<int>(sel));
@@ -110,7 +111,7 @@ bool ParamDlg::initDialog(const tstring& title) {
 	for(size_t i = 0; i < n; ++i)
 		initFs[i]();
 
-	WinUtil::addDlgButtons(grid->addChild(Grid::Seed(2, 1)),
+	DialogControls::addDlgButtons(grid->addChild(Grid::Seed(2, 1)),
 		[this] { okClicked(); },
 		[this] { endDialog(IDCANCEL); });
 
