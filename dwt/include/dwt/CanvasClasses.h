@@ -188,6 +188,32 @@ private:
 	HBITMAP itsOldBitmap; /// Buffer old bitmap
 };
 
+/** Saves DC state until scope exit or restore(). The DC and all saved GDI
+ * objects must outlive this guard. Guards on the same DC must unwind in reverse
+ * order; do not restore their saved states separately through Win32.
+ */
+class CanvasState {
+public:
+	explicit CanvasState(HDC dc) noexcept : dc(dc), saved(::SaveDC(dc)) { }
+	CanvasState(const CanvasState&) = delete;
+	CanvasState& operator=(const CanvasState&) = delete;
+	CanvasState(CanvasState&& rhs) noexcept : dc(rhs.dc), saved(rhs.saved) { rhs.saved = 0; }
+	CanvasState& operator=(CanvasState&&) = delete;
+	~CanvasState() { restore(); }
+
+	/// False if SaveDC failed, or after restoration/ownership transfer.
+	explicit operator bool() const noexcept { return saved != 0; }
+	bool restore() noexcept {
+		const int state = saved;
+		saved = 0;
+		return state != 0 && ::RestoreDC(dc, state) != FALSE;
+	}
+
+private:
+	HDC dc;
+	int saved;
+};
+
 /// Class for painting objects and drawing in a windows
 /** Helper class containing functions for drawing lines and objects inside a window.
   * <br>
@@ -201,7 +227,6 @@ private:
   * <li>Pen</li>
   * </ul>
   */
-
 class Canvas
 {
 	class Selector {
@@ -213,7 +238,8 @@ class Canvas
 		Selector& operator=(const Selector&) = delete;
 
 		Selector(Selector &&rhs) : canvas(rhs.canvas), h(rhs.h) { rhs.canvas = nullptr; }
-		Selector& operator=(Selector &&rhs) { if(&rhs != this) { canvas = rhs.canvas; h = rhs.h; rhs.canvas = nullptr; } return *this; }
+		// Reassignment can discard restoration state and break nested selections.
+		Selector& operator=(Selector&&) = delete;
 
 		~Selector() { if(canvas) ::SelectObject(canvas->handle(), h); }
 
@@ -230,7 +256,7 @@ class Canvas
 		BkMode& operator=(const BkMode&) = delete;
 
 		BkMode(BkMode &&rhs) : canvas(rhs.canvas), prevMode(rhs.prevMode) { rhs.canvas = nullptr; }
-		BkMode& operator=(BkMode &&rhs) { if(&rhs != this) { canvas = rhs.canvas; prevMode = rhs.prevMode; rhs.canvas = nullptr; } return *this; }
+		BkMode& operator=(BkMode&&) = delete;
 
 		~BkMode();
 
@@ -242,6 +268,8 @@ class Canvas
 public:
 	Canvas(const Canvas&) = delete;
 	Canvas& operator=(const Canvas&) = delete;
+
+	CanvasState saveState() const noexcept { return CanvasState(handle()); }
 
 	/** select a new resource (brush / font / pen / etc).
 	* @return object that restores the previous resource when destroyed.

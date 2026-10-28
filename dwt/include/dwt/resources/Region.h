@@ -2,6 +2,7 @@
   DC++ Widget Toolkit
 
   Copyright (c) 2007-2013, Jacek Sieka
+  Copyright (C) 2026 iceman50
 
   All rights reserved.
 
@@ -54,6 +55,14 @@ public:
 
 	/// create a rectangular region; more information in the ::CreateRectRgn doc.
 	Region(const Rectangle& rect);
+
+	/// Rounded rectangle; ellipseSize is the full width/height of each corner ellipse.
+	Region(const Rectangle& rect, const Point& ellipseSize);
+
+	enum class CombineMode { Intersection = RGN_AND, Union = RGN_OR, Difference = RGN_DIFF, ExclusiveOr = RGN_XOR };
+	/// Modify this region, preserving the other. Returns the native region type
+	/// (NULLREGION is a successful empty result), or ERROR on failure.
+	int combine(const Region& other, CombineMode mode) noexcept;
 
 	/**
 	* creates a polygonal region; more information in the ::CreatePolygonRgn doc.

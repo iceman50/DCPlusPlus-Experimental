@@ -35,6 +35,7 @@
 */
 
 #include <dwt/widgets/Menu.h>
+#include <dwt/resources/DibBitmap.h>
 
 #include <dwt/Application.h>
 #include <dwt/resources/Brush.h>
@@ -364,20 +365,11 @@ void Menu::setNativeIcon(MENUITEMINFO& info, ItemDataWrapper& item) {
 	if(!item.bitmap) {
 		// Render against black and white to recover premultiplied alpha for both
 		// modern RGBA icons and legacy executable icons with only an AND mask.
-		BITMAPINFO format { };
-		format.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-		format.bmiHeader.biWidth = iconSize.x;
-		format.bmiHeader.biHeight = -iconSize.y;
-		format.bmiHeader.biPlanes = 1;
-		format.bmiHeader.biBitCount = 32;
-		format.bmiHeader.biCompression = BI_RGB;
-		DWORD* blackPixels = nullptr;
-		DWORD* whitePixels = nullptr;
-		BitmapPtr black = new Bitmap(::CreateDIBSection(nullptr, &format, DIB_RGB_COLORS,
-			reinterpret_cast<void**>(&blackPixels), nullptr, 0));
-		BitmapPtr white = new Bitmap(::CreateDIBSection(nullptr, &format, DIB_RGB_COLORS,
-			reinterpret_cast<void**>(&whitePixels), nullptr, 0));
+		DibBitmapPtr black = new DibBitmap(nullptr, iconSize, DibBitmap::RowOrder::TopDown);
+		DibBitmapPtr white = new DibBitmap(nullptr, iconSize, DibBitmap::RowOrder::TopDown);
 		if(!black->handle() || !white->handle()) throw Win32Exception("Creating native menu icon failed");
+		auto blackPixels = static_cast<DWORD*>(black->pixels());
+		auto whitePixels = static_cast<DWORD*>(white->pixels());
 		const auto count = static_cast<size_t>(iconSize.x) * iconSize.y;
 		std::fill_n(blackPixels, count, 0);
 		std::fill_n(whitePixels, count, 0x00ffffff);

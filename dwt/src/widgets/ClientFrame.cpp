@@ -294,9 +294,9 @@ LRESULT ClientFrame::drawMenuButton(size_t index, NMCUSTOMDRAW& data) {
 		draw.rcItem = data.rc;
 		draw.itemData = info.dwItemData;
 		// The menu renderer excludes the painted area from its caller's clip region.
-		const int saved = ::SaveDC(data.hdc);
+		CanvasState saved(data.hdc);
 		const auto painted = owner->sendMessage(WM_DRAWITEM, 0, reinterpret_cast<LPARAM>(&draw));
-		if(saved) ::RestoreDC(data.hdc, saved);
+		saved.restore();
 		if(painted) return CDRF_SKIPDEFAULT;
 	}
 	FreeCanvas canvas(data.hdc);
@@ -550,9 +550,9 @@ bool ClientFrame::drawSystemMenuItem(DRAWITEMSTRUCT& data) {
 	if(data.CtlType != ODT_MENU || !nativeSystemMenu) return false;
 	const auto item = std::find_if(systemItems.begin(), systemItems.end(), [&data](const SystemMenuItem& entry) { return entry.data == data.itemData; });
 	if(item == systemItems.end()) return false;
-	const int saved = ::SaveDC(data.hDC);
+	CanvasState saved(data.hDC);
 	Menu::handlePainting(data);
-	if(saved) ::RestoreDC(data.hDC, saved);
+	saved.restore();
 	const auto command = item->original.wID;
 	if(command != SC_CLOSE && command != SC_MINIMIZE && command != SC_MAXIMIZE && command != SC_RESTORE) return true;
 	const auto& colors = getAppearance().getPalette();

@@ -2,6 +2,7 @@
   DC++ Widget Toolkit
 
   Copyright (c) 2007-2013, Jacek Sieka
+  Copyright (C) 2026 iceman50
 
   All rights reserved.
 
@@ -41,6 +42,13 @@ namespace dwt {
 Region::Region(HRGN h, bool own) : ResourceType(h, own) { }
 
 Region::Region(const Rectangle& rect) : Region(::CreateRectRgn(rect.left(), rect.top(), rect.right(), rect.bottom()), true) { }
+
+Region::Region(const Rectangle& rect, const Point& ellipseSize) :
+	Region(::CreateRoundRectRgn(rect.left(), rect.top(), rect.right(), rect.bottom(), ellipseSize.x, ellipseSize.y), true) { }
+
+int Region::combine(const Region& other, CombineMode mode) noexcept {
+	return ::CombineRgn(handle(), handle(), other.handle(), static_cast<int>(mode));
+}
 
 Region::Region(const std::vector<Point>& points, PolyFillMode mode)
 {

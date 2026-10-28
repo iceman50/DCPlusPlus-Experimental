@@ -3,6 +3,7 @@
 #define DWT_NON_CLIENT_PAINT_H
 
 #include <dwt/WindowsHeaders.h>
+#include <dwt/resources/Region.h>
 
 namespace dwt { namespace util { namespace win32 {
 
@@ -12,14 +13,12 @@ inline void invalidateNonClient(HWND window) {
 	RECT outer, client;
 	if(!::GetWindowRect(window, &outer) || !::GetClientRect(window, &client)) return;
 	::MapWindowPoints(nullptr, window, reinterpret_cast<POINT*>(&outer), 2);
-	auto frame = ::CreateRectRgnIndirect(&outer);
-	auto content = ::CreateRectRgnIndirect(&client);
-	if(frame && content) {
-		::CombineRgn(frame, frame, content, RGN_DIFF);
-		::RedrawWindow(window, nullptr, frame, RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
+	Region frame(::CreateRectRgnIndirect(&outer));
+	Region content(::CreateRectRgnIndirect(&client));
+	if(frame.handle() && content.handle()) {
+		frame.combine(content, Region::CombineMode::Difference);
+		::RedrawWindow(window, nullptr, frame.handle(), RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
 	}
-	if(content) ::DeleteObject(content);
-	if(frame) ::DeleteObject(frame);
 }
 
 // Let USER32 store titles/icons, without displaying an intermediate native

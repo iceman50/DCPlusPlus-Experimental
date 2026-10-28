@@ -37,6 +37,7 @@
 
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Bitmap.h>
+#include <dwt/resources/DibBitmap.h>
 #include <dwt/resources/Font.h>
 #include <dwt/resources/Pen.h>
 
@@ -449,8 +450,8 @@ void StatsFrame::drawPlot(dwt::Canvas& canvas, const dwt::Rectangle& plot, int t
 		canvas.line(x, plot.top(), x, plot.bottom());
 	}
 
-	int saved = ::SaveDC(canvas.handle());
-	if(saved != 0) {
+	auto saved = canvas.saveState();
+	if(saved) {
 		::IntersectClipRect(canvas.handle(), plot.left() + scale, plot.top() + scale, plot.right() - scale, plot.bottom() - scale);
 	}
 	{
@@ -469,9 +470,7 @@ void StatsFrame::drawPlot(dwt::Canvas& canvas, const dwt::Rectangle& plot, int t
 		auto select(canvas.select(uploadLine));
 		drawSeries(canvas.handle(), up, plot, scale);
 	}
-	if(saved != 0) {
-		::RestoreDC(canvas.handle(), saved);
-	}
+	saved.restore();
 
 	// Highlight the newest sample while using the same bounded coordinate mapping as the curve.
 	auto drawCurrentPoint = [&](int64_t speed, COLORREF color, dwt::Pen& seriesPen) {
@@ -528,12 +527,11 @@ bool StatsFrame::drawSupersampledPlot(dwt::Canvas& canvas, const dwt::Rectangle&
 		smoothPlotBitmap.reset();
 		smoothPlotWidth = 0;
 		smoothPlotHeight = 0;
-		BITMAPINFO info { { sizeof(BITMAPINFOHEADER), scaledWidth, scaledHeight, 1, 32, BI_RGB } };
-		HBITMAP bitmapHandle = ::CreateDIBSection(canvas.handle(), &info, DIB_RGB_COLORS, nullptr, nullptr, 0);
-		if(!bitmapHandle) {
+		dwt::DibBitmapPtr bitmap = new dwt::DibBitmap(canvas.handle(), dwt::Point(scaledWidth, scaledHeight), dwt::DibBitmap::RowOrder::BottomUp);
+		if(!bitmap->handle()) {
 			return false;
 		}
-		smoothPlotBitmap = dwt::BitmapPtr(new dwt::Bitmap(bitmapHandle));
+		smoothPlotBitmap = bitmap;
 		smoothPlotWidth = scaledWidth;
 		smoothPlotHeight = scaledHeight;
 	}

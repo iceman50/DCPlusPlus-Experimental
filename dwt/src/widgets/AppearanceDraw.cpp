@@ -33,6 +33,7 @@
 
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Font.h>
+#include <dwt/resources/IconInfo.h>
 #include <dwt/resources/Pen.h>
 #include <dwt/widgets/Button.h>
 #include <dwt/widgets/ComboBox.h>
@@ -176,13 +177,12 @@ ButtonImage getButtonImage(Button& button, bool disabled, bool pressed, bool hot
 	image.icon = reinterpret_cast<HICON>(button.sendMessage(BM_GETIMAGE,
 		IMAGE_ICON));
 	if(image.icon) {
-		ICONINFO info = { };
+		IconInfo info(image.icon);
 		BITMAP bitmap = { };
-		if(::GetIconInfo(image.icon, &info)) {
-			::GetObject(info.hbmColor ? info.hbmColor : info.hbmMask,
+		if(info) {
+			// Keep the existing layout dimensions, including legacy mask sizing.
+			::GetObject(info.get().hbmColor ? info.get().hbmColor : info.get().hbmMask,
 				sizeof(bitmap), &bitmap);
-			if(info.hbmColor) ::DeleteObject(info.hbmColor);
-			if(info.hbmMask) ::DeleteObject(info.hbmMask);
 		}
 		image.size = Point(bitmap.bmWidth ? bitmap.bmWidth : button.scale(16),
 			bitmap.bmHeight ? bitmap.bmHeight : button.scale(16));

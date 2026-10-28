@@ -36,6 +36,7 @@
 
 #include <dwt/resources/Icon.h>
 #include <dwt/resources/Bitmap.h>
+#include <dwt/resources/IconInfo.h>
 #include <dwt/DWTException.h>
 #include <dwt/util/win32/Path.h>
 
@@ -73,15 +74,12 @@ resId(0)
 }
 
 Point Icon::getSize() const {
-	ICONINFO ii;
-	if(!::GetIconInfo(handle(), &ii))
+	IconInfo info(handle());
+	if(!info)
 		throw Win32Exception("GetIconInfo in Icon::getSize failed");
 
-	// wrap these in Bitmap so they get destroyed properly
-	Bitmap mask(ii.hbmMask);
-	Bitmap color(ii.hbmColor);
-
-	return color.getSize();
+	// Preserve this API's existing color-bitmap sizing behavior.
+	return Bitmap::getSize(info.get().hbmColor);
 }
 
 IconPtr Icon::resized(const Point& size) const {

@@ -31,6 +31,7 @@
 */
 
 #include <dwt/Taskbar.h>
+#include <dwt/resources/DibBitmap.h>
 
 #include <dwmapi.h>
 #include <objectarray.h>
@@ -635,8 +636,7 @@ BitmapPtr Taskbar::getBitmap(ContainerPtr tab, LPARAM thumbnailSize) {
 		return 0;
 
 	// this DIB will hold a full capture of the tab.
-	BITMAPINFO info { { sizeof(BITMAPINFOHEADER), size_full.x, size_full.y, 1, 32, BI_RGB } };
-	BitmapPtr bitmap_full { new Bitmap { ::CreateDIBSection(canvas.handle(), &info, DIB_RGB_COLORS, 0, 0, 0) } };
+	BitmapPtr bitmap_full { new DibBitmap(canvas.handle(), size_full, DibBitmap::RowOrder::BottomUp) };
 
 	CompatibleCanvas canvas_full { canvas.handle() };
 	auto select_full(canvas_full.select(*bitmap_full));
@@ -657,9 +657,7 @@ BitmapPtr Taskbar::getBitmap(ContainerPtr tab, LPARAM thumbnailSize) {
 		return 0;
 
 	// this DIB will hold a resized view of the tab, to be used as a thumbnail.
-	info.bmiHeader.biWidth = size_thumb.x;
-	info.bmiHeader.biHeight = size_thumb.y;
-	BitmapPtr bitmap_thumb { new Bitmap { ::CreateDIBSection(canvas.handle(), &info, DIB_RGB_COLORS, 0, 0, 0) } };
+	BitmapPtr bitmap_thumb { new DibBitmap(canvas.handle(), size_thumb, DibBitmap::RowOrder::BottomUp) };
 
 	CompatibleCanvas canvas_thumb { canvas.handle() };
 	auto select_thumb(canvas_thumb.select(*bitmap_thumb));

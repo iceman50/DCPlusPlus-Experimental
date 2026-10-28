@@ -20,6 +20,7 @@
 #include <dcpp/util/Util.h>
 #include <win32/appearance/IconManager.h>
 #include <win32/app/SplashWindow.h>
+#include <dwt/resources/DibBitmap.h>
 
 #include <dcpp/text/format.h>
 #include <dcpp/text/Text.h>
@@ -89,9 +90,9 @@ void SplashWindow::draw() {
 	dwt::CompatibleCanvas canvas { windowCanvas.handle() };
 
 	// create the bitmap with CreateDIBSection to have access to its bits (used when drawing text).
-	BITMAPINFO info { { sizeof(BITMAPINFOHEADER), size.cx, -size.cy, 1, 32, BI_RGB } };
-	RGBQUAD* bits;
-	dwt::Bitmap bitmap { ::CreateDIBSection(windowCanvas.handle(), &info, DIB_RGB_COLORS, &reinterpret_cast<void*&>(bits), 0, 0) };
+	dwt::DibBitmap bitmap(windowCanvas.handle(), dwt::Point(size.cx, size.cy), dwt::DibBitmap::RowOrder::TopDown);
+	if(!bitmap.handle()) return;
+	auto bits = static_cast<RGBQUAD*>(bitmap.pixels());
 	auto select(canvas.select(bitmap));
 
 	auto bit = [&](long x, long y) -> RGBQUAD& { return bits[x + y * size.cx]; };
