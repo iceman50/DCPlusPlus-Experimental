@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 function(dcpp_c_library name directory pattern)
     file(GLOB sources CONFIGURE_DEPENDS "${DCPP_ROOT}/${directory}/${pattern}")
     add_library(${name} STATIC ${sources})

@@ -1,7 +1,7 @@
 /*
   DC++ Widget Toolkit
 
-  Copyright (c) 2026, iceman50
+  Copyright (c) 2026 iceman50
 
   All rights reserved.
 */

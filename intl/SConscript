@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 Import("dev source_path")
 
 # Modern runtime configuration is validated for MinGW x64.

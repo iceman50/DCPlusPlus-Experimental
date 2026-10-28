@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 set(generated "${CMAKE_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${generated}/dcpp" "${generated}/help")
 # Copy just this translation unit so quoted includes select CMake's own metadata.

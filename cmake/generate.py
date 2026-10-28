@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Generate build-local metadata without writing into the shared source tree."""
 import argparse
 import os

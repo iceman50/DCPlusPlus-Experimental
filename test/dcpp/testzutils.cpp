@@ -1,3 +1,4 @@
+// Copyright (C) 2026 iceman50
 /* Tests around the wrappers the dcpp lib has around zlib. These tests are as close as possible to
  * the way the dcpp lib uses these wrappers to compress / decompress files when uploading /
  * downloading them.

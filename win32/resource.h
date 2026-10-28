@@ -1,3 +1,4 @@
+// Copyright (C) 2026 iceman50
 #ifndef DCPLUSPLUS_WIN32_RESOURCE_H
 #define DCPLUSPLUS_WIN32_RESOURCE_H
 

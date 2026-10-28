@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Prepare a deterministic local corpus for TransferCompressionBenchmark.
 
 Run from the repository root. Outputs go under the ignored build directory.

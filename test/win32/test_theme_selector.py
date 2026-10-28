@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Exercise the built application's theme dropdown using a disposable local profile."""
 import argparse
 import ctypes as c

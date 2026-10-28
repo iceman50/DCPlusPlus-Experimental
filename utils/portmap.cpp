@@ -1,3 +1,4 @@
+// Copyright (C) 2026 iceman50
 // Tool to add or remove port mapping rules using the interfaces provided by DC++.
 
 #include "base.h"

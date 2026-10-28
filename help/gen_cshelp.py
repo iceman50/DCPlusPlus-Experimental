@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """This script browses through every HTML files passed in 'source', looking for
 tags that have the "cshelp" argument; target files are then generated for use
 by the DC++ help system.

@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Run the bundled zlib examples in a build-local scratch directory."""
 from pathlib import Path
 import subprocess

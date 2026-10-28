@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 # Tests the credentials against MaxMind without downloading a database.
 # The key is entered privately, never supplied on the command line or saved.
 [CmdletBinding()]

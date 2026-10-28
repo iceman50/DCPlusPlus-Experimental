@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Exercise the interactive distribution builder using isolated build-tool fixtures."""
 import os
 from pathlib import Path

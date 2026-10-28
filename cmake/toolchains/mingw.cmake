@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 # Set DCPP_MINGW_ROOT in the environment to select a toolchain outside PATH.
 set(CMAKE_SYSTEM_NAME Windows)
 foreach(pair IN ITEMS "C;gcc" "CXX;g++" "RC;windres")

@@ -1,3 +1,4 @@
+// Copyright (C) 2026 iceman50
 #include "testbase.h"
 
 #include <chrono>

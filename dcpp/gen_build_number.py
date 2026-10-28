@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Allocate build numbers locally, independently of the Git revision."""
 
 import os

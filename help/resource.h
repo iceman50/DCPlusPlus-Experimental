@@ -1,3 +1,4 @@
+// Copyright (C) 2026 iceman50
 // this file contains help ids for topic aliases used to open the help file
 
 #ifndef DCPLUSPLUS_HELP_RESOURCE_H

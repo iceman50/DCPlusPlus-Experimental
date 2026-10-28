@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Configure, build and run isolated CMake component tests from the root test tree."""
 import argparse
 from pathlib import Path

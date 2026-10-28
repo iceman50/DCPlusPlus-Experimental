@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 def get_rev_id(env):
     """Attempt to get information about the repository via Git.
 

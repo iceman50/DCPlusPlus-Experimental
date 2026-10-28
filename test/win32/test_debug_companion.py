@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Exercise the production SCons symbol-splitting rule with a small MinGW program.
 
 Run from any directory: python test/win32/test_debug_companion.py

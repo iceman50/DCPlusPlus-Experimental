@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Build-system regressions: python test/scons/test_build_system.py."""
 from contextlib import contextmanager
 from pathlib import Path

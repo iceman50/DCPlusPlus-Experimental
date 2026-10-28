@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 cmake_minimum_required(VERSION 3.25)
 
 # Deliberately separate from the root SCons entry point and its build tree.

@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Check a built MinGW application's symbols, no-op build, recovery and isolation."""
 import argparse
 import hashlib

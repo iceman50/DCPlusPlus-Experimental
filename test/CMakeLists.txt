@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 # The CMake test graph is opt-in and uses only CMake-built production objects.
 set(valid_components dcpp dwt win32 zlib dwarf)
 foreach(component IN LISTS DCPP_TEST_COMPONENTS)

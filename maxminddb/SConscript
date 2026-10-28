@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 Import("dev source_path")
 env, target, sources = dev.prepare_build(source_path, "maxminddb", source_glob="*.c", in_bin=False)
 env.Append(CPPDEFINES=['PACKAGE_VERSION=\\"1.14.1\\"'])

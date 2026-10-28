@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 # vim: set filetype: py
 
 EnsureSConsVersion(4, 0, 0)

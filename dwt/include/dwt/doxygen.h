@@ -1,5 +1,5 @@
 /*  Definitions for doxygen
-	Copyright (c) 2007-2026, iceman50
+	Copyright (c) 2026 iceman50
 	(Never included by c++ compilers)
 */
 

@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Compile C/C++ instruction-baseline probes: python test/cmake/test_cpu_target.py."""
 import os
 from pathlib import Path

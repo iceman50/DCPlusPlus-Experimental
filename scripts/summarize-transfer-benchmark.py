@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 """Summarize the seven timing rounds and estimate ideal pipelined throughput."""
 
 import csv

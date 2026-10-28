@@ -1,3 +1,4 @@
+// Copyright (C) 2026 iceman50
 // Tool to hash files using the interfaces provided by DC++ and gather some statistics.
 
 #include "base.h"

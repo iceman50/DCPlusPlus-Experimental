@@ -1,3 +1,4 @@
+# Copyright (C) 2026 iceman50
 # Match the production SCons compiler policy without importing its Python state.
 set(DCPP_CPU_TARGET "default" CACHE STRING "Optional MinGW x64 instruction baseline")
 set_property(CACHE DCPP_CPU_TARGET PROPERTY STRINGS default nehalem x86-64-v2 x86-64-v3)
