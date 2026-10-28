@@ -140,14 +140,17 @@ void Client::connectImpl(bool resetAttemptedHubUrls) {
 		sock = 0;
 	}
 
+	// The previous session no longer contributes while reconnecting or failing over.
+	// Detach its socket callbacks before changing the count.
+	state = STATE_CONNECTING;
+	updateCounts(true);
+
 	setAutoReconnect(true);
 	setReconnDelay(120 + Util::rand(0, 60));
 	reloadSettings(true);
 	setRegistered(false);
 	setMyIdentity(Identity(ClientManager::getInstance()->getMe(), 0));
 	setHubIdentity(Identity());
-
-	state = STATE_CONNECTING;
 
 	try {
 		sock = BufferedSocket::getSocket(separator, v4only());
@@ -308,6 +311,7 @@ void Client::on(Connected) noexcept {
 
 void Client::on(Failed, const string& aLine) noexcept {
 	state = STATE_DISCONNECTED;
+	updateCounts(true);
 	updateActivity();
 	FavoriteManager::getInstance()->removeUserCommand(getHubUrl());
 	if(getAutoReconnect() && advanceFailoverUrl()) {
@@ -350,7 +354,7 @@ void Client::updateCounts(bool aRemove) {
 		countType = COUNT_UNCOUNTED;
 	}
 
-	if(!aRemove) {
+	if(!aRemove && state == STATE_NORMAL) {
 		if(getMyIdentity().isOp()) {
 			countType = COUNT_OP;
 		} else if(getMyIdentity().isRegistered()) {
