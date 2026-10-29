@@ -106,7 +106,8 @@ TransferView::TransferView(dwt::Widget* parent, TabViewPtr mdi_) :
 
 	layout();
 
-	setTimer([this] { return handleTimer(); }, 500);
+	// Coalesce bursts without leaving completed updates waiting half a second.
+	setTimer([this] { return handleTimer(); }, 100);
 
 	ConnectionManager::getInstance()->addListener(this);
 	DownloadManager::getInstance()->addListener(this);

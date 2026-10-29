@@ -4,6 +4,8 @@
 #include <win32/app/SingleInstance.h>
 #include <win32/app/UiServices.h>
 #include <win32/appearance/IconManager.h>
+#include <win32/appearance/AppAppearance.h>
+#include <win32/appearance/UiFonts.h>
 #include <win32/appearance/ImageLists.h>
 #include <win32/controls/TypedTable.h>
 #include <win32/frames/users/AspectUserCommand.h>
@@ -22,6 +24,8 @@
 #include <dcpp/transfer/UploadManager.h>
 #include <dwt/widgets/Window.h>
 #include <dwt/widgets/Container.h>
+#include <dwt/Application.h>
+#include <dwmapi.h>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -35,11 +39,27 @@
 const UINT SingleInstance::WMU_WHERE_ARE_YOU = WM_APP + 181;
 
 class TransferViewPerformanceTest {
+	struct PaintProbe {
+		std::function<bool()> updated;
+		std::vector<double> milliseconds;
+		bool complete = false;
+	};
+	static LRESULT CALLBACK watchPaint(HWND window, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR data) {
+		auto& probe = *reinterpret_cast<PaintProbe*>(data);
+		if(message != WM_PAINT) return DefSubclassProc(window, message, wParam, lParam);
+		const auto start = std::chrono::steady_clock::now();
+		const auto result = DefSubclassProc(window, message, wParam, lParam);
+		if(probe.updated && probe.updated()) {
+			probe.milliseconds.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+			probe.complete = true;
+		}
+		return result;
+	}
 	static void check(bool value, const char* message) {
 		if(!value) throw std::runtime_error(message);
 	}
 public:
-	static void run(dwt::Window* window, size_t count, size_t perGroup, int sortColumn) {
+	static void run(dwt::Window* window, size_t count, size_t perGroup, int sortColumn, bool visiblePaint = false) {
 		using Clock = std::chrono::steady_clock;
 		auto view = new TransferView(window, nullptr);
 		view->resize(dwt::Rectangle(0, 0, 1000, 400));
@@ -53,17 +73,45 @@ public:
 			view->addConn(update);
 		}
 		view->execTasks();
+		PaintProbe probe;
+		if(visiblePaint) {
+			view->layout();
+			check(SetWindowSubclass(view->transfers->handle(), watchPaint, 1, reinterpret_cast<DWORD_PTR>(&probe)) != FALSE, "Cannot observe table painting");
+			view->setVisible(true);
+			view->transfers->setVisible(true);
+			UpdateWindow(view->transfers->handle());
+		}
 		std::vector<double> timings;
 		for(int round = 0; round < 9; ++round) {
+			std::vector<TransferView::UpdateInfo> updates;
 			for(size_t i = 0; i < count; ++i) {
 				auto update = std::make_unique<TransferView::UpdateInfo>(peer, CONNECTION_TYPE_UPLOAD, std::to_string(i));
 				update->setTransferred((round + 1) * 4096, (round + 1) * 4096, 1024 * 1024 * 1024);
 				update->setSpeed(1000000 + round);
-				view->resortMask |= update->updateMask;
-				view->tasks.emplace_back([view](const TransferView::UpdateInfo& value) { view->updateConn(value); }, std::move(update));
+				if(visiblePaint) {
+					updates.push_back(std::move(*update));
+				} else {
+					view->resortMask |= update->updateMask;
+					view->tasks.emplace_back([view](const TransferView::UpdateInfo& value) { view->updateConn(value); }, std::move(update));
+				}
 			}
 			const auto start = Clock::now();
-			view->execTasks();
+			if(visiblePaint) {
+				probe.complete = false;
+				probe.updated = [view, round, perGroup, count] {
+					return view->transferItems.front().transferred == static_cast<int64_t>(std::min(perGroup, count)) * (round + 1) * 4096;
+				};
+				view->updatedConns(std::move(updates));
+				// Exercise the normal async handoff and UI batch timer.
+				while(!probe.complete && Clock::now() - start < std::chrono::seconds(5)) {
+					if(!dwt::Application::instance().dispatch()) Sleep(1);
+				}
+				check(probe.complete, "Transfer update was not painted within five seconds");
+				check(SUCCEEDED(DwmFlush()), "Desktop composition flush failed");
+				if(round == 0) probe.milliseconds.clear();
+			} else {
+				view->execTasks();
+			}
 			const auto ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
 			if(round) timings.push_back(ms);
 			for(const auto& transfer: view->transferItems) {
@@ -73,8 +121,15 @@ public:
 			}
 		}
 		std::sort(timings.begin(), timings.end());
-		std::printf("ui,%zu,%zu,%d,%.3f,%.3f\n", count, perGroup, sortColumn,
+		std::printf("%s,%zu,%zu,%d,%.3f,%.3f\n", visiblePaint ? "event_to_paint_and_flush" : "ui", count, perGroup, sortColumn,
 			(timings[3] + timings[4]) / 2, timings.back());
+		if(visiblePaint) {
+			RemoveWindowSubclass(view->transfers->handle(), watchPaint, 1);
+			std::sort(probe.milliseconds.begin(), probe.milliseconds.end());
+			check(!probe.milliseconds.empty(), "No paint samples");
+			std::printf("wm_paint,%zu,%zu,%d,%.3f,%.3f\n", count, perGroup, sortColumn,
+				probe.milliseconds[probe.milliseconds.size() / 2], probe.milliseconds.back());
+		}
 		// Exercise invalidation of cached size/time labels, including an idle
 		// transition and a running connection whose remaining time rounds to zero.
 		for(int phase = 0; phase < 3; ++phase) {
@@ -137,17 +192,25 @@ int dwtMain(dwt::Application&) {
 		HttpManager::newInstance();
 		IconManager::initialize();
 		SettingsManager::getInstance()->set(SettingsManager::ICON_PACK, IconManager::EMBEDDED_PACK);
+		AppAppearance::init();
+		UiFonts::initDefault();
 		UiServices::initFont();
 		ImageLists::fileImages = dwt::ImageListPtr(new dwt::ImageList(dwt::Point(16, 16)));
 		auto window = new dwt::Window;
+		const bool visiblePaint = std::getenv("DCPP_PROFILE_PAINT") != nullptr;
 		dwt::Window::Seed seed;
 		seed.style &= ~WS_VISIBLE;
 		window->create(seed);
+		if(visiblePaint) {
+			window->setText(L"DC++ transfer painting profile (synthetic updates)");
+			SetWindowPos(window->handle(), HWND_TOP, 80, 80, 1040, 480, SWP_NOACTIVATE);
+			ShowWindow(window->handle(), SW_SHOWNOACTIVATE);
+		}
 		std::puts("area,connections,connections_per_group,sort_column,median_ms,max_ms");
 		const bool benchmark = std::getenv("DCPP_PROFILE") != nullptr;
-		for(size_t count: benchmark ? std::vector<size_t>{100, 500, 1000} : std::vector<size_t>{16}) {
-			for(size_t group: {size_t(1), size_t(16), count}) {
-				for(int sort: {0, 6}) TransferViewPerformanceTest::run(window, count, group, sort);
+		for(size_t count: visiblePaint ? std::vector<size_t>{100, 1000} : benchmark ? std::vector<size_t>{100, 500, 1000} : std::vector<size_t>{16}) {
+			for(size_t group: visiblePaint ? std::vector<size_t>{16} : std::vector<size_t>{1, 16, count}) {
+				for(int sort: {0, 6}) TransferViewPerformanceTest::run(window, count, group, sort, visiblePaint);
 			}
 		}
 		DestroyWindow(window->handle());

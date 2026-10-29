@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--label", required=True)
     parser.add_argument("--build", default="build/release-mingw-x64")
     parser.add_argument("--repeat", type=int, default=3)
-    parser.add_argument("--area", choices=("core", "ui", "all"), default="all")
+    parser.add_argument("--area", choices=("core", "ui", "paint", "all"), default="all")
     args = parser.parse_args()
     if not args.label or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for c in args.label):
         parser.error("label must contain only letters, digits, underscores, and hyphens")
@@ -32,11 +32,17 @@ def main():
                  "--gtest_filter=PipelineBenchmark.*", "--gtest_also_run_disabled_tests"],
         "ui": [str(build / "test/win32/TransferPerformanceTest.exe")],
     }
+    if args.area == "paint":
+        commands = {"paint": commands["ui"]}
     if args.area != "all":
         commands = {args.area: commands[args.area]}
     metadata = dict(timestamp=datetime.now(timezone.utc).isoformat(), platform=platform.platform(),
                     logical_cpus=os.cpu_count(), repeat=args.repeat, commands=commands,
                     note="Warm-cache reads and hidden native transfer-table update/sort timings; excludes visible painting and network traffic.")
+    if args.area == "paint":
+        metadata["note"] = ("Visible synthetic transfer updates through the production async queue, batch timer, WM_PAINT and DwmFlush. "
+                            "Back-to-back batches emphasize timer waiting; excludes network delivery and physical display latency. "
+                            "Run on an unlocked interactive desktop with the test window unobscured.")
     metadata["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     metadata["status"] = subprocess.check_output(["git", "status", "--short"], cwd=root, text=True)
     metadata["binary_sha256"] = {}
@@ -51,13 +57,16 @@ def main():
     rows = []
     for iteration in range(args.repeat):
         for name, command in commands.items():
-            result = subprocess.run(command, cwd=root, env={**os.environ, "DCPP_PROFILE": "1"},
+            environment = {key: value for key, value in os.environ.items()
+                           if key not in ("DCPP_PROFILE", "DCPP_PROFILE_PAINT")}
+            environment["DCPP_PROFILE_PAINT" if name == "paint" else "DCPP_PROFILE"] = "1"
+            result = subprocess.run(command, cwd=root, env=environment,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
             (output / f"{name}-{iteration}.log").write_bytes(result.stdout)
             result.check_returncode()
             parsed = 0
             for line in result.stdout.decode("utf-8", errors="replace").splitlines():
-                if not line.startswith(("ui,", "hash,", "cached_read_new_reader,")):
+                if not line.startswith(("ui,", "hash,", "cached_read_new_reader,", "event_to_paint_and_flush,", "wm_paint,")):
                     continue
                 fields = line.split(",")
                 rows.append(dict(area=fields[0], workload=":".join(fields[1:-2]), run=iteration,
