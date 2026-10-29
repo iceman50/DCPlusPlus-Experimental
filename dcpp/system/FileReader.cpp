@@ -74,25 +74,35 @@ size_t FileReader::readCached(const string& file, const DataCallback& callback) 
 }
 
 size_t FileReader::readCached(File& file, const DataCallback& callback) {
-	buffer.resize(getBlockSize(0));
+	const auto bufferSize = getBlockSize(0);
+	reserveBuffer(bufferSize);
 
 	size_t total = 0;
 	bool go = true;
 	while(go) {
 		size_t filled = 0;
-		while(filled < buffer.size()) {
-			size_t bytes = buffer.size() - filled;
-			if(file.read(buffer.data() + filled, bytes) == 0) break;
+		while(filled < bufferSize) {
+			size_t bytes = bufferSize - filled;
+			if(file.read(buffer.get() + filled, bytes) == 0) break;
 			filled += bytes;
 		}
 		if(filled == 0) break;
 
-		go = callback(buffer.data(), filled);
+		go = callback(buffer.get(), filled);
 		total += filled;
-		if(filled < buffer.size()) break;
+		if(filled < bufferSize) break;
 	}
 
 	return total;
+}
+
+void FileReader::reserveBuffer(size_t size) {
+	if(size > bufferCapacity) {
+		// Reads initialize every byte passed to callbacks. Value-initializing the
+		// full buffer wastes memory bandwidth, especially for small files.
+		buffer.reset(new uint8_t[size]);
+		bufferCapacity = size;
+	}
 }
 
 size_t FileReader::getBlockSize(size_t alignment) {
@@ -143,9 +153,9 @@ size_t FileReader::readDirect(const string& file, const DataCallback& callback) 
 	Handle h(tmp);
 
 	DWORD bufSize = static_cast<DWORD>(getBlockSize(sector));
-	buffer.resize(bufSize * 2 + sector);
+	reserveBuffer(static_cast<size_t>(bufSize) * 2 + sector);
 
-	auto buf = align(&buffer[0], sector);
+	auto buf = align(buffer.get(), sector);
 
 	DWORD hn = 0;
 	DWORD rn = 0;

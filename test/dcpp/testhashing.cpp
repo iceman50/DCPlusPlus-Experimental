@@ -170,6 +170,8 @@ TEST(TigerTreeHasherTest, bounds_workers_by_cpu_leaves_and_memory) {
 	EXPECT_EQ(1U, TigerTreeHasher::getWorkerCount(8, 0, 64 * 1024));
 	EXPECT_EQ(1U, TigerTreeHasher::getWorkerCount(8, 64 * 1024, 64 * 1024));
 	EXPECT_EQ(1U, TigerTreeHasher::getWorkerCount(1, 16 * 1024 * 1024, 64 * 1024));
+	EXPECT_EQ(1U, TigerTreeHasher::getWorkerCount(64, 128 * 1024, 1024));
+	EXPECT_LE(TigerTreeHasher::getWorkerCount(64, 1024 * 1024, 1024), 4U);
 	EXPECT_EQ(1U, TigerTreeHasher::getWorkerCount(64, 1024LL * 1024LL * 1024LL, 128LL * 1024LL * 1024LL));
 
 	const auto workers = TigerTreeHasher::getWorkerCount(64, 16 * 1024 * 1024, 64 * 1024);

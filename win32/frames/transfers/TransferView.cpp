@@ -127,6 +127,7 @@ void TransferView::prepareClose() {
 }
 
 TransferView::ItemInfo::ItemInfo() :
+	timeleft(0),
 	speed(0),
 	actual(0),
 	transferred(0),
@@ -194,6 +195,9 @@ int TransferView::ConnectionInfo::getImage(int col) const {
 }
 
 void TransferView::ConnectionInfo::update(const UpdateInfo& ui) {
+	const auto previousSize = size;
+	const auto previousTimeleft = timeleft;
+	const auto previousStatus = status;
 	if(ui.updateMask & UpdateInfo::MASK_PATH) {
 		parent.path = ui.path;
 		parent.updatePath();
@@ -229,10 +233,12 @@ void TransferView::ConnectionInfo::update(const UpdateInfo& ui) {
 			columns[COLUMN_TRANSFERRED].clear();
 		}
 
-		if(size > 0) {
-			columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
-		} else {
-			columns[COLUMN_SIZE].clear();
+		if(size != previousSize) {
+			if(size > 0) {
+				columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
+			} else {
+				columns[COLUMN_SIZE].clear();
+			}
 		}
 	}
 
@@ -251,7 +257,9 @@ void TransferView::ConnectionInfo::update(const UpdateInfo& ui) {
 	if((ui.updateMask & UpdateInfo::MASK_STATUS) || (ui.updateMask & UpdateInfo::MASK_TRANSFERRED) || (ui.updateMask & UpdateInfo::MASK_SPEED)) {
 		if(status == STATUS_RUNNING && size > 0 && speed > 0) {
 			timeleft = static_cast<double>(size - transferred) / speed;
-			columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+			if(timeleft != previousTimeleft || previousStatus != status || columns[COLUMN_TIMELEFT].empty()) {
+				columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+			}
 		} else {
 			timeleft = 0;
 			columns[COLUMN_TIMELEFT].clear();
@@ -318,6 +326,8 @@ int TransferView::TransferInfo::getImage(int col) const {
 }
 
 void TransferView::TransferInfo::update() {
+	const auto previousTimeleft = timeleft;
+	const auto previousSize = size;
 	timeleft = 0;
 	speed = 0;
 	if(type != CONNECTION_TYPE_DOWNLOAD) { transferred = 0; }
@@ -395,10 +405,14 @@ void TransferView::TransferInfo::update() {
 		columns[COLUMN_TRANSFERRED].clear();
 		columns[COLUMN_SIZE].clear();
 	} else {
-		columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+		if(timeleft != previousTimeleft || columns[COLUMN_TIMELEFT].empty()) {
+			columns[COLUMN_TIMELEFT] = Text::toT(Util::formatSeconds(timeleft));
+		}
 		columns[COLUMN_SPEED] = str(TF_("%1%/s") % Text::toT(Util::formatBytes(speed)));
 		columns[COLUMN_TRANSFERRED] = Text::toT(Util::formatBytes(transferred));
-		columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
+		if(size != previousSize || columns[COLUMN_SIZE].empty()) {
+			columns[COLUMN_SIZE] = Text::toT(Util::formatBytes(size));
+		}
 	}
 }
 
@@ -897,7 +911,7 @@ void TransferView::addConn(const UpdateInfo& ui) {
 	}
 
 	conn->update(ui);
-	transfer->update();
+	pendingTransfers.insert(transfer);
 	markDirty(*conn);
 	markDirty(*transfer);
 }
@@ -906,7 +920,7 @@ void TransferView::updateConn(const UpdateInfo& ui) {
 	auto conn = findConn(ui.token, ui.type);
 	if(conn) {
 		conn->update(ui);
-		conn->parent.update();
+		pendingTransfers.insert(&conn->parent);
 		markDirty(*conn);
 		markDirty(conn->parent);
 	}
@@ -960,7 +974,7 @@ void TransferView::removeConn(ConnectionInfo& conn) {
 			transfers->eraseChild(reinterpret_cast<LPARAM>(&transfer.conns.front()));
 		}
 
-		transfer.update();
+		pendingTransfers.insert(&transfer);
 		markDirty(transfer);
 	}
 }
@@ -974,6 +988,7 @@ void TransferView::removeTransfer(TransferInfo& transfer) {
 	}
 
 	forgetDirty(transfer);
+	pendingTransfers.erase(&transfer);
 	for(auto& conn: transfer.conns) {
 		forgetDirty(conn);
 	}
@@ -1103,6 +1118,12 @@ void TransferView::execTasks() {
 			task.first(*task.second);
 		}
 		tasks.clear();
+		// A tick contains updates for many children of the same transfer. Rebuild
+		// each parent's totals and text only after all ordered events are applied.
+		for(auto transfer: pendingTransfers) {
+			transfer->update();
+		}
+		pendingTransfers.clear();
 
 		if(redrawAll) {
 			transfers->resort();

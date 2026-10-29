@@ -257,6 +257,7 @@ private:
 
 	vector<pair<function<void (const UpdateInfo&)>, unique_ptr<UpdateInfo>>> tasks;
 	unordered_set<ItemInfo*> dirtyItems;
+	unordered_set<TransferInfo*> pendingTransfers;
 	bool updateList;
 	bool resortList;
 	uint32_t resortMask;

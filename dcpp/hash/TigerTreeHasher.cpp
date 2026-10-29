@@ -31,6 +31,7 @@ namespace {
 constexpr size_t MAX_HASH_WORKERS = 64;
 constexpr size_t FILE_READ_BLOCK_SIZE = 1024 * 1024;
 constexpr uint64_t MAX_PIPELINE_MEMORY = 256ULL * 1024ULL * 1024ULL;
+constexpr uint64_t MIN_BYTES_PER_WORKER = 256 * 1024;
 
 /** Calculate leaf storage without the signed addition used by MerkleTree::calcBlocks. */
 size_t getBlockCount(int64_t fileSize, int64_t blockSize) noexcept {
@@ -194,6 +195,8 @@ size_t TigerTreeHasher::getWorkerCount(size_t requested, int64_t fileSize, int64
 	const auto hardwareWorkers = std::thread::hardware_concurrency();
 	if(hardwareWorkers != 0) workers = std::min(workers, static_cast<size_t>(hardwareWorkers));
 	workers = std::min(workers, blockCount);
+	// Thread creation and queue synchronization dominate very small jobs.
+	workers = std::min<uint64_t>(workers, std::max<uint64_t>(1, static_cast<uint64_t>(fileSize) / MIN_BYTES_PER_WORKER));
 
 	const auto blockBytes = static_cast<uint64_t>(blockSize);
 	// The coordinator owns one read buffer and one assembling block. The bounded

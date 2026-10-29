@@ -264,3 +264,24 @@ TEST(FileReaderTest, stops_callbacks_immediately_after_cancellation) {
 	EXPECT_EQ(1U, callbacks);
 	File::deleteFile(path);
 }
+
+TEST(FileReaderTest, reused_buffer_does_not_expose_previous_file_bytes) {
+	const auto path = readerTestPath("reuse.bin");
+	FileReader reader(false);
+	for(const auto& expected: {string(2 * 1024 * 1024 + 37, 'a'), string("short"), string()}) {
+		File(path, File::WRITE, File::CREATE | File::TRUNCATE).write(expected);
+		string actual;
+		size_t callbacks = 0;
+		const auto read = reader.read(path, [&](const void* data, size_t count) {
+			++callbacks;
+			actual.append(static_cast<const char*>(data), count);
+			return true;
+		});
+		EXPECT_EQ(expected.size(), read);
+		EXPECT_EQ(expected, actual);
+		if(expected.empty()) {
+			EXPECT_EQ(0U, callbacks);
+		}
+	}
+	File::deleteFile(path);
+}

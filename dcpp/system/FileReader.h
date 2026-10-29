@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -68,7 +69,9 @@ private:
 	bool direct;
 	size_t blockSize;
 
-	vector<uint8_t> buffer;
+	std::unique_ptr<uint8_t[]> buffer;
+	size_t bufferCapacity = 0;
+	void reserveBuffer(size_t size);
 
 	/** Return an aligned buffer which is at least twice the size of ret.second */
 	size_t getBlockSize(size_t alignment);
