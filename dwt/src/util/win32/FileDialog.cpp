@@ -21,6 +21,7 @@
   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
 */
 
+#include <dwt/util/win32/ComPtr.h>
 #include <dwt/util/win32/FileDialog.h>
 
 #include <dwt/Application.h>

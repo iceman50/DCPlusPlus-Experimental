@@ -2,6 +2,7 @@
 // Exercise the real Shell picker without writing the selected files.
 #include <dwt/Application.h>
 #include <dwt/widgets/SaveDialog.h>
+#include <dwt/util/win32/ComPtr.h>
 #include <dwt/util/win32/FileDialog.h>
 #include <cstdio>
 #include <stdexcept>

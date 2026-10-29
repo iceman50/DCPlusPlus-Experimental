@@ -40,7 +40,7 @@
 
 #include <dwt/util/check.h>
 #include <dwt/util/StringConversion.h>
-#include <dwt/util/win32/FileDialog.h>
+#include <dwt/util/win32/ComPtr.h>
 #include <dwt/util/win32/Version.h>
 #include <dwt/widgets/Container.h>
 #include <dwt/widgets/Window.h>
@@ -220,6 +220,7 @@ window(0)
 }
 
 Taskbar::~Taskbar() {
+	while(!tabs.empty()) removeFromTaskbar(tabs.begin()->first);
 	if(taskbar4)
 		taskbar4->Release();
 	if(taskbar)
@@ -237,11 +238,11 @@ void Taskbar::initTaskbar(WindowPtr window_) {
 	CLSID CLSID_TaskbarList;
 	OLECHAR tbl[] = L"{56FDF344-FD6D-11d0-958A-006097C9A090}";
 	CLSIDFromString(tbl, &CLSID_TaskbarList);
-	IID IID_ITaskbarList;
-	OLECHAR itbl[] = L"{56FDF342-FD6D-11d0-958A-006097C9A090}";
-	CLSIDFromString(itbl, &IID_ITaskbarList);
+	IID IID_ITaskbarList3;
+	OLECHAR itbl[] = L"{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}";
+	CLSIDFromString(itbl, &IID_ITaskbarList3);
 #endif
-	if(::CoCreateInstance(CLSID_TaskbarList, 0, CLSCTX_INPROC_SERVER, IID_ITaskbarList,
+	if(::CoCreateInstance(CLSID_TaskbarList, 0, CLSCTX_INPROC_SERVER, IID_ITaskbarList3,
 		reinterpret_cast<LPVOID*>(&taskbar)) != S_OK) { taskbar = 0; }
 	if(taskbar && taskbar->HrInit() != S_OK) {
 			taskbar->Release();
@@ -408,7 +409,7 @@ public:
 };
 
 void Taskbar::addToTaskbar(ContainerPtr tab) {
-	if(!taskbar || !window) {
+	if(!taskbar || !window || tabs.find(tab) != tabs.end()) {
 		return;
 	}
 
@@ -420,6 +421,20 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 
 	auto proxy = window->addChild(Proxy::Seed(tab->getText()));
 	tabs[tab] = proxy;
+	// A proxy can also be destroyed by its owning window. Unregister while its
+	// HWND is still valid, and forget it before shell calls can re-enter us.
+	proxy->onDestroy([this, tab, proxy] {
+		auto i = tabs.find(tab);
+		if(i == tabs.end() || i->second != proxy) return;
+		tabs.erase(i);
+		if(taskbar) {
+			taskbar->UnregisterTab(proxy->handle());
+			taskbar->DeleteTab(proxy->handle());
+		}
+	});
+	// Retire previews at HWND destruction, before a derived page's destructor
+	// removes its tab-strip item or releases the contents used by Aero Peek.
+	tab->onDestroy([this, tab] { removeFromTaskbar(tab); });
 
 	/* call ChangeWindowMessageFilterEx on the 2 messages we use to dispatch bitmaps to the
 	destktop manager to prevent blockings because of different privilege levels. */
@@ -427,12 +442,22 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 	::ChangeWindowMessageFilterEx(proxy->handle(), WM_DWMSENDICONICLIVEPREVIEWBITMAP, 1/*MSGFLT_ALLOW*/, 0);
 
 	// keep the proxy window in sync with the actual tab window.
-	tab->onTextChanging([proxy](const tstring& text) { proxy->setText(text); });
-	tab->onSized([proxy](const SizedEvent&) { ::DwmInvalidateIconicBitmaps(proxy->handle()); });
+	tab->onTextChanging([this, tab](const tstring& text) {
+		auto i = tabs.find(tab);
+		if(i != tabs.end()) i->second->setText(text);
+	});
+	tab->onSized([this, tab](const SizedEvent&) {
+		auto i = tabs.find(tab);
+		if(i != tabs.end()) ::DwmInvalidateIconicBitmaps(i->second->handle());
+	});
+	const auto registered = [this, tab, proxy] {
+		auto i = tabs.find(tab);
+		return i != tabs.end() && i->second == proxy;
+	};
 
 	// forward taskbar events that were sent to the proxy window to the actual tab window.
-	proxy->onActivate([this, tab](bool activate) {
-		if(activate) {
+	proxy->onActivate([this, tab, registered](bool activate) {
+		if(activate && registered()) {
 			setActive(tab);
 			::SetForegroundWindow(window->handle());
 			if(window->isIconic())
@@ -441,14 +466,15 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 				window->setVisible(true);
 		}
 	});
-	proxy->onClosing([this, tab]() -> bool {
-		if(window->getEnabled()) {
+	proxy->onClosing([this, tab, registered]() -> bool {
+		if(registered() && window->getEnabled()) {
 			tab->close(true);
 		}
 		return false; // don't close the proxy window just yet; wait for removeFromTaskbar.
 	});
 
-	proxy->onRaw([this, tab, proxy](WPARAM, LPARAM lParam) -> LRESULT {
+	proxy->onRaw([this, tab, proxy, registered](WPARAM, LPARAM lParam) -> LRESULT {
+		if(!registered()) return 0;
 		// generate a thumbnail to be displayed in the taskbar.
 		BitmapPtr bitmap = getBitmap(tab, lParam);
 		if(bitmap) {
@@ -457,7 +483,8 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 		return 0;
 	}, Message(WM_DWMSENDICONICTHUMBNAIL));
 
-	proxy->onRaw([this, tab, proxy](WPARAM, LPARAM) -> LRESULT {
+	proxy->onRaw([this, tab, proxy, registered](WPARAM, LPARAM) -> LRESULT {
+		if(!registered()) return 0;
 		// generate a preview of the tab to be shown in "Aero Peek" when the user hovers the thumbnail.
 		BitmapPtr bitmap = getBitmap(tab, 0);
 		if(bitmap) {
@@ -476,7 +503,10 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 	::DwmSetWindowAttribute(proxy->handle(), DWMWA_FORCE_ICONIC_REPRESENTATION, &attrib, sizeof(attrib));
 	::DwmSetWindowAttribute(proxy->handle(), DWMWA_HAS_ICONIC_BITMAP, &attrib, sizeof(attrib));
 
-	taskbar->RegisterTab(proxy->handle(), window->handle());
+	if(FAILED(taskbar->RegisterTab(proxy->handle(), window->handle()))) {
+		removeFromTaskbar(tab);
+		return;
+	}
 	moveOnTaskbar(tab);
 }
 
@@ -485,11 +515,15 @@ void Taskbar::removeFromTaskbar(ContainerPtr tab) {
 	if(i == tabs.end() || !i->second) {
 		return;
 	}
-	if(taskbar) {
-		taskbar->UnregisterTab(i->second->handle());
-	}
-	::DestroyWindow(i->second->handle());
+	const auto proxy = i->second->handle();
 	tabs.erase(i);
+	if(taskbar) {
+		taskbar->UnregisterTab(proxy);
+		// Remove any shell button as well as the registered tab thumbnail, before
+		// freeing the HWND. Bulk closes must not leave blank standalone entries.
+		taskbar->DeleteTab(proxy);
+	}
+	::DestroyWindow(proxy);
 }
 
 void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {

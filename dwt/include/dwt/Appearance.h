@@ -108,6 +108,19 @@ public:
 	bool isHighContrast() const { return highContrast; }
 	bool isManual() const { return dark && !highContrast; }
 	unsigned getGeneration() const { return generation; }
+	bool isUpdating() const { return updateDepth != 0; }
+
+	/** Defer explicit synchronous repaints until all theme colors and fonts agree.
+	 * Nested scopes share a single final repaint of the application windows. */
+	class UpdateScope {
+	public:
+		explicit UpdateScope(Appearance& owner) : owner(owner) { ++owner.updateDepth; }
+		~UpdateScope();
+		UpdateScope(const UpdateScope&) = delete;
+		UpdateScope& operator=(const UpdateScope&) = delete;
+	private:
+		Appearance& owner;
+	};
 
 	const Palette& getPalette() const { return active; }
 	COLORREF getContentBackground() const;
@@ -140,6 +153,7 @@ private:
 	bool handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal);
 	void updateActivePalette();
 	void changed();
+	void finishUpdate();
 	void scheduleSystemRefresh(bool forceApply);
 
 	static Palette sanitize(Palette palette);
@@ -156,6 +170,7 @@ private:
 	bool systemRefreshPending;
 	bool systemRefreshRequiresApply;
 	unsigned generation;
+	unsigned updateDepth = 0;
 	std::vector<Widget*> widgets;
 	CallbackList callbacks;
 	BrushPtr backgroundBrush;

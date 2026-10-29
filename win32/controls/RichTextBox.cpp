@@ -208,6 +208,9 @@ void RichTextBox::refreshMessageStyles() {
 		SETTEXTEX config { ST_SELECTION, CP_ACP };
 		sendMessage(EM_SETTEXTEX, reinterpret_cast<WPARAM>(&config), reinterpret_cast<LPARAM>(rtf.c_str()));
 		const auto change = static_cast<int>(length()) - previousLength;
+		// Color/font changes normally preserve length. Avoid walking the whole
+		// remaining history for every unchanged message.
+		if(change == 0) continue;
 		for(auto position : { &restore.selection.first, &restore.selection.second }) {
 			if(*position >= message.end) *position += change;
 			else if(*position > message.begin) *position = std::min(*position, message.end + change);

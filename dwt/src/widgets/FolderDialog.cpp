@@ -31,6 +31,7 @@
 */
 
 #include <dwt/widgets/FolderDialog.h>
+#include <dwt/util/win32/ComPtr.h>
 #include <dwt/util/win32/FileDialog.h>
 
 #include <utility>

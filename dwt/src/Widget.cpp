@@ -149,10 +149,12 @@ void Widget::setHandle(HWND h) {
 }
 
 bool Widget::redrawWindow(UINT flags) {
+	if(getAppearance().isUpdating()) flags &= ~(RDW_UPDATENOW | RDW_ERASENOW);
 	return ::RedrawWindow(handle(), nullptr, nullptr, flags) != FALSE;
 }
 
 bool Widget::redrawWindow(const Rectangle& rect, UINT flags) {
+	if(getAppearance().isUpdating()) flags &= ~(RDW_UPDATENOW | RDW_ERASENOW);
 	RECT rc = rect;
 	return ::RedrawWindow(handle(), &rc, nullptr, flags) != FALSE;
 }

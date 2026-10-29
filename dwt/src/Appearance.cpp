@@ -810,12 +810,29 @@ void Appearance::updateActivePalette() {
 }
 
 void Appearance::changed() {
+	UpdateScope update(*this);
 	++generation;
 	applyAll();
 	const std::vector<Callback> copy(callbacks.begin(), callbacks.end());
 	for(const auto& callback: copy) {
 		callback();
 	}
+}
+
+Appearance::UpdateScope::~UpdateScope() {
+	owner.finishUpdate();
+}
+
+void Appearance::finishUpdate() {
+	if(--updateDepth != 0) return;
+	// All callbacks have finished before any window presents the new theme.
+	::EnumThreadWindows(::GetCurrentThreadId(), [](HWND window, LPARAM) -> BOOL {
+		if(hwnd_cast<Widget*>(window) && ::IsWindowVisible(window)) {
+			::RedrawWindow(window, nullptr, nullptr,
+				RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
+		}
+		return TRUE;
+	}, 0);
 }
 
 void Appearance::scheduleSystemRefresh(bool forceApply) {

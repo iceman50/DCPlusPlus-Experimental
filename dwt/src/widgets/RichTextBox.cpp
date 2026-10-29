@@ -38,6 +38,8 @@
 #include <dwt/Point.h>
 #include <dwt/util/check.h>
 #include <dwt/util/HoldRedraw.h>
+#include <dwt/util/win32/ComPtr.h>
+#include <tom.h>
 
 #include <dwt/LibraryLoader.h>
 
@@ -461,19 +463,63 @@ void RichTextBox::updateColors(COLORREF text, COLORREF background, bool updateFo
 	util::HoldRedraw hold { this };
 	const auto selection = getCaretPosRange();
 	auto scrollPos = getScrollPos();
+	util::win32::ComPtr<IUnknown> ole;
+	util::win32::ComPtr<ITextDocument> document;
+	// MinGW declares IID_ITextDocument but does not provide it in libuuid.
+	static const IID textDocumentId = { 0x8cc497c0, 0xa1df, 0x11ce, { 0x80, 0x98, 0x00, 0xaa, 0x00, 0x47, 0xbe, 0x5d } };
+	sendMessage(EM_GETOLEINTERFACE, 0, reinterpret_cast<LPARAM>(ole.put()));
+	if(ole) ole->QueryInterface(textDocumentId, reinterpret_cast<void**>(document.put()));
+	// WM_SETREDRAW suppresses painting; TOM also holds RichEdit's display updates
+	// while selections and formatting change repeatedly.
+	struct Thaw {
+		ITextDocument* document;
+		void finish() {
+			if(document) { long count; document->Unfreeze(&count); document = nullptr; }
+		}
+		~Thaw() { finish(); }
+	};
+	long freezeCount = 0;
+	Thaw thaw { document && document->Freeze(&freezeCount) == S_OK ? document.get() : nullptr };
 
 	/* when changing the global formatting of a Rich Edit, its per-character formatting properties
 	may become funky depending on how they were initially set (the RTF context depth, for example,
 	seems to matter). the solution is to gather colors beforehand and re-apply them after the
 	global changes. */
-	std::vector<CHARFORMAT2> formats(length());
-	size_t sel = 0;
-	for(auto& format: formats) {
-		setSelection(static_cast<int>(sel), static_cast<int>(sel + 1));
-		++sel;
-		format.cbSize = sizeof(CHARFORMAT2);
+	// Query uniform ranges, splitting only where the attributes we preserve
+	// differ. Long chat histories otherwise require two native calls per character.
+	constexpr DWORD preserved = CFM_COLOR | CFM_BACKCOLOR | CFM_LINK | CFM_UNDERLINE;
+	struct FormatRange { int begin, end; CHARFORMAT2 format; };
+	std::vector<FormatRange> formats;
+	const auto collect = [&](const auto& self, int begin, int end) -> void {
+		if(begin >= end) return;
+		CHARFORMAT2 format { sizeof(CHARFORMAT2) };
+		setSelection(begin, end);
 		sendMessage(EM_GETCHARFORMAT, SCF_SELECTION, reinterpret_cast<LPARAM>(&format));
+		format.dwMask &= preserved;
+		if(format.dwMask == preserved || end - begin == 1) {
+			formats.push_back({ begin, end, format });
+		} else {
+			const auto middle = begin + (end - begin) / 2;
+			self(self, begin, middle);
+			self(self, middle, end);
+		}
+	};
+	const int textLength = static_cast<int>(length());
+	int begin = 0;
+	if(document) {
+		util::win32::ComPtr<ITextRange> range;
+		while(begin < textLength) {
+			long end = begin;
+			if(document->Range(begin, begin, range.put()) != S_OK ||
+				range->MoveEnd(tomCharFormat, 1, nullptr) != S_OK ||
+				range->GetEnd(&end) != S_OK || end <= begin) break;
+			end = std::min<long>(end, textLength);
+			collect(collect, begin, static_cast<int>(end));
+			begin = static_cast<int>(end);
+		}
 	}
+	// Older controls or unsupported TOM operations retain the selection-based path.
+	collect(collect, begin, textLength);
 
 	if(updateFont) {
 		BaseType::setFontImpl();
@@ -492,17 +538,16 @@ void RichTextBox::updateColors(COLORREF text, COLORREF background, bool updateFo
 	sendMessage(EM_SETBKGNDCOLOR, 0, static_cast<LPARAM>(bgColor));
 
 	// restore custom colors.
-	sel = 0;
-	for(auto& format: formats) {
-		format.dwMask &= CFM_COLOR | CFM_BACKCOLOR | CFM_LINK | CFM_UNDERLINE;
+	for(auto& range: formats) {
+		auto& format = range.format;
 		if(format.dwMask) {
 			if(format.crTextColor == prevText) { format.crTextColor = textColor; }
 			if(format.crBackColor == prevBg) { format.crBackColor = bgColor; }
-			setSelection(static_cast<int>(sel), static_cast<int>(sel + 1));
+			setSelection(range.begin, range.end);
 			sendMessage(EM_SETCHARFORMAT, SCF_SELECTION, reinterpret_cast<LPARAM>(&format));
 		}
-		++sel;
 	}
+	thaw.finish();
 	setSelection(selection.first, selection.second);
 	setScrollPos(scrollPos);
 }

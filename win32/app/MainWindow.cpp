@@ -1525,6 +1525,7 @@ void MainWindow::handleSettings() {
 }
 
 void MainWindow::refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont) {
+	dwt::Appearance::UpdateScope update(dwt::Application::instance().getAppearance());
 	if(SETTING(MAIN_FONT) != previousFont) {
 		auto previous = UiFonts::font;
 		UiServices::initFont();

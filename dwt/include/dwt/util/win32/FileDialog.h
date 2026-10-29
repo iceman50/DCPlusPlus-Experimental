@@ -26,6 +26,7 @@
 #ifndef DWT_UTIL_WIN32_FILEDIALOG_H
 #define DWT_UTIL_WIN32_FILEDIALOG_H
 
+#include "ComPtr.h"
 #include "../../WindowsHeaders.h"
 #include "../../tstring.h"
 #include "../../resources/Font.h"
@@ -35,75 +36,6 @@
 #include <vector>
 
 namespace dwt { namespace util { namespace win32 {
-
-template<typename T>
-class ComPtr {
-public:
-	ComPtr() : value(nullptr) { }
-
-	explicit ComPtr(T* ptr, bool addRef = true) : value(ptr) {
-		if(value && addRef) {
-			value->AddRef();
-		}
-	}
-
-	ComPtr(const ComPtr& rhs) : value(rhs.value) {
-		if(value) {
-			value->AddRef();
-		}
-	}
-
-	ComPtr(ComPtr&& rhs) noexcept : value(rhs.value) {
-		rhs.value = nullptr;
-	}
-
-	~ComPtr() {
-		reset();
-	}
-
-	ComPtr& operator=(const ComPtr& rhs) {
-		if(this != &rhs) {
-			reset(rhs.value);
-		}
-		return *this;
-	}
-
-	ComPtr& operator=(ComPtr&& rhs) noexcept {
-		if(this != &rhs) {
-			reset();
-			value = rhs.value;
-			rhs.value = nullptr;
-		}
-		return *this;
-	}
-
-	T* get() const { return value; }
-	T** put() {
-		reset();
-		return &value;
-	}
-	T* operator->() const { return value; }
-	explicit operator bool() const { return value != nullptr; }
-
-	void reset(T* ptr = nullptr, bool addRef = true) {
-		if(ptr && addRef) {
-			ptr->AddRef();
-		}
-		if(value) {
-			value->Release();
-		}
-		value = ptr;
-	}
-
-	T* detach() {
-		auto result = value;
-		value = nullptr;
-		return result;
-	}
-
-private:
-	T* value;
-};
 
 typedef ComPtr<IShellItem> ShellItemPtr;
 
