@@ -2,14 +2,22 @@
 #include "stdafx.h"
 
 #include <win32/app/SingleInstance.h>
+#include <win32/app/UiServices.h>
 #include <win32/appearance/ColorUtil.h>
 #include <win32/controls/TableLayout.h>
 #include <win32/frames/chat/ChatCommands.h>
 #include <win32/frames/chat/ChatText.h>
 #include <win32/services/LinkActions.h>
+#include <win32/dialogs/ParamDlg.h>
+#include <win32/settings/connection/BandwidthLimitPage.h>
+#include <dwt/widgets/Window.h>
+#include <dwt/widgets/Spinner.h>
 #include <dcpp/app/ResourceManager.h>
 #include <dcpp/search/Magnet.h>
 #include <dcpp/settings/SettingsManager.h>
+#include <dcpp/hub/ClientManager.h>
+#include <dcpp/system/TimerManager.h>
+#include <dcpp/transfer/ThrottleManager.h>
 #include <cstdio>
 #include <stdexcept>
 
@@ -18,6 +26,69 @@ const UINT SingleInstance::WMU_WHERE_ARE_YOU = WM_APP + 180;
 namespace {
 void check(bool condition, const char* message) {
 	if(!condition) throw std::runtime_error(message);
+}
+
+BOOL CALLBACK collectLimitControls(HWND hwnd, LPARAM data) {
+	reinterpret_cast<std::vector<HWND>*>(data)->push_back(hwnd);
+	return TRUE;
+}
+
+void manualLimitControls() {
+	SettingsManager::getInstance()->setDefault(SettingsManager::MAIN_FONT, "Segoe UI,-12,400,0,1");
+	UiServices::initFont();
+	auto window = new dwt::Window();
+	auto seed = dwt::Window::Seed();
+	seed.style &= ~WS_VISIBLE;
+	window->create(seed);
+	{
+		ParamDlg dialog(window, L"Download limit");
+		dialog.addIntTextBox(L"New limit (KiB/s) (0 = infinite)", L"0", 0, ThrottleManager::MAX_LIMIT);
+		// Create the real controls without showing a modal window or touching a running client.
+		dialog.create(dwt::ModalDialog::Seed(dwt::Point(365, 0)));
+		std::vector<HWND> children;
+		EnumChildWindows(dialog.handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
+		HWND spinner = nullptr, ok = nullptr;
+		for(auto child: children) {
+			if(dwt::hwnd_cast<dwt::Spinner*>(child)) spinner = child;
+			if(GetDlgCtrlID(child) == IDOK) ok = child;
+		}
+		check(spinner && ok, "Manual limit dialog controls were not created");
+		int lower = -1, upper = -1;
+		SendMessage(spinner, UDM_GETRANGE32, reinterpret_cast<WPARAM>(&lower), reinterpret_cast<LPARAM>(&upper));
+		check(lower == 0 && upper == 16777216, "Manual limit dialog still uses the old cap");
+		auto edit = reinterpret_cast<HWND>(SendMessage(spinner, UDM_GETBUDDY, 0, 0));
+		for(int value: { 1048577, 2097152, 16777217, 16777216 }) {
+			SetWindowTextW(edit, std::to_wstring(value).c_str());
+			check(SendMessage(spinner, UDM_GETPOS32, 0, 0) == std::min(value, 16777216),
+				"Manual input was clamped to the wrong limit");
+		}
+		SendMessage(ok, BM_CLICK, 0, 0);
+		check(dialog.getValue() == L"16777216", "Manual limit dialog did not return the full 16 GiB/s value");
+		DestroyWindow(dialog.handle());
+	}
+	{
+		auto page = new BandwidthLimitPage(window);
+		std::vector<HWND> children;
+		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
+		int limits = 0;
+		for(auto child: children) {
+			if(!dwt::hwnd_cast<dwt::Spinner*>(child)) continue;
+			int lower = -1, upper = -1;
+			SendMessage(child, UDM_GETRANGE32, reinterpret_cast<WPARAM>(&lower), reinterpret_cast<LPARAM>(&upper));
+			if(upper == 16777216) {
+				++limits;
+				auto edit = reinterpret_cast<HWND>(SendMessage(child, UDM_GETBUDDY, 0, 0));
+				SetWindowTextW(edit, L"16777216");
+			}
+		}
+		check(limits == 4, "Bandwidth settings did not expose four 16 GiB/s controls");
+		page->write();
+		for(auto key: { SettingsManager::MAX_DOWNLOAD_SPEED_MAIN, SettingsManager::MAX_UPLOAD_SPEED_MAIN,
+			SettingsManager::MAX_DOWNLOAD_SPEED_ALTERNATE, SettingsManager::MAX_UPLOAD_SPEED_ALTERNATE }) {
+			check(SettingsManager::getInstance()->get(key) == 16777216, "Bandwidth settings lost a manually entered limit");
+		}
+	}
+	DestroyWindow(window->handle());
 }
 
 void tableSettings() {
@@ -49,12 +120,21 @@ void tableSettings() {
 
 void chatAndLinks() {
 	for(const auto* limitCommand: { L"/upload ", L"/download " }) {
-		for(const auto* invalidLimit: { L"-1", L"2097152", L"4294967296", L"999999999999999999999999999999" }) {
+		for(const auto* invalidLimit: { L"-1", L"16777217", L"4294967296", L"999999999999999999999999999999" }) {
 			dwt::tstring command = dwt::tstring(limitCommand) + invalidLimit;
 			dwt::tstring parameter, message, status;
 			bool thirdPerson = false;
 			check(ChatCommands::checkCommand(command, parameter, message, status, thirdPerson), "Limit command was not recognized");
 			check(status == T_("Invalid speed value"), "Out-of-range limit command was not rejected");
+		}
+		for(int rate: { 2097152, 4194304, 16777216, 0 }) {
+			dwt::tstring command = dwt::tstring(limitCommand) + std::to_wstring(rate);
+			dwt::tstring parameter, message, status;
+			bool thirdPerson = false;
+			check(ChatCommands::checkCommand(command, parameter, message, status, thirdPerson), "Limit command was not recognized");
+			check(status != T_("Invalid speed value"), "Supported high limit was rejected");
+			check((command == L"upload" ? ThrottleManager::getUpLimit() : ThrottleManager::getDownLimit()) == rate,
+				"High limit command did not preserve the requested rate");
 		}
 	}
 	dwt::tstring command = L"/me waves hello", parameter, message, status;
@@ -86,14 +166,20 @@ int dwtMain(dwt::Application&) {
 	try {
 		ResourceManager::newInstance();
 		SettingsManager::newInstance();
+		TimerManager::newInstance();
+		ClientManager::newInstance();
 		tableSettings();
 		chatAndLinks();
+		manualLimitControls();
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(0, 0, 0))) == RGB(0, 0, 0), "Black color conversion changed");
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(255, 255, 255))) == RGB(255, 255, 255), "White color conversion changed");
 		check(ColorUtil::modRed(RGB(250, 100, 100), 20) == RGB(255, 85, 85), "Color overflow adjustment changed");
+		ClientManager::deleteInstance();
+		TimerManager::getInstance()->shutdown();
+		TimerManager::deleteInstance();
 		SettingsManager::deleteInstance();
 		ResourceManager::deleteInstance();
-		std::puts("UI table settings, chat commands, magnets and color helpers passed.");
+		std::puts("UI table settings, chat commands, manual 16 GiB/s limit controls, magnets and color helpers passed.");
 		return 0;
 	} catch(const std::exception& e) {
 		std::fprintf(stderr, "%s\n", e.what());

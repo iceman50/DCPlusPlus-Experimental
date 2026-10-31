@@ -17,8 +17,8 @@
 
 namespace dcpp { namespace TransferRate {
 
-// Settings remain in KiB/s. Raising this policy limit is a separate change.
-constexpr int MAX_LIMIT_KIB = 1024 * 1024; // 1 GiB/s
+// Settings remain in KiB/s; token budgets and advertised rates use 64-bit bytes/s.
+constexpr int MAX_LIMIT_KIB = 16 * 1024 * 1024; // 16 GiB/s
 
 constexpr int64_t fromKiB(int rate) noexcept {
 	return static_cast<int64_t>(rate) * 1024;
