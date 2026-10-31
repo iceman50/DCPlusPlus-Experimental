@@ -17,150 +17,164 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/util/Util.h>
-#include <win32/appearance/IconManager.h>
 #include <win32/app/SplashWindow.h>
-#include <dwt/resources/DibBitmap.h>
-
+#include <win32/appearance/IconManager.h>
+#include <win32/resource.h>
+#include <dcpp/settings/SettingsManager.h>
 #include <dcpp/text/format.h>
 #include <dcpp/text/Text.h>
 #include <dcpp/version.h>
+#include <dwt/Appearance.h>
+#include <dwt/resources/Brush.h>
+#include <dwt/resources/DibBitmap.h>
+#include <dwt/resources/Font.h>
+#include <cmath>
 
-#include <dwt/DWTException.h>
-#include <dwt/widgets/ProgressBar.h>
+SplashWindow::SplashWindow() : dwt::Window(nullptr), started(GetTickCount64()) {
+	Seed seed(_T(APPNAME) _T(" ") _T(VERSIONSTRING));
+	seed.style = WS_POPUP;
+	seed.exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+	create(seed);
+	setFrameRendering(dwt::Frame::FrameRendering::Native);
+	setFont(nullptr);
+	status = T_("Starting up...");
+	pendingStatus = status;
+	enableAccessibility();
+	setAccessibleName(_T(APPNAME) _T(" ") _T(VERSIONSTRING));
+	setAccessibleHelpText(status);
+	onClosing([this] { return finished; });
+	onPainting([this](dwt::PaintCanvas& canvas) { draw(canvas); });
+	onPrinting([this](dwt::Canvas& canvas) { draw(canvas); });
+	onRaw([](WPARAM, LPARAM) -> LRESULT { return 1; }, dwt::Message(WM_ERASEBKGND));
+	onDpiChanged([this](const dwt::DpiChangedEvent& event) { updateLayout(event.newDpi); });
+	updateLayout(getDpi());
+	// Fast startup never flashes a splash; slow startup has no minimum display time.
+	setTimer([this] {
+		if(!getVisible() && settingsReady && GetTickCount64() - started >= 350)
+			::ShowWindow(handle(), SW_SHOWNOACTIVATE);
+		return !getVisible();
+	}, 50, 1);
+}
 
-#include <win32/resource.h>
+SplashWindow::~SplashWindow() = default;
 
-SplashWindow::SplashWindow() :
-	dwt::Window(0),
-	logoRot(0),
-	progress(0)
-{
-	// 256x icons only work on >= Vista. on failure, try loading a 48x image.
-	try {
-		iconSize = 256;
-		icon = IconManager::load(IDI_DCPP, iconSize);
-	} catch(const dwt::DWTException&) {
-		iconSize = 48;
-		icon = IconManager::load(IDI_DCPP, iconSize);
+void SplashWindow::settingsLoaded() {
+	// Snapshot on the loader thread after SettingsManager::load(), before posting.
+	const auto setting = SETTING(THEME_MODE);
+	const auto mode = setting == SettingsManager::THEME_LIGHT ? dwt::Appearance::Mode::Light :
+		setting == SettingsManager::THEME_DARK ? dwt::Appearance::Mode::Dark : dwt::Appearance::Mode::System;
+	const dwt::Appearance::Palette palette {
+		static_cast<COLORREF>(SETTING(THEME_BACKGROUND_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_SURFACE_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_TEXT_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_DISABLED_TEXT_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_BORDER_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_ACCENT_COLOR)),
+		static_cast<COLORREF>(SETTING(THEME_HIGHLIGHT_TEXT_COLOR))
+	};
+	callAsync([this, mode, palette] {
+		dwt::Application::instance().getAppearance().configure(mode, palette);
+		settingsReady = true;
+	});
+}
+
+void SplashWindow::finish() {
+	finished = true;
+	close();
+}
+
+void SplashWindow::operator()(const string& stage) {
+	std::lock_guard<std::mutex> lock(pendingMutex);
+	pendingStatus = str(TF_("Loading: %1%") % Text::toT(stage));
+	queueUpdate();
+}
+
+void SplashWindow::operator()(float value) {
+	std::lock_guard<std::mutex> lock(pendingMutex);
+	// Keep completed work visible even across stages and invalid/stale updates.
+	if(!std::isfinite(value)) return;
+	pendingProgress = std::max(pendingProgress, std::clamp(value, 0.0f, 1.0f));
+	queueUpdate();
+}
+
+void SplashWindow::queueUpdate() {
+	if(updatePending) return;
+	updatePending = true;
+	callAsync([this] {
+		{
+			std::lock_guard<std::mutex> lock(pendingMutex);
+			status = pendingStatus;
+			progress = pendingProgress;
+			updatePending = false;
+		}
+		setAccessibleHelpText(status);
+		redraw();
+	});
+}
+
+void SplashWindow::appearanceChanged() {
+	dwt::Window::appearanceChanged();
+	redraw();
+}
+
+void SplashWindow::updateLayout(unsigned dpi) {
+	if(fontDpi != dpi) {
+		fontDpi = dpi;
+		auto lf = getFont()->getLogFont();
+		lf.lfHeight = -pixels(26);
+		lf.lfWeight = FW_SEMIBOLD;
+		titleFont = new dwt::Font(lf);
+		lf.lfHeight = -pixels(13);
+		lf.lfWeight = FW_NORMAL;
+		detailFont = new dwt::Font(lf);
+		icon = IconManager::load(IDI_DCPP, pixels(80));
 	}
-
-	{
-		// create a layered window (WS_EX_LAYERED); it will be shown later with UpdateLayeredWindow.
-		Seed seed(_T(APPNAME) _T(" ") _T(VERSIONSTRING));
-		seed.style = WS_POPUP | WS_VISIBLE;
-		seed.exStyle = WS_EX_LAYERED;
-		create(seed);
-	}
-
-	setFont(0); // default font since settings haven't been loaded yet
-
-	// start showing when loading settings. language info isn't loaded at this point...
-	operator()(Text::fromT(_T(APPNAME)));
+	MONITORINFO monitor { sizeof(monitor) };
+	::GetMonitorInfo(::MonitorFromWindow(handle(), MONITOR_DEFAULTTOPRIMARY), &monitor);
+	const auto width = pixels(440), height = pixels(300);
+	::SetWindowPos(handle(), nullptr,
+		monitor.rcWork.left + (monitor.rcWork.right - monitor.rcWork.left - width) / 2,
+		monitor.rcWork.top + (monitor.rcWork.bottom - monitor.rcWork.top - height) / 2,
+		width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+	redraw();
 }
 
-SplashWindow::~SplashWindow() {
-}
-
-void SplashWindow::operator()(const string& status) {
-	this->status = str(TF_("Loading DC++, please wait... (%1%)") % Text::toT(status));
-	progress = 0;
-	callAsync([this] { draw(); });
-}
-
-void SplashWindow::operator()(float progress) {
-	this->progress = progress;
-	callAsync([this] { draw(); });
-}
-
-void SplashWindow::draw() {
-	auto text = status;
-	if(progress) { text += _T(" [") + Text::toT(Util::toString(progress * 100.)) + _T("%]"); }
-	logoRot = (logoRot + 1) % 4;
-
-	// set up sizes.
-	const long spacing { 6 }; // space between the icon and the text
-	const dwt::Point padding { 4, 4 }; // padding borders around the text
-	const auto textSize = getTextSize(text) + padding + padding;
-	SIZE size { std::max(iconSize, textSize.x), iconSize + spacing + textSize.y };
-	dwt::Rectangle textRect { std::max(iconSize - textSize.x, 0L) / 2, size.cy - textSize.y, textSize.x, textSize.y };
-	dwt::Rectangle iconRect { std::max(textSize.x - iconSize, 0L) / 2, 0, iconSize, iconSize };
-
-	dwt::UpdateCanvas windowCanvas { this };
-	dwt::CompatibleCanvas canvas { windowCanvas.handle() };
-
-	// create the bitmap with CreateDIBSection to have access to its bits (used when drawing text).
-	dwt::DibBitmap bitmap(windowCanvas.handle(), dwt::Point(size.cx, size.cy), dwt::DibBitmap::RowOrder::TopDown);
+void SplashWindow::draw(dwt::Canvas& target) {
+	const auto size = getClientSize();
+	if(size.x <= 0 || size.y <= 0 || !titleFont) return;
+	dwt::CompatibleCanvas canvas(target.handle());
+	dwt::DibBitmap bitmap(target.handle(), size, dwt::DibBitmap::RowOrder::TopDown);
 	if(!bitmap.handle()) return;
-	auto bits = static_cast<RGBQUAD*>(bitmap.pixels());
-	auto select(canvas.select(bitmap));
-
-	auto bit = [&](long x, long y) -> RGBQUAD& { return bits[x + y * size.cx]; };
-
-	// draw the icon.
-	canvas.drawIcon(icon, iconRect);
-
-	// rotate the icon by swapping its bits, quarter by quarter (just because I can).
-	auto iconBit = [&](long x, long y) -> RGBQUAD& { return bit(iconRect.left() + x, iconRect.top() + y); };
-	for(long y = 0; y < iconSize / 2; ++y) {
-		for(long x = 0; x < iconSize / 2; ++x) {
-			auto &bit1 = iconBit(x, y), &bit3 = iconBit(iconSize - 1 - x, iconSize - 1 - y),
-				&bit2 = iconBit(y, iconSize - 1 - x), &bit4 = iconBit(iconSize - 1 - y, x);
-			switch(logoRot) {
-			case 0: break; // identity
-			case 1: // 90
-				{
-					auto prev = bit1;
-					bit1 = bit2;
-					bit2 = bit3;
-					bit3 = bit4;
-					bit4 = prev;
-					break;
-				}
-			case 2: // 180
-				{
-					std::swap(bit1, bit3);
-					std::swap(bit2, bit4);
-					break;
-				}
-			case 3: // 270
-				{
-					auto prev = bit1;
-					bit1 = bit4;
-					bit4 = bit3;
-					bit3 = bit2;
-					bit2 = prev;
-					break;
-				}
-			}
-		}
+	auto selectBitmap = canvas.select(bitmap);
+	const auto& appearance = dwt::Application::instance().getAppearance();
+	auto palette = appearance.getPalette();
+	if(!appearance.isManual()) {
+		palette.background = ::GetSysColor(COLOR_WINDOW);
+		palette.text = ::GetSysColor(COLOR_WINDOWTEXT);
+		palette.disabledText = ::GetSysColor(COLOR_GRAYTEXT);
+		palette.border = ::GetSysColor(COLOR_WINDOWFRAME);
 	}
-
-	// draw text borders and fill the text background.
-	::RECT rc = textRect;
-	::DrawEdge(canvas.handle(), &rc, EDGE_BUMP, BF_RECT | BF_MIDDLE);
-
-	// draw the text.
-	auto bkMode(canvas.setBkMode(true));
-	canvas.setTextColor(dwt::Color::predefined(COLOR_WINDOWTEXT));
-	auto selectFont(canvas.select(*getFont()));
-	canvas.drawText(text.c_str(), textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-	// set bits within the text rectangle to not be transparent. rgbReserved is the alpha value.
-	// to simulate a progress bar, some bits are made to be semi-opaque.
-	long pos = textRect.left() + progress * static_cast<float>(textRect.width());
-	for(long y = textRect.top(), yn = textRect.bottom(); y < yn; ++y) {
-		for(long x = textRect.left(); x < pos; ++x) {
-			bit(x, y).rgbReserved = 191;
-		}
-		for(long x = pos, xn = textRect.right(); x < xn; ++x) {
-			bit(x, y).rgbReserved = 255;
-		}
-	}
-
-	auto desktop = getPrimaryDesktopSize();
-	POINT pt { std::max(desktop.x - size.cx, 0L) / 2, std::max(desktop.y - size.cy - iconSize, 0L) / 2 };
-	POINT canvasPt { 0 };
-	BLENDFUNCTION blend { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-	::UpdateLayeredWindow(handle(), windowCanvas.handle(), &pt, &size, canvas.handle(), &canvasPt, 0, &blend, ULW_ALPHA);
+	const auto background = palette.background;
+	const auto blue = appearance.isHighContrast() ? palette.accent : RGB(22, 136, 240);
+	canvas.fill(dwt::Rectangle(0, 0, size.x, size.y), dwt::Brush(palette.border));
+	const auto edge = pixels(1);
+	canvas.fill(dwt::Rectangle(edge, edge, size.x - 2 * edge, size.y - 2 * edge), dwt::Brush(background));
+	canvas.drawIcon(icon, dwt::Rectangle((size.x - pixels(80)) / 2, pixels(34), pixels(80), pixels(80)));
+	auto bkMode = canvas.setBkMode(true);
+	auto text = [&](const tstring& value, int top, int height, const dwt::FontPtr& font, COLORREF color, UINT align) {
+		auto selectFont = canvas.select(*font);
+		canvas.setTextColor(color);
+		auto rect = dwt::Rectangle(pixels(32), pixels(top), size.x - pixels(64), pixels(height));
+		canvas.drawText(value, rect, align | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+	};
+	text(_T(APPNAME), 128, 36, titleFont, palette.text, DT_CENTER);
+	text(_T(VERSIONSTRING), 168, 22, detailFont, palette.disabledText, DT_CENTER);
+	text(T_("Starting up..."), 196, 22, detailFont, palette.disabledText, DT_CENTER);
+	text(status, 240, 22, detailFont, palette.text, DT_LEFT);
+	const long left = pixels(32), top = pixels(272), width = size.x - pixels(64), height = pixels(4);
+	const auto track = appearance.isHighContrast() ? palette.background :
+		dwt::Appearance::blend(background, palette.text, 32);
+	canvas.fill(dwt::Rectangle(left, top, width, height), dwt::Brush(track));
+	canvas.fill(dwt::Rectangle(left, top, static_cast<long>(width * progress), height), dwt::Brush(blue));
+	::BitBlt(target.handle(), 0, 0, size.x, size.y, canvas.handle(), 0, 0, SRCCOPY);
 }

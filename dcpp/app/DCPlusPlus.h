@@ -27,6 +27,7 @@ using std::function;
 using std::string;
 
 void startup();
+// progressF reports cumulative loading progress (0..1), not a per-stage percentage.
 void load(function<void (const string&)> stepF, function<void (float)> progressF);
 void shutdown();
 

@@ -21,6 +21,7 @@
 #include <dcpp/typedefs.h>
 
 #include <dwt/widgets/Window.h>
+#include <mutex>
 
 class SplashWindow : public dwt::Window  {
 public:
@@ -29,16 +30,29 @@ public:
 
 	void operator()(const string& status);
 	void operator()(float progress);
+	// Called by the loader once settings are available, before its first stage.
+	void settingsLoaded();
+	void finish();
 
 private:
-	void draw();
+	void queueUpdate(); // pendingMutex must be held
+	void updateLayout(unsigned dpi);
+	int pixels(int value) const { return ::MulDiv(value, fontDpi, 96); }
+	void draw(dwt::Canvas& canvas);
+	void appearanceChanged() override;
 
-	long iconSize;
 	dwt::IconPtr icon;
-	uint32_t logoRot;
+	dwt::FontPtr titleFont, detailFont;
+	unsigned fontDpi = 0;
+	ULONGLONG started;
+	bool settingsReady = false, finished = false;
 
 	tstring status;
-	float progress;
+	float progress = 0;
+	std::mutex pendingMutex;
+	tstring pendingStatus;
+	float pendingProgress = 0;
+	bool updatePending = false;
 };
 
 #endif

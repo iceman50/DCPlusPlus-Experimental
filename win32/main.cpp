@@ -146,9 +146,19 @@ int dwtMain(dwt::Application& app) {
 		struct Loader : Thread {
 			Loader(SplashWindow& splash) : Thread(), splash(splash) { }
 			int run() {
-				load([this](const string& str) { this->splash(str); }, [this](float progress) { this->splash(progress); });
+				bool settingsReady = false;
+				load([this, &settingsReady](const string& str) {
+					if(!settingsReady) {
+						this->splash.settingsLoaded();
+						settingsReady = true;
+					}
+					this->splash(str);
+				}, [this](float progress) {
+					// Leave room for UI creation after the core loading stages finish.
+					this->splash(progress * 0.9f);
+				});
 
-				splash(Text::fromT(_T(APPNAME)));
+				splash(_("Starting user interface"));
 
 				dwt::Application::instance().callAsync([this] {
 					if(ResourceManager::getInstance()->isRTL()) {
@@ -162,7 +172,7 @@ int dwtMain(dwt::Application& app) {
 					MainWindow* wnd = new MainWindow;
 					UiServices::mainWindow = wnd;
 
-					this->splash.close();
+					this->splash.finish();
 				});
 				return 0;
 			}

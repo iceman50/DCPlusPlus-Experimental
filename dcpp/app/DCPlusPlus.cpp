@@ -46,6 +46,7 @@
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/user/UserMatchManager.h>
 #include <dcpp/app/WindowManager.h>
+#include <cmath>
 
 extern "C" int _nl_msg_cat_cntr;
 
@@ -118,28 +119,52 @@ void load(function<void (const string&)> stepF, function<void (float)> progressF
 			stepF(str);
 		}
 	};
+	// Give each loading stage a fixed part of the bar. This measures completed
+	// work, not elapsed time; stages without estimates hold their position.
+	const bool loadCountries = SETTING(GET_USER_COUNTRY);
+	const float stageCount = loadCountries ? 7.0f : 6.0f;
+	unsigned completedStages = 0;
+	float reportedProgress = 0;
+	auto reportProgress = [&](float value) {
+		if(!std::isfinite(value)) return;
+		reportedProgress = std::max(reportedProgress,
+			(completedStages + std::clamp(value, 0.0f, 1.0f)) / stageCount);
+		if(progressF) progressF(reportedProgress);
+	};
+	auto completeStage = [&] {
+		reportProgress(1);
+		++completedStages;
+	};
+	reportProgress(0);
 
 	announce(_("Users"));
 	ClientManager::getInstance()->loadUsers();
 	FavoriteManager::getInstance()->load();
+	completeStage();
 
 	PluginManager::getInstance()->loadPlugins(stepF);
+	completeStage();
 
 	announce(_("Security certificates"));
 	CryptoManager::getInstance()->loadCertificates();
+	completeStage();
 
 	announce(_("Hash database"));
-	HashManager::getInstance()->startup(progressF);
+	HashManager::getInstance()->startup(reportProgress);
+	completeStage();
 
 	announce(_("Shared Files"));
-	ShareManager::getInstance()->startupRefresh(progressF);
+	ShareManager::getInstance()->startupRefresh(reportProgress);
+	completeStage();
 
 	announce(_("Download Queue"));
-	QueueManager::getInstance()->loadQueue(progressF);
+	QueueManager::getInstance()->loadQueue(reportProgress);
+	completeStage();
 
-	if(SETTING(GET_USER_COUNTRY)) {
+	if(loadCountries) {
 		announce(_("Country information"));
 		GeoManager::getInstance()->init();
+		completeStage();
 	}
 }
 
