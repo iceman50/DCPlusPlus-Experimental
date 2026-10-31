@@ -17,6 +17,7 @@ public:
 	explicit ClientFrame(Frame* owner);
 	~ClientFrame() override;
 	void refresh();
+	void releaseFrameInput();
 	void layout() override;
 	long height() const { return frameHeight; }
 	bool menuFocused() const;

@@ -475,6 +475,40 @@ int dwtMain(dwt::Application& app) {
 			window->sendMessage(WM_DWMCOMPOSITIONCHANGED);
 			check(!(GetWindowLongPtr(hwnd, GWL_STYLE) & WS_CAPTION), "Theme/composition change restored native buttons");
 		}
+		const auto lightPalette = dwt::Appearance::Palette {
+			RGB(245, 245, 245), RGB(255, 255, 255), RGB(25, 25, 25),
+			RGB(110, 110, 110), RGB(175, 175, 175), RGB(0, 90, 180), RGB(255, 255, 255)
+		};
+		const auto customBounds = window->getContentRect();
+		app.getAppearance().configure(dwt::Appearance::Mode::Light, lightPalette,
+			dwt::Appearance::Rendering::CustomPalette);
+		check(!app.getAppearance().isDark() && window->usesClientFrame(), "Custom light mode lost client framing");
+		check(background(caption) == lightPalette.surface, "Custom light caption ignored the palette");
+		check(buttonPixel(close, 0, 2, 2) == lightPalette.surface, "Custom light caption button ignored the palette");
+		check(buttonPixel(close, CDIS_HOT, 2, 2) == RGB(232, 17, 35), "Custom light mode changed close-button hover handling");
+		checkSeparator(caption, lightPalette.border);
+		check(window->getContentRect().top() == customBounds.top(), "Palette-only switch changed the caption layout");
+		for(int i = 0; i < 3; ++i) {
+			edit->setFocus();
+			if(i == 1) window->sendMessage(WM_SYSCOMMAND, SC_KEYMENU, 0);
+			if(i == 2) SetFocus(close);
+			window->setFrameRendering(dwt::Frame::FrameRendering::Native);
+			pump();
+			check(!window->usesClientFrame() && !IsWindowVisible(caption), "Native frame retained custom caption controls");
+			check(window->getContentRect().top() == 0, "Native frame retained a client caption offset");
+			check(GetMenu(hwnd) == menu->handle() && IsWindowEnabled(hwnd), "Frame switch lost menu or enabled state");
+			check(GetFocus() == edit->handle(), "Native frame switch stole content focus");
+			window->sendMessage(WM_THEMECHANGED);
+			window->sendMessage(WM_DWMCOMPOSITIONCHANGED);
+			check(!window->usesClientFrame(), "System notification discarded native frame choice");
+			window->setFrameRendering(dwt::Frame::FrameRendering::Automatic);
+			pump();
+			check(window->usesClientFrame() && background(caption) == lightPalette.surface,
+				"Returning to automatic framing lost caption colors");
+			check(window->getContentRect().top() == customBounds.top(), "Frame switch changed caption/menu layout");
+			check(GetFocus() == edit->handle(), "Client frame switch stole content focus");
+		}
+		app.getAppearance().configure(dwt::Appearance::Mode::Dark, palette);
 		rebar->refresh();
 		status->refresh();
 		edit->resize(dwt::Rectangle(window->getContentRect().left() + 12, window->getContentRect().top() + rebar->getWindowSize().y + 12, 200, 30));

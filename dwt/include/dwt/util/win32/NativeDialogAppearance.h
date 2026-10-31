@@ -49,8 +49,8 @@ namespace util { namespace win32 {
  * Windows creates MessageBox, common-dialog and TaskDialog windows inside their
  * blocking show functions. This scoped object observes those windows on the
  * calling thread and applies the current DWT palette without changing their
- * command, focus, keyboard or accessibility behavior. It is a no-op in light,
- * system and high-contrast modes.
+ * command, focus, keyboard or accessibility behavior. It is a no-op unless
+ * Appearance::isManual() is true; high contrast always disables it.
  *
  * Standard dialog controls and conventional #32770 dialog frames are
  * palette-painted on every supported Windows version. The optional

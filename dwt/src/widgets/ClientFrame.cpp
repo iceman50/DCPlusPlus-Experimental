@@ -83,6 +83,28 @@ Button* ClientFrame::addCaptionButton(const tstring& label, UINT command) {
 	return button;
 }
 
+void ClientFrame::releaseFrameInput() {
+	// Reframing can hide the currently focused caption/menu button. Return input
+	// to content before hiding it, without activating an unrelated window.
+	const auto focus = ::GetFocus();
+	const auto target = menuFocused() ? previousFocus : captionFocus;
+	const auto capture = ::GetCapture();
+	if(capture == handle() || ::IsChild(handle(), capture)) ::ReleaseCapture();
+	if(focus == handle() || ::IsChild(handle(), focus)) {
+		if(target && ::IsWindow(target) && ::IsWindowVisible(target) &&
+			::IsWindowEnabled(target) && !::IsChild(handle(), target)) {
+			::SetFocus(target);
+		} else {
+			::SetFocus(owner->handle());
+		}
+	}
+	previousFocus = captionFocus = nullptr;
+	if(trackingFrame == this) {
+		nextMenu = -1;
+		::EndMenu();
+	}
+}
+
 void ClientFrame::refresh() {
 	NONCLIENTMETRICS metrics = { sizeof(NONCLIENTMETRICS) };
 	if(owner->getSystemParameters(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics)) {

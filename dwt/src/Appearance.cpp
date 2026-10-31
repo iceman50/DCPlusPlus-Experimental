@@ -533,7 +533,7 @@ Appearance::Palette Appearance::defaultPalette() {
 }
 
 Appearance::Appearance() :
-	mode(Mode::System), configured(defaultPalette()), active(configured),
+	mode(Mode::System), rendering(Rendering::Automatic), configured(defaultPalette()), active(configured),
 	highContrast(false), systemDark(false), dark(false), applying(false),
 	systemRefreshPending(false), systemRefreshRequiresApply(false), generation(1)
 {
@@ -550,7 +550,12 @@ Appearance::~Appearance() {
 }
 
 void Appearance::configure(Mode mode_, const Palette& palette) {
+	configure(mode_, palette, Rendering::Automatic);
+}
+
+void Appearance::configure(Mode mode_, const Palette& palette, Rendering rendering_) {
 	mode = mode_;
+	rendering = rendering_;
 	configured = sanitize(palette);
 	const bool stateChanged = refreshSystemState();
 	if(!stateChanged) {

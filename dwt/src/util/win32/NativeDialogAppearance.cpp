@@ -33,21 +33,20 @@
 
 #include <dwt/Appearance.h>
 #include <dwt/CanvasClasses.h>
-#include <dwt/LibraryLoader.h>
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Font.h>
 #include <dwt/resources/Pen.h>
 #include <dwt/tstring.h>
 #include <dwt/util/win32/Dpi.h>
+#include <dwt/util/win32/Dwm.h>
 #include <dwt/util/win32/NonClientPaint.h>
 
 #include <algorithm>
 #include <array>
 #include <commctrl.h>
-#include <cstring>
 #include <richedit.h>
 #include <tchar.h>
-#include <uxtheme.h>
+#include <dwt/util/win32/UxTheme.h>
 #include <vector>
 
 namespace dwt { namespace util { namespace win32 {
@@ -120,17 +119,6 @@ struct NativeWindowData {
 
 const UINT_PTR nativeDialogSubclassId = 0x44575441;
 
-typedef HRESULT (WINAPI* DwmSetWindowAttributeFunction)(HWND, DWORD, LPCVOID, DWORD);
-
-enum DwmWindowAttribute {
-	DWT_DWMWA_NCRENDERING_POLICY = 2
-};
-
-enum DwmNcRenderingPolicy {
-	DWT_DWMNCRP_USEWINDOWSTYLE,
-	DWT_DWMNCRP_DISABLED
-};
-
 struct CaptionButton {
 	int hitTest;
 	Rectangle bounds;
@@ -148,33 +136,6 @@ struct CaptionLayout {
 	bool rightToLeft;
 	bool toolWindow;
 };
-
-DwmSetWindowAttributeFunction getDwmSetWindowAttribute() {
-	static LibraryLoader library(_T("dwmapi.dll"), true);
-	static const auto function = [] {
-		DwmSetWindowAttributeFunction result = nullptr;
-		if(library.loaded()) {
-			const auto address = library.getProcAddress(
-				_T("DwmSetWindowAttribute"));
-			static_assert(sizeof(result) == sizeof(address),
-				"Function pointer representations must have equal size");
-			std::memcpy(&result, &address, sizeof(result));
-		}
-		return result;
-	}();
-	return function;
-}
-
-bool setNonClientRendering(HWND window, bool disabled) {
-	auto function = getDwmSetWindowAttribute();
-	if(!function) {
-		return false;
-	}
-	const int policy = disabled ? DWT_DWMNCRP_DISABLED :
-		DWT_DWMNCRP_USEWINDOWSTYLE;
-	return SUCCEEDED(function(window, DWT_DWMWA_NCRENDERING_POLICY,
-		&policy, sizeof(policy)));
-}
 
 tstring windowClass(HWND window) {
 	std::vector<TCHAR> value(128);
@@ -1306,14 +1267,14 @@ void configureNativeControl(HWND window, NativeWindowData& data) {
 		 * Each affected standard control is then painted here or through its
 		 * documented color messages. This is available on Windows 7 and does not
 		 * select a version-specific dark theme. */
-		::SetWindowTheme(window, L"", L"");
+		uxtheme::setWindowTheme(window, L"", L"");
 		break;
 	case NativeControl::Dialog:
 		/* A preserved common dialog owns its client theme. Disabling the root
 		 * theme also lets USER32 restore a classic caption button after Shell has
 		 * completed its initialization. The non-client frame is painted below. */
 		if(!appearance.preserveDialogClientPainting) {
-			::SetWindowTheme(window, L"", L"");
+			uxtheme::setWindowTheme(window, L"", L"");
 		}
 		break;
 	default:
@@ -1346,7 +1307,7 @@ void configureNativeControl(HWND window, NativeWindowData& data) {
 			::SetWindowLongPtr(window, GWL_STYLE,
 				::GetWindowLongPtr(window, GWL_STYLE) | WS_CLIPCHILDREN);
 		}
-		setNonClientRendering(window, true);
+		dwm::setNonClientRendering(window, DWMNCRP_DISABLED);
 		::SetWindowPos(window, nullptr, 0, 0, 0, 0,
 			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
 			SWP_FRAMECHANGED);
@@ -1590,7 +1551,7 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 	case WM_DWMCOMPOSITIONCHANGED:
 		if(data->control == NativeControl::Dialog) {
 			const auto result = ::DefSubclassProc(window, message, wParam, lParam);
-			setNonClientRendering(window, true);
+			dwm::setNonClientRendering(window, DWMNCRP_DISABLED);
 			redrawNonClient(window);
 			return result;
 		}
@@ -1737,7 +1698,7 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 	case WM_NCDESTROY:
 		{
 			if(data->manualNonClient) {
-				setNonClientRendering(window, false);
+				dwm::setNonClientRendering(window, DWMNCRP_USEWINDOWSTYLE);
 			}
 			const auto result = ::DefSubclassProc(window, message, wParam, lParam);
 			::RemoveWindowSubclass(window, nativeWindowProc,

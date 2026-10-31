@@ -34,7 +34,7 @@
 
 #include <dwt/Appearance.h>
 
-#include <uxtheme.h>
+#include <dwt/util/win32/UxTheme.h>
 
 namespace dwt {
 
@@ -174,9 +174,9 @@ void ToolTip::appearanceChanged() {
 	if(isManualAppearance()) {
 		// Native tooltip behavior and sizing are retained, while visual-style
 		// bitmaps are disabled so the palette messages are honored on Windows 7.
-		::SetWindowTheme(handle(), L"", L"");
+		util::win32::uxtheme::setWindowTheme(handle(), L"", L"");
 	} else {
-		::SetWindowTheme(handle(), nullptr, nullptr);
+		util::win32::uxtheme::setWindowTheme(handle(), nullptr, nullptr);
 	}
 	sendMessage(TTM_SETTIPBKCOLOR, background);
 	sendMessage(TTM_SETTIPTEXTCOLOR, foreground);

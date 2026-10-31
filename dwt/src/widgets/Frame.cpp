@@ -33,6 +33,7 @@
 #include <dwt/CanvasClasses.h>
 #include <dwt/DWTException.h>
 #include <dwt/resources/Brush.h>
+#include <dwt/util/win32/Dwm.h>
 
 #include "ClientFrame.h"
 
@@ -58,6 +59,12 @@ Frame::Frame(Widget* parent, Dispatcher& dispatcher) : Composite(parent, dispatc
 
 Frame::~Frame() {
 	// Child HWNDs (including ClientFrame) are destroyed by USER32 before us.
+}
+
+void Frame::setFrameRendering(FrameRendering rendering) {
+	if(frameRendering == rendering) return;
+	frameRendering = rendering;
+	updateCaptionAppearance();
 }
 
 Rectangle Frame::getContentRect() const {
@@ -157,7 +164,14 @@ bool Frame::handleMessage(const MSG& msg, LRESULT& result) {
 		result = 0;
 		return true;
 	}
-	if(!manualFrame) return handled;
+	if(!manualFrame) {
+		if(!changingFrame && (msg.message == WM_THEMECHANGED || msg.message == WM_DWMCOMPOSITIONCHANGED)) {
+			changingFrame = true;
+			updateNativeFrameAppearance();
+			changingFrame = false;
+		}
+		return handled;
+	}
 
 	switch(msg.message) {
 	case WM_INITMENUPOPUP:
@@ -222,9 +236,13 @@ void Frame::updateCaptionAppearance() {
 	const auto style = static_cast<DWORD>(::GetWindowLongPtr(handle(), GWL_STYLE));
 	const auto exStyle = static_cast<DWORD>(::GetWindowLongPtr(handle(), GWL_EXSTYLE));
 	// Child frames and intentionally captionless windows retain their own layout.
-	const bool manual = isManualAppearance() && !(style & WS_CHILD) && (manualFrame || (style & WS_CAPTION) == WS_CAPTION);
-	if(manual == manualFrame) return;
+	const bool manual = frameRendering == FrameRendering::Automatic && isManualAppearance() && !(style & WS_CHILD) && (manualFrame || (style & WS_CAPTION) == WS_CAPTION);
 	changingFrame = true;
+	updateNativeFrameAppearance();
+	if(manual == manualFrame) {
+		changingFrame = false;
+		return;
+	}
 	manualFrame = manual;
 	if(manual) {
 		captionStyle = style & WS_CAPTION;
@@ -237,7 +255,11 @@ void Frame::updateCaptionAppearance() {
 		::SetWindowLongPtr(handle(), GWL_EXSTYLE, exStyle & ~edgeStyle);
 		clientFrame->setVisible(true);
 	} else {
-		if(clientFrame) clientFrame->setVisible(false);
+		if(clientFrame) {
+			clientFrame->releaseFrameInput();
+			clientFrame->restoreSystemMenu();
+			clientFrame->setVisible(false);
+		}
 		::SetWindowLongPtr(handle(), GWL_STYLE, style | captionStyle);
 		::SetWindowLongPtr(handle(), GWL_EXSTYLE, exStyle | edgeStyle);
 	}
@@ -254,6 +276,23 @@ void Frame::updateCaptionAppearance() {
 	if(manual && clientFrame) clientFrame->refresh();
 	::PostMessage(handle(), frameLayoutMessage(), 0, 0);
 	redrawWindow(RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+void Frame::updateNativeFrameAppearance() {
+	const bool eligible = frameRendering == FrameRendering::Native && isManualAppearance() &&
+		!hasStyle(WS_CHILD) && (manualFrame || hasStyle(WS_CAPTION));
+	if(eligible) {
+		const auto& palette = getAppearance().getPalette();
+		// Try independently: older systems can support only part of this contract.
+		// A failed attribute must not prevent Windows from owning the native frame.
+		nativeFrameAppearanceApplied |= SUCCEEDED(util::win32::dwm::setDarkMode(handle(), getAppearance().isDark()));
+		nativeFrameAppearanceApplied |= SUCCEEDED(util::win32::dwm::setCaptionColor(handle(), palette.surface));
+		nativeFrameAppearanceApplied |= SUCCEEDED(util::win32::dwm::setTextColor(handle(), palette.text));
+		nativeFrameAppearanceApplied |= SUCCEEDED(util::win32::dwm::setBorderColor(handle(), palette.border));
+	} else if(nativeFrameAppearanceApplied) {
+		util::win32::dwm::resetFrameAppearance(handle());
+		nativeFrameAppearanceApplied = false;
+	}
 }
 
 }

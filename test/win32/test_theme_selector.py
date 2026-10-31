@@ -40,6 +40,17 @@ def main():
     user.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
     user.ShowWindow.argtypes = [w.HWND, c.c_int]
     user.SetWindowPos.argtypes = [w.HWND, w.HWND, c.c_int, c.c_int, c.c_int, c.c_int, w.UINT]
+    user.GetMenu.argtypes = [w.HWND]
+    user.GetMenu.restype = w.HMENU
+    user.GetSubMenu.argtypes = [w.HMENU, c.c_int]
+    user.GetSubMenu.restype = w.HMENU
+    user.GetMenuItemCount.argtypes = [w.HMENU]
+    user.GetMenuStringW.argtypes = [w.HMENU, w.UINT, w.LPWSTR, c.c_int, w.UINT]
+    user.GetWindowTextW.argtypes = [w.HWND, w.LPWSTR, c.c_int]
+    user.IsWindow.argtypes = [w.HWND]
+    user.IsWindowEnabled.argtypes = [w.HWND]
+    user.GetWindowLongPtrW.argtypes = [w.HWND, c.c_int]
+    user.GetWindowLongPtrW.restype = c.c_ssize_t
 
     def rebar_ancestor(hwnd):
         name = c.create_unicode_buffer(128)
@@ -136,7 +147,7 @@ def main():
             gdi.DeleteDC(memory)
             user.ReleaseDC(hwnd, dc)
 
-    def wait_for(check, process):
+    def wait_for(check, process, description="the theme selector"):
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             if process.poll() is not None:
@@ -145,7 +156,7 @@ def main():
             if result:
                 return result
             time.sleep(0.1)
-        raise AssertionError("Timed out waiting for the theme selector")
+        raise AssertionError(f"Timed out waiting for {description}")
 
     def find_selector(process):
         found = []
@@ -174,6 +185,42 @@ def main():
         user.EnumWindows(window, 0)
         return (found[0], found[-1]) if found else None
 
+    def check_settings_menu(window, process):
+        file_menu = user.GetSubMenu(user.GetMenu(window), 0)
+        settings_index = None
+        for index in range(user.GetMenuItemCount(file_menu)):
+            caption = c.create_unicode_buffer(256)
+            user.GetMenuStringW(file_menu, index, caption, len(caption), 0x400)  # MF_BYPOSITION
+            if caption.value.replace("&", "").split("\t")[0] == "Settings":
+                settings_index = index
+                break
+        assert settings_index is not None, "Settings menu command is missing"
+        user.PostMessageW(window, 0x126, settings_index, file_menu)  # WM_MENUCOMMAND
+
+        def find_settings():
+            found = []
+
+            @callback
+            def inspect(hwnd, _):
+                pid = w.DWORD()
+                user.GetWindowThreadProcessId(hwnd, c.byref(pid))
+                if pid.value == process.pid and hwnd != window:
+                    caption = c.create_unicode_buffer(256)
+                    user.GetWindowTextW(hwnd, caption, len(caption))
+                    if caption.value == "Settings" or caption.value.startswith("Settings > "):
+                        found.append(hwnd)
+                return True
+
+            user.EnumWindows(inspect, 0)
+            return found[0] if found else None
+
+        dialog = wait_for(find_settings, process, "the Settings dialog")
+        user.SetWindowPos(dialog, None, -32000, -32000, 0, 0, 0x15)
+        assert not user.IsWindowEnabled(window), "Settings did not disable its owner"
+        user.PostMessageW(dialog, 0x10, 0, 0)  # Cancel through the normal close path.
+        wait_for(lambda: not user.IsWindow(dialog) and user.IsWindowEnabled(window), process, "Settings cancellation")
+        print("Settings opened through File menu, canceled, and restored its owner.", flush=True)
+
     scratch = ROOT / "build/test-theme-selector"
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=scratch) as directory:
@@ -186,6 +233,8 @@ def main():
         config.write_text(f'''<DCPlusPlus><Settings>
 <ConfigVersion type="string">0.8842</ConfigVersion><Nick type="string">Theme selector test</Nick>
 <ConfirmExit type="int">0</ConfirmExit><ShowToolbar type="int">1</ShowToolbar>
+<MagnetRegister type="int">0</MagnetRegister><DcextRegister type="int">0</DcextRegister>
+<UrlHandler type="int">0</UrlHandler><RegisterSystemStartup type="int">0</RegisterSystemStartup>
 <ToolbarSize type="int">{args.toolbar_size}</ToolbarSize>
 <MainFont type="string">Segoe UI,-24,400,0,1</MainFont>
 <ThemeMode type="int">1</ThemeMode><TestingStatus type="int">0</TestingStatus>
@@ -218,6 +267,9 @@ def main():
                 bounds = w.RECT()
                 user.GetWindowRect(combo, c.byref(bounds))
                 assert bounds.right > bounds.left and bounds.bottom > bounds.top, "Empty theme selector bounds"
+                if not restart:
+                    assert user.GetWindowLongPtrW(window, -16) & 0xC00000 == 0xC00000, "Light startup lost its native caption"
+                check_settings_menu(window, process)
                 if restart:
                     assert user.SendMessageW(combo, 0x147, 0, 0) == 8, "Saved theme was not recognized after restart"
                     if args.snapshot:
@@ -250,6 +302,7 @@ def main():
                             return color == str(expected) if expected is not None else color != previous
 
                         wait_for(applied, process)
+                        assert user.GetWindowLongPtrW(window, -16) & 0xC00000 == 0, "Dark preset retained a native caption"
                         assert user.SendMessageW(combo, 0x147, 0, 0) == index, "Applying a theme lost the combo selection"
                         if args.snapshot and index in (1, 4, ultraviolet_index, 8):
                             time.sleep(1)

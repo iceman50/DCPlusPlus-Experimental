@@ -227,7 +227,8 @@ void Menu::setOwnerDrawn(bool value) {
 
 LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 	const auto window = getParent()->handle();
-	const bool manual = getParent()->isManualAppearance();
+	const auto frame = dynamic_cast<Frame*>(getParent());
+	const bool manual = getParent()->isManualAppearance() && (!frame || frame->usesClientFrame());
 	if(!manual) {
 		const MSG msg { window, message, wParam, lParam };
 		getParent()->getDispatcher().chain(msg);

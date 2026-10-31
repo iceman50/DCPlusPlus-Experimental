@@ -127,18 +127,24 @@ int dwtMain(dwt::Application& app) {
 		checkBandEdge(rebar, app.getAppearance().getPalette().background);
 		// Exercise resizing, header layout, selection and repeated theme changes.
 		tree->addColumn(L"Pages", 160, dwt::Column::LEFT);
-		for(auto mode : { dwt::Appearance::Mode::Light, dwt::Appearance::Mode::Dark,
-			dwt::Appearance::Mode::Light, dwt::Appearance::Mode::Dark }) {
-			app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
+		for(int scenario = 0; scenario < 6; ++scenario) {
+			const bool customLight = scenario >= 4;
+			auto palette = dwt::Appearance::defaultPalette();
+			if(customLight) {
+				palette = { RGB(245, 245, 245), RGB(255, 255, 255), RGB(25, 25, 25),
+					RGB(110, 110, 110), RGB(175, 175, 175), RGB(0, 90, 180), RGB(255, 255, 255) };
+			}
+			app.getAppearance().configure(!customLight && scenario % 2 ? dwt::Appearance::Mode::Dark : dwt::Appearance::Mode::Light,
+				palette, customLight ? dwt::Appearance::Rendering::CustomPalette : dwt::Appearance::Rendering::Automatic);
 			for(auto width : { 420, 700 }) {
 				window->resize(dwt::Rectangle(-32000, -32000, width, 450));
 				rebar->refresh();
 				tree->resize(dwt::Rectangle(10, 120, width / 2, 220));
 				tree->setSelected(item);
 				settle(app);
-				const bool dark = mode == dwt::Appearance::Mode::Dark;
-				checkPaint(tree->treeHandle(), dark ? app.getAppearance().getPalette().background : GetSysColor(COLOR_WINDOW), true);
-				if(dark) {
+				const bool manual = app.getAppearance().isManual();
+				checkPaint(tree->treeHandle(), manual ? app.getAppearance().getPalette().background : GetSysColor(COLOR_WINDOW), true);
+				if(manual) {
 					checkPaint(rebar->handle(), app.getAppearance().getPalette().background, true);
 					checkComboBand(rebar, combo, app.getAppearance().getPalette().background);
 				}

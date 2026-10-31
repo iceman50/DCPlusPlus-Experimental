@@ -60,6 +60,19 @@ public:
 	/// Object type
 	typedef ThisType * ObjectType;
 
+	/** Frame ownership is independent of control/menu palette painting. */
+	enum class FrameRendering {
+		/** Existing behavior: client frame with a manual palette, native otherwise. */
+		Automatic,
+		/** Windows owns the caption/borders; apply palette colors where supported. */
+		Native
+	};
+	/** May be set before creation or changed live on the GUI thread.
+	 * High contrast and AppearancePolicy::Native always retain Windows defaults.
+	 * Unsupported DWM colors leave the native frame functional with system colors. */
+	void setFrameRendering(FrameRendering rendering);
+	FrameRendering getFrameRendering() const { return frameRendering; }
+
 	/// Animates a window
 	/** Slides the window into view from either right or left depending on the
 	  * parameter "left". If "left" is true, then from the left,  otherwise from the
@@ -126,6 +139,7 @@ protected:
 private:
 	bool handleEraseBackground(HDC dc);
 	void updateCaptionAppearance();
+	void updateNativeFrameAppearance();
 
 	IconPtr smallIcon;
 	IconPtr largeIcon;
@@ -134,6 +148,8 @@ private:
 	DWORD edgeStyle;
 	bool manualFrame;
 	bool changingFrame;
+	FrameRendering frameRendering = FrameRendering::Automatic;
+	bool nativeFrameAppearanceApplied = false;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -164,12 +164,17 @@ int dwtMain(dwt::Application& app) {
 		toolbar->setLayout({ "first" });
 		toolbar->resize(dwt::Rectangle(0, 0, 580, 35));
 		ShowWindow(window->handle(), SW_SHOWNOACTIVATE);
-		for(auto mode : { dwt::Appearance::Mode::Dark, dwt::Appearance::Mode::Light }) {
+		for(int scenario = 0; scenario < 3; ++scenario) {
 			palette.background = RGB(18, 28, 38);
 			palette.surface = RGB(28, 38, 48);
 			palette.text = RGB(225, 235, 245);
 			palette.accent = RGB(135, 45, 165);
-			app.getAppearance().configure(mode, palette);
+			if(scenario == 2) {
+				palette = { RGB(245, 245, 245), RGB(255, 255, 255), RGB(25, 25, 25),
+					RGB(110, 110, 110), RGB(175, 175, 175), RGB(0, 90, 180), RGB(255, 255, 255) };
+			}
+			app.getAppearance().configure(scenario == 0 ? dwt::Appearance::Mode::Dark : dwt::Appearance::Mode::Light,
+				palette, scenario == 2 ? dwt::Appearance::Rendering::CustomPalette : dwt::Appearance::Rendering::Automatic);
 			palette = app.getAppearance().getPalette();
 			manualPalette = app.getAppearance().isManual();
 			for(bool doubleClick : { false, true }) {

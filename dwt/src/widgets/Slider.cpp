@@ -37,7 +37,7 @@
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Pen.h>
 
-#include <uxtheme.h>
+#include <dwt/util/win32/UxTheme.h>
 
 namespace dwt {
 
@@ -114,13 +114,13 @@ void Slider::appearanceChanged() {
 	const auto& appearance = getAppearance();
 	if(HWND tip = getToolTip()) {
 		if(isManualAppearance()) {
-			::SetWindowTheme(tip, L"", L"");
+			util::win32::uxtheme::setWindowTheme(tip, L"", L"");
 			::SendMessage(tip, TTM_SETTIPBKCOLOR,
 				appearance.getPalette().surface, 0);
 			::SendMessage(tip, TTM_SETTIPTEXTCOLOR,
 				appearance.getPalette().text, 0);
 		} else {
-			::SetWindowTheme(tip, nullptr, nullptr);
+			util::win32::uxtheme::setWindowTheme(tip, nullptr, nullptr);
 			::SendMessage(tip, TTM_SETTIPBKCOLOR,
 				::GetSysColor(COLOR_INFOBK), 0);
 			::SendMessage(tip, TTM_SETTIPTEXTCOLOR,

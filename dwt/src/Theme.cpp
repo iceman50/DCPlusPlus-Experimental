@@ -75,20 +75,20 @@ void Theme::drawBackground(Canvas& canvas, int part, int state, const Rectangle&
 	::RECT rc = rect;
 	std::optional<RECT> rcClip(clip);
 	if(drawParent && isBackgroundPartiallyTransparent(part, state)) {
-		DrawThemeParentBackground(w->handle(), canvas.handle(), clip ? &rcClip.value() : &rc);
+		util::win32::uxtheme::drawThemeParentBackground(w->handle(), canvas.handle(), clip ? &rcClip.value() : &rc);
 	}
-	DrawThemeBackground(theme, canvas.handle(), part, state, &rc, clip ? &rcClip.value() : 0);
+	util::win32::uxtheme::drawThemeBackground(theme, canvas.handle(), part, state, &rc, clip ? &rcClip.value() : 0);
 }
 
 void Theme::drawText(Canvas& canvas, int part, int state, const tstring& text, unsigned textFlags, const Rectangle& rect) {
 	::RECT rc = rect;
-	DrawThemeText(theme, canvas.handle(), part, state, text.c_str(), static_cast<int>(text.size()), textFlags, 0, &rc);
+	util::win32::uxtheme::drawThemeText(theme, canvas.handle(), part, state, text.c_str(), static_cast<int>(text.size()), textFlags, 0, &rc);
 }
 
 void Theme::formatRect(Canvas& canvas, int part, int state, Rectangle& rect) {
 	::RECT rc = rect;
 	MARGINS margins = { 0 };
-	if(GetThemeMargins(theme, canvas.handle(), part, state, TMT_CONTENTMARGINS, &rc, &margins) == S_OK) {
+	if(util::win32::uxtheme::getThemeMargins(theme, canvas.handle(), part, state, TMT_CONTENTMARGINS, &rc, &margins) == S_OK) {
 		rc.left += margins.cxLeftWidth; rc.right -= margins.cxRightWidth;
 		rc.top += margins.cyTopHeight; rc.bottom -= margins.cyBottomHeight;
 		rect = Rectangle(rc);
@@ -100,21 +100,21 @@ void Theme::formatTextRect(Canvas& canvas, int part, int state, const tstring& t
 
 	::RECT rc = rect;
 	::RECT rcOut;
-	if(GetThemeTextExtent(theme, canvas.handle(), part, state, text.c_str(), static_cast<int>(text.size()), textFlags, &rc, &rcOut) == S_OK) {
+	if(util::win32::uxtheme::getThemeTextExtent(theme, canvas.handle(), part, state, text.c_str(), static_cast<int>(text.size()), textFlags, &rc, &rcOut) == S_OK) {
 		rect = Rectangle(rcOut);
 	}
 }
 
 COLORREF Theme::getColor(int part, int state, int specifier) {
 	COLORREF color;
-	if(GetThemeColor(theme, part, state, specifier, &color) == S_OK)
+	if(util::win32::uxtheme::getThemeColor(theme, part, state, specifier, &color) == S_OK)
 		return color;
 	return NaC;
 }
 
 bool Theme::getPartSize(Canvas& canvas, int part, int state, Point& ret) {
 	SIZE size;
-	if(GetThemePartSize(theme, canvas.handle(), part, state, 0, TS_TRUE, &size) == S_OK) {
+	if(util::win32::uxtheme::getThemePartSize(theme, canvas.handle(), part, state, 0, TS_TRUE, &size) == S_OK) {
 		ret.x = size.cx;
 		ret.y = size.cy;
 		return true;
@@ -123,7 +123,7 @@ bool Theme::getPartSize(Canvas& canvas, int part, int state, Point& ret) {
 }
 
 bool Theme::isBackgroundPartiallyTransparent(int part, int state) {
-	return IsThemeBackgroundPartiallyTransparent(theme, part, state);
+	return util::win32::uxtheme::isThemeBackgroundPartiallyTransparent(theme, part, state);
 }
 
 Theme::operator bool() const {
@@ -131,14 +131,14 @@ Theme::operator bool() const {
 }
 
 void Theme::open(const tstring& classes) {
-	if(IsAppThemed()) {
-		theme = OpenThemeData(w->handle(), classes.c_str());
+	if(util::win32::uxtheme::isAppThemed()) {
+		theme = util::win32::uxtheme::openThemeData(w->handle(), classes.c_str());
 	}
 }
 
 void Theme::close() {
 	if(theme) {
-		CloseThemeData(theme);
+		util::win32::uxtheme::closeThemeData(theme);
 		theme = 0;
 	}
 }

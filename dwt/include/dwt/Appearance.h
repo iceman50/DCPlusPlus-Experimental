@@ -60,8 +60,8 @@ enum class AppearancePolicy {
 /** \ingroup Appearance
  * Application-wide visual appearance service.
  *
- * DWT uses native controls for behavior, input, metrics and accessibility. In
- * manual dark mode it paints their visual chrome with this palette so the same
+ * DWT uses native controls for behavior, input, metrics and accessibility. With
+ * manual rendering it paints their visual chrome with this palette so the same
  * implementation works on Windows 7 and later. High contrast always overrides
  * the configured mode and palette.
  */
@@ -71,6 +71,14 @@ public:
 		System,
 		Light,
 		Dark
+	};
+
+	/** Select palette painting independently of the light/dark preference. */
+	enum class Rendering {
+		/** Existing behavior: manual when dark, native otherwise. */
+		Automatic,
+		/** Paint with the supplied palette in both light and dark modes. */
+		CustomPalette
 	};
 
 	/** Semantic colors used by framework renderers. */
@@ -99,14 +107,24 @@ public:
 
 	/**
 	 * Set the requested mode and manual palette, then refresh every DWT widget.
+	 * Uses Rendering::Automatic, including after an explicit custom configuration.
 	 * Call this on the application's GUI thread.
 	 */
 	void configure(Mode mode, const Palette& palette);
 
+	/**
+	 * Explicitly select rendering while retaining Mode as the light/dark preference.
+	 * CustomPalette uses the existing manual renderers, including custom frames
+	 * and native-dialog adaptation. High contrast always restores native rendering.
+	 * Call this on the application's GUI thread.
+	 */
+	void configure(Mode mode, const Palette& palette, Rendering rendering);
+
 	Mode getMode() const { return mode; }
+	Rendering getRendering() const { return rendering; }
 	bool isDark() const { return dark; }
 	bool isHighContrast() const { return highContrast; }
-	bool isManual() const { return dark && !highContrast; }
+	bool isManual() const { return !highContrast && (dark || rendering == Rendering::CustomPalette); }
 	unsigned getGeneration() const { return generation; }
 	bool isUpdating() const { return updateDepth != 0; }
 
@@ -161,6 +179,7 @@ private:
 	static bool querySystemDarkPreference();
 
 	Mode mode;
+	Rendering rendering;
 	Palette configured;
 	Palette active;
 	bool highContrast;

@@ -39,7 +39,7 @@
 #include <dwt/widgets/Header.h>
 #include <dwt/WidgetCreator.h>
 
-#include <uxtheme.h>
+#include <dwt/util/win32/UxTheme.h>
 
 namespace dwt {
 
@@ -132,9 +132,9 @@ void Tree::appearanceChanged() {
 		return;
 	}
 	if(isManualAppearance()) {
-		::SetWindowTheme(treeHandle(), L"", L"");
+		util::win32::uxtheme::setWindowTheme(treeHandle(), L"", L"");
 	} else {
-		::SetWindowTheme(treeHandle(), nullptr, nullptr);
+		util::win32::uxtheme::setWindowTheme(treeHandle(), nullptr, nullptr);
 	}
 	if(!hasExplicitColors()) {
 		clearColorImpl();

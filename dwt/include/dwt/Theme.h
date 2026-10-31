@@ -35,13 +35,13 @@
 
 #include "CanvasClasses.h"
 
-#include <uxtheme.h>
+#include "util/win32/UxTheme.h"
 #include <optional>
 
 namespace dwt {
 
 /** helper class to manage a theme. this class:
-- manages calls to visual styles APIs without having to link to uxtheme.lib.
+- manages visual-style drawing through the shared UxTheme API utility.
 - handles opening and closing the theme on destruction and on WM_THEMECHANGED.
 */
 class Theme {
