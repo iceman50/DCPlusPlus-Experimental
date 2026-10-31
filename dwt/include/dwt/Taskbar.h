@@ -93,6 +93,8 @@ public:
 	static HRESULT deleteJumpList(const tstring& appId = tstring());
 
 	void initTaskbar(WindowPtr window_);
+	/// Call for each TaskbarButtonCreated notification, including Explorer restarts.
+	void taskbarButtonCreated();
 
 	void setOverlayIcon(ContainerPtr tab, const IconPtr& icon, const tstring& description);
 	void setProgressState(TBPFLAG state);
@@ -130,7 +132,10 @@ private:
 	virtual void setActive(ContainerPtr) = 0;
 
 	WindowPtr window;
+	bool taskbarReady;
+	ContainerPtr activeTab;
 	std::unordered_map<ContainerPtr, FramePtr> tabs;
+	std::vector<ContainerPtr> tabOrder;
 };
 
 }

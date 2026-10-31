@@ -215,11 +215,16 @@ privateSendOpen(false)
 	onRaw([this](WPARAM, LPARAM) { return handleWhereAreYou(); }, dwt::Message(SingleInstance::WMU_WHERE_ARE_YOU));
 
 	if(SETTING(ENABLE_TASKBAR_PREVIEW)) {
-		//In the event that explorer.exe crashes lets make sure the overlay icon is reset
+		// Register startup tabs once the shell is ready, and restore them (along
+		// with the overlay) whenever Explorer recreates the taskbar button.
 		UINT tbcMsg = ::RegisterWindowMessage(L"TaskbarButtonCreated");
 		if(tbcMsg != WM_NULL) {
 			::ChangeWindowMessageFilterEx(this->handle(), tbcMsg, 1, 0);
-			onRaw([this, tbcMsg](WPARAM, LPARAM) { handleTaskbarOverlay(); return 0; }, dwt::Message(tbcMsg));
+			onRaw([this](WPARAM, LPARAM) {
+				tabs->taskbarButtonCreated();
+				handleTaskbarOverlay();
+				return 0;
+			}, dwt::Message(tbcMsg));
 		}
 	}
 

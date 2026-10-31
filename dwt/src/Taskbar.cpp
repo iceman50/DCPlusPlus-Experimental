@@ -33,14 +33,15 @@
 #include <dwt/Taskbar.h>
 #include <dwt/resources/DibBitmap.h>
 
-#include <dwmapi.h>
 #include <objectarray.h>
 #include <propkey.h>
 #include <propsys.h>
+#include <algorithm>
 
 #include <dwt/util/check.h>
 #include <dwt/util/StringConversion.h>
 #include <dwt/util/win32/ComPtr.h>
+#include <dwt/util/win32/Dwm.h>
 #include <dwt/util/win32/Version.h>
 #include <dwt/widgets/Container.h>
 #include <dwt/widgets/Window.h>
@@ -215,7 +216,9 @@ HRESULT makeObjectArray(const std::vector<JumpListLink>& items, IObjectArray** v
 Taskbar::Taskbar() :
 taskbar(0),
 taskbar4(0),
-window(0)
+window(0),
+taskbarReady(false),
+activeTab(nullptr)
 {
 }
 
@@ -231,9 +234,8 @@ void Taskbar::initTaskbar(WindowPtr window_) {
 	window = window_;
 	dwtassert(window, "Taskbar: no widget set");
 
-	/* init the ITaskbarList3 COM pointer. MSDN recommends waiting for the
-	"TaskbarButtonCreated" message, but neither MFC nor Win SDK samples do that, so we don't
-	either. greatly simplifies the logic of this interface. */
+	// Create the interface now, but defer tab registration until the shell has
+	// created the owner's taskbar button. Startup pages must survive that delay.
 #ifdef __GNUC__
 	CLSID CLSID_TaskbarList;
 	OLECHAR tbl[] = L"{56FDF344-FD6D-11d0-958A-006097C9A090}";
@@ -252,6 +254,20 @@ void Taskbar::initTaskbar(WindowPtr window_) {
 		reinterpret_cast<void**>(&taskbar4)) != S_OK) {
 		taskbar4 = 0;
 	}
+}
+
+void Taskbar::taskbarButtonCreated() {
+	if(!taskbar || !window) return;
+	taskbarReady = true;
+	// Explorer loses all registrations when it recreates the taskbar. Keep the
+	// same proxies (and their titles/icons), restoring the current strip order.
+	for(auto tab : tabOrder) {
+		auto i = tabs.find(tab);
+		if(i != tabs.end() && SUCCEEDED(taskbar->RegisterTab(i->second->handle(), window->handle()))) {
+			taskbar->SetTabOrder(i->second->handle(), nullptr);
+		}
+	}
+	setActiveOnTaskbar(activeTab);
 }
 
 HRESULT Taskbar::setCurrentAppId(const tstring& appId) {
@@ -421,13 +437,16 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 
 	auto proxy = window->addChild(Proxy::Seed(tab->getText()));
 	tabs[tab] = proxy;
+	tabOrder.push_back(tab);
 	// A proxy can also be destroyed by its owning window. Unregister while its
 	// HWND is still valid, and forget it before shell calls can re-enter us.
 	proxy->onDestroy([this, tab, proxy] {
 		auto i = tabs.find(tab);
 		if(i == tabs.end() || i->second != proxy) return;
 		tabs.erase(i);
-		if(taskbar) {
+		tabOrder.erase(std::remove(tabOrder.begin(), tabOrder.end(), tab), tabOrder.end());
+		if(activeTab == tab) activeTab = nullptr;
+		if(taskbar && taskbarReady) {
 			taskbar->UnregisterTab(proxy->handle());
 			taskbar->DeleteTab(proxy->handle());
 		}
@@ -448,7 +467,7 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 	});
 	tab->onSized([this, tab](const SizedEvent&) {
 		auto i = tabs.find(tab);
-		if(i != tabs.end()) ::DwmInvalidateIconicBitmaps(i->second->handle());
+		if(i != tabs.end()) util::win32::dwm::invalidateIconicBitmaps(i->second->handle());
 	});
 	const auto registered = [this, tab, proxy] {
 		auto i = tabs.find(tab);
@@ -478,7 +497,7 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 		// generate a thumbnail to be displayed in the taskbar.
 		BitmapPtr bitmap = getBitmap(tab, lParam);
 		if(bitmap) {
-			::DwmSetIconicThumbnail(proxy->handle(), bitmap->handle(), 0);
+			util::win32::dwm::setIconicThumbnail(proxy->handle(), bitmap->handle(), 0);
 		}
 		return 0;
 	}, Message(WM_DWMSENDICONICTHUMBNAIL));
@@ -493,21 +512,19 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 			MENUBARINFO info = { sizeof(MENUBARINFO) };
 			if(!window->usesClientFrame() && ::GetMenuBarInfo(window->handle(), OBJID_MENU, 0, &info))
 				offset.y += Rectangle(info.rcBar).height();
-			::DwmSetIconicLivePreviewBitmap(proxy->handle(), bitmap->handle(), &offset, 0);
+			util::win32::dwm::setIconicLivePreviewBitmap(proxy->handle(), bitmap->handle(), &offset, 0);
 		}
 		return 0;
 	}, Message(WM_DWMSENDICONICLIVEPREVIEWBITMAP));
 
 	// indicate to the window manager that it should always use the bitmaps we provide.
 	BOOL attrib = TRUE;
-	::DwmSetWindowAttribute(proxy->handle(), DWMWA_FORCE_ICONIC_REPRESENTATION, &attrib, sizeof(attrib));
-	::DwmSetWindowAttribute(proxy->handle(), DWMWA_HAS_ICONIC_BITMAP, &attrib, sizeof(attrib));
+	util::win32::dwm::setWindowAttribute(proxy->handle(), DWMWA_FORCE_ICONIC_REPRESENTATION, &attrib, sizeof(attrib));
+	util::win32::dwm::setWindowAttribute(proxy->handle(), DWMWA_HAS_ICONIC_BITMAP, &attrib, sizeof(attrib));
 
-	if(FAILED(taskbar->RegisterTab(proxy->handle(), window->handle()))) {
-		removeFromTaskbar(tab);
-		return;
+	if(taskbarReady && SUCCEEDED(taskbar->RegisterTab(proxy->handle(), window->handle()))) {
+		taskbar->SetTabOrder(proxy->handle(), nullptr);
 	}
-	moveOnTaskbar(tab);
 }
 
 void Taskbar::removeFromTaskbar(ContainerPtr tab) {
@@ -517,7 +534,9 @@ void Taskbar::removeFromTaskbar(ContainerPtr tab) {
 	}
 	const auto proxy = i->second->handle();
 	tabs.erase(i);
-	if(taskbar) {
+	tabOrder.erase(std::remove(tabOrder.begin(), tabOrder.end(), tab), tabOrder.end());
+	if(activeTab == tab) activeTab = nullptr;
+	if(taskbar && taskbarReady) {
 		taskbar->UnregisterTab(proxy);
 		// Remove any shell button as well as the registered tab thumbnail, before
 		// freeing the HWND. Bulk closes must not leave blank standalone entries.
@@ -528,7 +547,10 @@ void Taskbar::removeFromTaskbar(ContainerPtr tab) {
 
 void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
 	auto i = tabs.find(tab);
-	if(taskbar && i != tabs.end() && i->second) {
+	if(i == tabs.end() || tab == rightNeighbor) return;
+	tabOrder.erase(std::remove(tabOrder.begin(), tabOrder.end(), tab), tabOrder.end());
+	tabOrder.insert(std::find(tabOrder.begin(), tabOrder.end(), rightNeighbor), tab);
+	if(taskbar && taskbarReady && i->second) {
 		auto right = rightNeighbor ? tabs.find(rightNeighbor) : tabs.end();
 		taskbar->SetTabOrder(i->second->handle(),
 			right != tabs.end() && right->second ? right->second->handle() : 0);
@@ -536,8 +558,9 @@ void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
 }
 
 void Taskbar::setActiveOnTaskbar(ContainerPtr tab) {
+	activeTab = tab;
 	auto i = tabs.find(tab);
-	if(taskbar && window && i != tabs.end() && i->second) {
+	if(taskbar && taskbarReady && window && i != tabs.end() && i->second) {
 		taskbar->SetTabActive(i->second->handle(), window->handle(), 0);
 	}
 }
