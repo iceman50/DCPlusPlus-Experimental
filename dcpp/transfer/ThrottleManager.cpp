@@ -37,11 +37,12 @@ namespace dcpp {
  * Throttles traffic and reads a packet from the network
  */
 int ThrottleManager::read(Socket* sock, void* buffer, size_t len, bool privateTransfer) {
+	len = TransferRate::socketChunkSize(len);
 	int64_t readSize = -1;
 	size_t downs = DownloadManager::getInstance()->getDownloadCount();
 	if(privateTransfer)
 		downs = std::max<size_t>(1, downs);
-	auto downLimit = getDownLimit(); // avoid even intra-function races
+	auto downLimit = getDownLimitBytes(); // avoid even intra-function races
 	if(!getCurThrottling() || downLimit == 0 || downs == 0)
 		return sock->read(buffer, len);
 
@@ -50,7 +51,7 @@ int ThrottleManager::read(Socket* sock, void* buffer, size_t len, bool privateTr
 
 		if(downTokens > 0)
 		{
-			int64_t slice = (downLimit * 1024) / downs;
+			int64_t slice = downLimit / downs;
 			readSize = min(slice, min(static_cast<int64_t>(len), downTokens));
 
 			// read from socket
@@ -76,11 +77,12 @@ int ThrottleManager::read(Socket* sock, void* buffer, size_t len, bool privateTr
  * Handle this a little bit differently than downloads due to OpenSSL stupidity 
  */
 int ThrottleManager::write(Socket* sock, void* buffer, size_t& len, bool privateTransfer) {
+	len = TransferRate::socketChunkSize(len);
 	bool gotToken = false;
 	size_t ups = UploadManager::getInstance()->getUploadCount();
 	if(privateTransfer)
 		ups = std::max<size_t>(1, ups);
-	auto upLimit = getUpLimit(); // avoid even intra-function races
+	auto upLimit = getUpLimitBytes(); // avoid even intra-function races
 	if(!getCurThrottling() || upLimit == 0 || ups == 0)
 		return sock->write(buffer, len);
 
@@ -89,8 +91,8 @@ int ThrottleManager::write(Socket* sock, void* buffer, size_t& len, bool private
 
 		if(upTokens > 0)
 		{
-			size_t slice = (upLimit * 1024) / ups;
-			len = min(slice, min(len, static_cast<size_t>(upTokens)));
+			auto slice = static_cast<uint64_t>(upLimit) / ups;
+			len = static_cast<size_t>(std::min<uint64_t>(slice, std::min<uint64_t>(len, upTokens)));
 			upTokens -= len;
 
 			gotToken = true; // token successfuly assigned
@@ -209,12 +211,12 @@ void ThrottleManager::on(TimerManagerListener::Second, uint64_t /* aTick */) noe
 	// readd tokens
 	{
 		Lock l(downCS);
-		downTokens = getDownLimit() * 1024;
+		downTokens = getDownLimitBytes();
 	}
 
 	{
 		Lock l(upCS);
-		upTokens = getUpLimit() * 1024;
+		upTokens = getUpLimitBytes();
 	}
 
 	// let existing events drain out (fairness).

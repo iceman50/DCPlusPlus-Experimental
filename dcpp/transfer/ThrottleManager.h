@@ -23,6 +23,7 @@
 #include <dcpp/net/Socket.h>
 #include <dcpp/system/TimerManager.h>
 #include <dcpp/settings/SettingsManager.h>
+#include <dcpp/transfer/TransferRate.h>
 
 namespace dcpp
 {
@@ -52,17 +53,12 @@ namespace dcpp
 
 		static int getUpLimit();
 		static int getDownLimit();
+		static int64_t getUpLimitBytes() { return TransferRate::fromKiB(getUpLimit()); }
+		static int64_t getDownLimitBytes() { return TransferRate::fromKiB(getDownLimit()); }
 
 		static void setSetting(SettingsManager::IntSetting setting, int value);
 
-		// @todo if we want to allow higher limit values in the future (over ~2 Gib/s)
-		// (means transfer speeds of that magnitude or higher become common) then
-		// lots of code dealing with byte representation of speeds and limits values 
-		// needs to be checked and changed to use int64 types, to make sure that 
-		// formatBytes of actual speeds, DS, US values etc... won't overflow. 
-		// See L#2143720 for a similar issue.
- 
-		static const int MAX_LIMIT = 1024 * 1024; // 1 GiB/s
+		static constexpr int MAX_LIMIT = TransferRate::MAX_LIMIT_KIB;
 
 	private:
 		// stack up throttled read & write threads

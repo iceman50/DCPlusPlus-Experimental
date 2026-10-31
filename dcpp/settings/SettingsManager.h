@@ -25,6 +25,8 @@
 #include <dcpp/base/Exception.h>
 #include <dcpp/hub/HubSettings.h>
 
+#include <algorithm>
+
 namespace dcpp {
 
 STANDARD_EXCEPTION(SearchTypeException);
@@ -251,6 +253,9 @@ public:
 	}
 
 	void set(IntSetting key, int value) {
+		const auto maxSpeed = getSpeedSettingMax(key);
+		if(maxSpeed >= 0)
+			value = std::clamp(value, 0, maxSpeed);
 		if((key == SLOTS) && (value <= 0)) {
 			value = 1;
 		}
@@ -268,8 +273,7 @@ public:
 			intSettings[key - INT_FIRST] = 0;
 			isSet[key] = false;
 		} else {
-			intSettings[key - INT_FIRST] = Util::toInt(value);
-			isSet[key] = true;
+			set(key, parseIntSetting(key, value));
 		}
 	}
 
@@ -378,6 +382,9 @@ public:
 	const StringList& getExtensions(const string& name);
 
 private:
+	static int getSpeedSettingMax(IntSetting key);
+	static int parseIntSetting(IntSetting key, const string& value);
+
 	friend class Singleton<SettingsManager>;
 	SettingsManager();
 	virtual ~SettingsManager() { }

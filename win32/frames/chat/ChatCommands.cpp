@@ -33,6 +33,8 @@
 #include <win32/frames/tools/ACFrame.h>
 #include <win32/app/MainWindow.h>
 
+#include <cstdlib>
+
 namespace ChatCommands {
 
 namespace {
@@ -196,19 +198,19 @@ bool checkCommand(tstring& cmd, tstring& param, tstring& message, tstring& statu
 	} else if(Util::stricmp(cmd.c_str(), _T("rebuild")) == 0) {
 		HashManager::getInstance()->rebuild();
 	} else if(Util::stricmp(cmd.c_str(), _T("upload")) == 0) {
-		auto value = Util::toInt(Text::fromT(param));
+		auto value = std::strtoll(Text::fromT(param).c_str(), nullptr, 10);
 		if(value < 0 || value > ThrottleManager::MAX_LIMIT) {
 			status = T_("Invalid speed value");
 		} else {
-			ThrottleManager::setSetting(ThrottleManager::getCurSetting(SettingsManager::MAX_UPLOAD_SPEED_MAIN), value);
+			ThrottleManager::setSetting(ThrottleManager::getCurSetting(SettingsManager::MAX_UPLOAD_SPEED_MAIN), static_cast<int>(value));
 			status = value ? str(TF_("Upload limit set to %1% KiB/s") % value) : T_("Upload limit disabled");
 		}
 	} else if(Util::stricmp(cmd.c_str(), _T("download")) == 0) {
-		auto value = Util::toInt(Text::fromT(param));
+		auto value = std::strtoll(Text::fromT(param).c_str(), nullptr, 10);
 		if(value < 0 || value > ThrottleManager::MAX_LIMIT) {
 			status = T_("Invalid speed value");
 		} else {
-			ThrottleManager::setSetting(ThrottleManager::getCurSetting(SettingsManager::MAX_DOWNLOAD_SPEED_MAIN), value);
+			ThrottleManager::setSetting(ThrottleManager::getCurSetting(SettingsManager::MAX_DOWNLOAD_SPEED_MAIN), static_cast<int>(value));
 			status = value ? str(TF_("Download limit set to %1% KiB/s") % value) : T_("Download limit disabled");
 		}
 	} else if(Util::stricmp(cmd.c_str(), _T("about:config")) == 0 || Util::stricmp(cmd.c_str(), _T("ac")) == 0 || Util::stricmp(cmd.c_str(), _T("a:c")) == 0) {

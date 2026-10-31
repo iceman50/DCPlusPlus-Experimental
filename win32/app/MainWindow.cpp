@@ -1002,9 +1002,9 @@ void MainWindow::fillLimiterMenu(Menu* menu, bool upload) {
 
 	const auto setting = ThrottleManager::getCurSetting(
 		upload ? SettingsManager::MAX_UPLOAD_SPEED_MAIN : SettingsManager::MAX_DOWNLOAD_SPEED_MAIN);
-	const auto x = SettingsManager::getInstance()->get(setting);
+	const int64_t x = SettingsManager::getInstance()->get(setting);
 
-	int arr[] = { 0 /* disabled */, x /* current value */,
+	int64_t arr[] = { 0 /* disabled */, x /* current value */,
 		x + 1, x + 2, x + 5, x + 10, x + 20, x + 50, x + 100,
 		x - 1, x - 2, x - 5, x - 10, x - 20, x - 50, x - 100,
 		x * 11 / 10, x * 6 / 5, x * 3 / 2, x * 2, x * 3, x * 4, x * 5, x * 10, x * 100,
@@ -1012,14 +1012,14 @@ void MainWindow::fillLimiterMenu(Menu* menu, bool upload) {
 
 	// set ensures ordered unique members; remove_if performs range and relevancy checking.
 	auto minDelta = (x >= 1024) ? (20 * pow(1024, floor(log(static_cast<float>(x)) / log(1024.)) - 1)) : 0;
-	set<int> values(arr, std::remove_if(arr, arr + sizeof(arr) / sizeof(int), [x, minDelta](int i) {
+	set<int> values(std::begin(arr), std::remove_if(std::begin(arr), std::end(arr), [x, minDelta](int64_t i) {
 		return i < 0 || i > ThrottleManager::MAX_LIMIT ||
 			(minDelta && i != x && abs(i - x) < minDelta); // not too close to the original value
 	}));
 
 	for(auto value: values) {
 		auto same = value == x;
-		auto formatted = Text::toT(Util::formatBytes(value * 1024));
+		auto formatted = Text::toT(Util::formatBytes(TransferRate::fromKiB(value)));
 		auto pos = menu->appendItem(value ? escapeMenu(str(TF_("%1%/s") % formatted)) : T_("Disabled"),
 			[setting, value] { ThrottleManager::setSetting(setting, value); }, 0, !same);
 		if(same)
@@ -1385,11 +1385,11 @@ void MainWindow::updateStatus() {
 	status->setText(STATUS_UP_DIFF, str(TF_("%1%/s") % s));
 	status->setToolTip(STATUS_UP_DIFF, str(TF_("U: %1%/s (%2%)") % s % UploadManager::getInstance()->getUploadCount()));
 
-	s = Text::toT(Util::formatBytes(ThrottleManager::getDownLimit() * 1024));
+	s = Text::toT(Util::formatBytes(ThrottleManager::getDownLimitBytes()));
 	status->setText(STATUS_DOWN_LIMIT, str(TF_("%1%/s") % s));
 	status->setToolTip(STATUS_DOWN_LIMIT, str(TF_("Download limit: %1%/s - Click to adjust") % s));
 
-	s = Text::toT(Util::formatBytes(ThrottleManager::getUpLimit() * 1024));
+	s = Text::toT(Util::formatBytes(ThrottleManager::getUpLimitBytes()));
 	status->setText(STATUS_UP_LIMIT, str(TF_("%1%/s") % s));
 	status->setToolTip(STATUS_UP_LIMIT, str(TF_("Upload limit: %1%/s - Click to adjust") % s));
 }

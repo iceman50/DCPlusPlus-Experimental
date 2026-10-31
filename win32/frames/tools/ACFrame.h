@@ -88,7 +88,7 @@ private:
 				break;
 
 			case SettingsManager::TYPE_INT:
-				sm->set(static_cast<SettingsManager::IntSetting>(index), Util::toInt(Text::fromT(value)));
+				sm->set(static_cast<SettingsManager::IntSetting>(index), Text::fromT(value));
 				break;
 
 			case SettingsManager::TYPE_BOOL:

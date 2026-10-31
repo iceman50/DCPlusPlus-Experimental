@@ -1415,18 +1415,18 @@ void AdcHub::infoImpl() {
 	addParam(lastInfoMap, c, "VE", hubVersionString);
 	addParam(lastInfoMap, c, "AW", Util::getAway() ? "1" : Util::emptyString);
 
-	int limit = ThrottleManager::getInstance()->getDownLimit();
+	auto limit = ThrottleManager::getDownLimitBytes();
 	if (limit > 0) {
-		addParam(lastInfoMap, c, "DS", Util::toString(limit * 1024));
+		addParam(lastInfoMap, c, "DS", std::to_string(limit));
 	} else {
 		addParam(lastInfoMap, c, "DS", Util::emptyString);
 	}
 
-	limit = ThrottleManager::getInstance()->getUpLimit();
+	limit = ThrottleManager::getUpLimitBytes();
 	if (limit > 0) {
-		addParam(lastInfoMap, c, "US", Util::toString(limit * 1024));
+		addParam(lastInfoMap, c, "US", std::to_string(limit));
 	} else {
-		addParam(lastInfoMap, c, "US", std::to_string((long)(Util::toDouble(SETTING(UPLOAD_SPEED))*1024*1024/8)));
+		addParam(lastInfoMap, c, "US", std::to_string(TransferRate::fromMibit(Util::toDouble(SETTING(UPLOAD_SPEED)))));
 	}
 
 	addParam(lastInfoMap, c, "LC", Util::getIETFLang());

@@ -48,6 +48,15 @@ void tableSettings() {
 }
 
 void chatAndLinks() {
+	for(const auto* limitCommand: { L"/upload ", L"/download " }) {
+		for(const auto* invalidLimit: { L"-1", L"2097152", L"4294967296", L"999999999999999999999999999999" }) {
+			dwt::tstring command = dwt::tstring(limitCommand) + invalidLimit;
+			dwt::tstring parameter, message, status;
+			bool thirdPerson = false;
+			check(ChatCommands::checkCommand(command, parameter, message, status, thirdPerson), "Limit command was not recognized");
+			check(status == T_("Invalid speed value"), "Out-of-range limit command was not rejected");
+		}
+	}
 	dwt::tstring command = L"/me waves hello", parameter, message, status;
 	bool thirdPerson = false;
 	check(ChatCommands::checkCommand(command, parameter, message, status, thirdPerson), "Action command was not recognized");

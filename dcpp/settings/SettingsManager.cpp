@@ -28,6 +28,10 @@
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/text/StringTokenizer.h>
+#include <dcpp/transfer/TransferRate.h>
+
+#include <cstdlib>
+#include <limits>
 
 namespace dcpp {
 
@@ -37,6 +41,32 @@ constexpr int RGB(uint8_t red, uint8_t green, uint8_t blue) noexcept { return re
 #endif
 
 StringList SettingsManager::connectionSpeeds;
+
+int SettingsManager::getSpeedSettingMax(IntSetting key) {
+	switch(key) {
+	case MAX_UPLOAD_SPEED_MAIN:
+	case MAX_DOWNLOAD_SPEED_MAIN:
+	case MAX_UPLOAD_SPEED_ALTERNATE:
+	case MAX_DOWNLOAD_SPEED_ALTERNATE:
+		return TransferRate::MAX_LIMIT_KIB;
+	case MAX_DOWNLOAD_SPEED:
+	case MIN_UPLOAD_SPEED:
+		return std::numeric_limits<int>::max();
+	default:
+		return -1;
+	}
+}
+
+int SettingsManager::parseIntSetting(IntSetting key, const string& value) {
+	const auto maxSpeed = getSpeedSettingMax(key);
+	if(maxSpeed < 0)
+		return Util::toInt(value);
+
+	// strtoll saturates on overflow, so even oversized XML/about:config values
+	// can be clamped before narrowing to the KiB/s setting's int representation.
+	const auto parsed = std::strtoll(value.c_str(), nullptr, 10);
+	return static_cast<int>(std::clamp<long long>(parsed, 0, maxSpeed));
+}
 
 const string SettingsManager::settingTags[] =
 {
@@ -537,7 +567,7 @@ void SettingsManager::load(string const& aFileName)
 				dcassert(attr.find("SENTRY") == string::npos);
 
 				if(xml.findChild(attr))
-					set(IntSetting(i), Util::toInt(xml.getChildData()));
+					set(IntSetting(i), parseIntSetting(IntSetting(i), xml.getChildData()));
 				xml.resetCurrentChild();
 			}
 			for(i=BOOL_FIRST; i<BOOL_LAST; i++)

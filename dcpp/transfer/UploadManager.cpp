@@ -34,6 +34,7 @@
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/net/CryptoManager.h>
 #include <dcpp/transfer/Upload.h>
+#include <dcpp/transfer/TransferRate.h>
 #include <dcpp/connection/UserConnection.h>
 #include <dcpp/system/File.h>
 
@@ -500,7 +501,7 @@ bool UploadManager::getAutoSlot() {
 	if(GET_TICK() < getLastGrant() + 30*1000)
 		return false;
 	/** Grant if upload speed is less than the threshold speed */
-	return getRunningAverage() < (SETTING(MIN_UPLOAD_SPEED)*1024);
+	return getRunningAverage() < TransferRate::fromKiB(SETTING(MIN_UPLOAD_SPEED));
 }
 
 bool UploadManager::isUploadingMCN(const UserPtr& user) const {

@@ -22,6 +22,7 @@
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/transfer/Download.h>
+#include <dcpp/transfer/TransferRate.h>
 #include <dcpp/system/File.h>
 #include <dcpp/logging/LogManager.h>
 #include <dcpp/user/User.h>
@@ -157,7 +158,7 @@ bool DownloadManager::startDownload(QueueItem::Priority prio, bool smallSlot) {
 	size_t downloadCount = getDownloadCount();
 
 	bool full = (SETTING(DOWNLOAD_SLOTS) != 0) && (downloadCount >= (size_t)SETTING(DOWNLOAD_SLOTS));
-	full = full || ((SETTING(MAX_DOWNLOAD_SPEED) != 0) && (getRunningAverage() >= (SETTING(MAX_DOWNLOAD_SPEED)*1024)));
+	full = full || ((SETTING(MAX_DOWNLOAD_SPEED) != 0) && (getRunningAverage() >= TransferRate::fromKiB(SETTING(MAX_DOWNLOAD_SPEED))));
 
 	if(full) {
 		bool extraFull = (SETTING(DOWNLOAD_SLOTS) != 0) && (getDownloadCount() >= (size_t)(SETTING(DOWNLOAD_SLOTS)+3));
