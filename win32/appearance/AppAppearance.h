@@ -21,6 +21,7 @@
 
 #include <dwt/WindowsHeaders.h>
 #include <dwt/forward.h>
+namespace dcpp { struct Style; }
 namespace AppAppearance {
 extern dwt::BrushPtr bgBrush;
 extern COLORREF textColor, bgColor;
@@ -28,6 +29,7 @@ void init();
 void initStyleDefaults();
 void refreshTheme();
 void setColor(dwt::Control* widget);
+void applyUserStyle(const dcpp::Style& snapshot, HFONT& font, COLORREF& text, COLORREF& background);
 }
 
 #endif

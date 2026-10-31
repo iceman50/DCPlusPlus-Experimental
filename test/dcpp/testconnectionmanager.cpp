@@ -218,6 +218,70 @@ TEST_F(ConnectionManagerTest, duplicate_named_user_rules_keep_independent_appear
 	EXPECT_EQ(-1, matching->getStyle(style.textSource).textColor);
 }
 
+TEST_F(ConnectionManagerTest, user_styles_refresh_without_replacing_identity_snapshots) {
+	UserMatchManager::newInstance();
+	struct Cleanup { ~Cleanup() { UserMatchManager::deleteInstance(); } } cleanup;
+	auto matching = UserMatchManager::getInstance();
+	UserMatch first, fallback, unrelated;
+	first.name = fallback.name = unrelated.name = "Duplicate name";
+	first.setFlag(UserMatch::IGNORE_CHAT);
+	first.style.textColor = 0x112233;
+	fallback.style.textColor = 0x445566;
+	fallback.style.bgColor = 0x778899;
+	UserMatch::Rule rule;
+	rule.field = UserMatch::Rule::NICK;
+	rule.pattern = "Someone else";
+	rule.setMethod(StringMatch::EXACT);
+	unrelated.addRule(std::move(rule));
+	unrelated.style.textColor = 0xffffff;
+	matching->setList({ unrelated, first, fallback }, false);
+	auto& bob = online(user(1), "dchub://styles.example");
+	bob.getIdentity().setNick("Bob");
+	matching->match(bob);
+	const auto snapshot = bob.getIdentity().getStyle();
+	ASSERT_EQ(2U, snapshot.matchingStyles.size());
+	EXPECT_EQ(first.style.textColor, snapshot.textColor);
+	EXPECT_TRUE(bob.getIdentity().noChat());
+
+	// Remove the first override: the lower priority rule must supply the new color.
+	// Add a previously absent font and background to that same first rule.
+	first.style.textColor = -1;
+	first.style.font = "Segoe UI,-16,700,0,1";
+	first.style.bgColor = 0x123456;
+	fallback.style.textColor = 0xaabbcc;
+	matching->setList({ unrelated, first, fallback }, false);
+	auto resolved = matching->resolveStyle(snapshot);
+	EXPECT_EQ(fallback.style.textColor, resolved.textColor);
+	EXPECT_EQ(first.style.bgColor, resolved.bgColor);
+	EXPECT_EQ(first.style.font, resolved.font);
+	EXPECT_EQ(fallback.styleId, resolved.textSource);
+	EXPECT_EQ(first.styleId, resolved.bgSource);
+	EXPECT_EQ(0x112233, bob.getIdentity().getStyle().textColor);
+	EXPECT_TRUE(bob.getIdentity().noChat());
+
+	// Pending old snapshots must also honor reordered and deleted definitions.
+	matching->setList({ fallback, first, unrelated }, false);
+	EXPECT_EQ(fallback.style.bgColor, matching->resolveStyle(snapshot).bgColor);
+	matching->setList({ unrelated }, false);
+	resolved = matching->resolveStyle(snapshot);
+	EXPECT_EQ(-1, resolved.textColor);
+	EXPECT_EQ(-1, resolved.bgColor);
+	EXPECT_TRUE(resolved.font.empty());
+
+	// Even a match with no original visual fields can acquire themed overrides.
+	first.style = Style();
+	matching->setList({ first }, false);
+	matching->match(bob);
+	const auto emptySnapshot = bob.getIdentity().getStyle();
+	first.style.textColor = 0xabcdef;
+	matching->setList({ first }, false);
+	EXPECT_EQ(first.style.textColor, matching->resolveStyle(emptySnapshot).textColor);
+
+	Style literal;
+	literal.textColor = 0x010203;
+	EXPECT_EQ(literal.textColor, matching->resolveStyle(literal).textColor);
+}
+
 TEST_F(ConnectionManagerTest, nmdc_transfers_to_multiple_users_have_independent_ids) {
 	StringSet downloadTokens, uploadTokens;
 	for(uint8_t id = 1; id <= 4; ++id) {

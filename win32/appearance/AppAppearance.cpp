@@ -22,6 +22,8 @@
 #include <dcpp/util/Util.h>
 #include <win32/appearance/ColorUtil.h>
 #include <win32/appearance/IconManager.h>
+#include <win32/appearance/UiFonts.h>
+#include <dcpp/user/UserMatchManager.h>
 #include <win32/forward.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dwt/Appearance.h>
@@ -138,8 +140,20 @@ void initStyleDefaults() {
 
 }
 void refreshTheme() {
+	// Make custom row fonts available before appearance callbacks repaint lists.
+	UiFonts::updateUserMatchFonts();
 	dwt::Application::instance().getAppearance().configure(
 		themeMode(), themePalette());
+}
+
+void applyUserStyle(const dcpp::Style& snapshot, HFONT& font, COLORREF& text, COLORREF& background) {
+	const auto style = UserMatchManager::getInstance()->resolveStyle(snapshot);
+	if(!style.font.empty()) {
+		const auto cached = UiFonts::getUserMatchFont(style.font);
+		if(cached) font = cached->handle();
+	}
+	if(style.textColor >= 0) text = style.textColor;
+	if(style.bgColor >= 0) background = style.bgColor;
 }
 
 void setColor(dwt::Control* widget) {

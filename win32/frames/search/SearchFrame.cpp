@@ -21,6 +21,7 @@
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/text/StringTokenizer.h>
 #include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
 #include <win32/appearance/ControlSeeds.h>
 #include <win32/appearance/IconManager.h>
 #include <win32/appearance/ImageLists.h>
@@ -93,24 +94,8 @@ int SearchFrame::SearchInfo::getImage(int col) const {
 	return sr->getType() == SearchResult::TYPE_FILE ? static_cast<int>(ImageLists::getFileIcon(sr->getFile())) : static_cast<int>(ImageLists::DIR_ICON);
 }
 
-int SearchFrame::SearchInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgColor, int col) const {
-		auto style = srs[0]->getStyle();
-
-		if (!style.font.empty()) {
-			auto cached = UiFonts::getUserMatchFont(style.font);
-			if (cached.get()) {
-				font = cached->handle();
-			}
-		}
-
-		if (style.textColor != -1) {
-			textColor = style.textColor;
-		}
-
-		if (style.bgColor != -1) {
-			bgColor = style.bgColor;
-		}
-
+int SearchFrame::SearchInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgColor, int) const {
+	AppAppearance::applyUserStyle(srs[0]->getStyle(), font, textColor, bgColor);
 	return CDRF_NEWFONT;
 }
 

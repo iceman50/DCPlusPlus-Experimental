@@ -20,6 +20,7 @@
 #include <dcpp/text/format.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/util/Util.h>
+#include <win32/appearance/AppAppearance.h>
 #include <win32/appearance/ControlSeeds.h>
 #include <win32/appearance/IconManager.h>
 #include <win32/appearance/UiFonts.h>
@@ -280,27 +281,8 @@ isOnline(u->isOnline())
 }
 
 int UsersFrame::UserInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgColor, int) const {
-	auto ident = ClientManager::getInstance()->getIdentities(user);
-	if(!ident.empty()) {
-	
-		auto style = ident[0].getStyle();
-
-		if(!style.font.empty()) {
-			auto cached = UiFonts::getUserMatchFont(style.font);
-			if(cached.get()) {
-				font = cached->handle();
-			}
-		}
-
-		if(style.textColor != -1) {
-			textColor = style.textColor;
-		}
-
-		if(style.bgColor != -1) {
-			bgColor = style.bgColor;
-		}
-	}
-
+	const auto ident = ClientManager::getInstance()->getIdentities(user);
+	if(!ident.empty()) AppAppearance::applyUserStyle(ident[0].getStyle(), font, textColor, bgColor);
 	return CDRF_NEWFONT;
 }
 

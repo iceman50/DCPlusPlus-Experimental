@@ -20,6 +20,7 @@
 #define DCPLUSPLUS_DCPP_STYLE_H
 
 #include <string>
+#include <vector>
 
 namespace dcpp {
 
@@ -32,6 +33,10 @@ struct Style {
 	// Session-local definition identities for live refresh; each component can come from
 	// a different matching rule. These are derived, not persisted rule data.
 	string fontSource, textSource, bgSource;
+	// All matching definitions, including ones with no visual overrides yet.
+	// Row painting uses these identities to resolve the current theme without
+	// waiting for an asynchronous user update to replace its identity snapshot.
+	std::vector<string> matchingStyles;
 
 	Style() : textColor(-1), bgColor(-1) { }
 };

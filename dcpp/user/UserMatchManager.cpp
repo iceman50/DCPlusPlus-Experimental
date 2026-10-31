@@ -42,8 +42,38 @@ UserMatchManager::UserMatches UserMatchManager::getList() const {
 
 Style UserMatchManager::getStyle(const string& styleId) const {
 	std::shared_lock<std::shared_mutex> lock(mutex);
-	for(const auto& match : list) if(match.styleId == styleId) return match.style;
-	return Style();
+	const auto found = styleIndices.find(styleId);
+	return found != styleIndices.end() ? list[found->second].style : Style();
+}
+
+Style UserMatchManager::resolveStyle(const Style& snapshot) const {
+	if(snapshot.matchingStyles.empty()) return snapshot;
+	std::shared_lock<std::shared_mutex> lock(mutex);
+	Style style;
+	auto fontIndex = list.size(), textIndex = list.size(), bgIndex = list.size();
+	for(const auto& id : snapshot.matchingStyles) {
+		const auto found = styleIndices.find(id);
+		if(found == styleIndices.end()) continue;
+		const auto index = found->second;
+		const auto& current = list[index].style;
+		// Use current rule priority even if definitions have been reordered.
+		if(index < fontIndex && !current.font.empty()) {
+			style.font = current.font;
+			style.fontSource = id;
+			fontIndex = index;
+		}
+		if(index < textIndex && current.textColor >= 0) {
+			style.textColor = current.textColor;
+			style.textSource = id;
+			textIndex = index;
+		}
+		if(index < bgIndex && current.bgColor >= 0) {
+			style.bgColor = current.bgColor;
+			style.bgSource = id;
+			bgIndex = index;
+		}
+	}
+	return style;
 }
 
 void UserMatchManager::setList(UserMatches&& newList, bool updateUsers) {
@@ -55,12 +85,14 @@ void UserMatchManager::setList(UserMatches&& newList, bool updateUsers) {
 			do { match.styleId = UserMatch().styleId; } while(!ids.insert(match.styleId).second);
 		}
 	}
-	if(list.empty() && newList.empty())
-		return;
+	std::unordered_map<string, size_t> newIndices;
+	for(size_t i = 0; i < newList.size(); ++i) newIndices.emplace(newList[i].styleId, i);
 
 	{
 		std::unique_lock<std::shared_mutex> lock(mutex);
+		if(list.empty() && newList.empty()) return;
 		const_cast<UserMatches&>(list) = move(newList);
+		styleIndices = move(newIndices);
 	}
 
 	if(updateUsers) {
@@ -80,6 +112,7 @@ void UserMatchManager::match(OnlineUser& user) const {
 
 	for(auto& i: list) {
 		if(i.match(user)) {
+			style.matchingStyles.push_back(i.styleId);
 
 			if(!chatSet && (i.isSet(UserMatch::FORCE_CHAT) || i.isSet(UserMatch::IGNORE_CHAT))) {
 				identity.setNoChat(i.isSet(UserMatch::IGNORE_CHAT));

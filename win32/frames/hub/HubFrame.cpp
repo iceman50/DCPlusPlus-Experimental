@@ -21,6 +21,7 @@
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/util/Util.h>
 #include <win32/app/UiServices.h>
+#include <win32/appearance/AppAppearance.h>
 #include <win32/appearance/ControlSeeds.h>
 #include <win32/appearance/IconManager.h>
 #include <win32/appearance/ImageLists.h>
@@ -1397,23 +1398,7 @@ int HubFrame::UserInfo::getImage(int col) const {
 }
 
 int HubFrame::UserInfo::getStyle(HFONT& font, COLORREF& textColor, COLORREF& bgColor, int) const {
-	auto style = identity.getStyle();
-
-	if(!style.font.empty()) {
-		auto cached = UiFonts::getUserMatchFont(style.font);
-		if(cached.get()) {
-			font = cached->handle();
-		}
-	}
-
-	if(style.textColor != -1) {
-		textColor = style.textColor;
-	}
-
-	if(style.bgColor != -1) {
-		bgColor = style.bgColor;
-	}
-
+	AppAppearance::applyUserStyle(identity.getStyle(), font, textColor, bgColor);
 	return CDRF_NEWFONT;
 }
 

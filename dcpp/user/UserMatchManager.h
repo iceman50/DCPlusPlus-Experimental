@@ -21,6 +21,7 @@
 
 #include <shared_mutex>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -48,6 +49,8 @@ public:
 	UserMatches getList() const;
 	/** Resolve a session-local definition identity, never a display name. */
 	Style getStyle(const string& styleId) const;
+	/** Resolve current visual overrides for an already matched identity snapshot. */
+	Style resolveStyle(const Style& snapshot) const;
 	/** Assign a new list of user matching definitions. */
 	void setList(UserMatches&& newList, bool updateUsers = true);
 
@@ -69,6 +72,7 @@ private:
 	friend class Singleton<UserMatchManager>;
 
 	const UserMatches list; // const to make sure only setList can change this.
+	std::unordered_map<string, size_t> styleIndices;
 	mutable std::shared_mutex mutex; // shared to allow multiple readers (each hub).
 
 	UserMatchManager();
