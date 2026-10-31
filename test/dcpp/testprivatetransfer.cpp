@@ -102,6 +102,14 @@ protected:
 		std::unique_ptr<SSLSocket> remote;
 		std::atomic<unsigned> processed { 0 };
 		std::atomic<bool> failed { false };
+		std::function<void()> beforeData;
+		void on(UserConnectionListener::Data, UserConnection*, const uint8_t*, size_t) noexcept override {
+			if(beforeData) {
+				auto callback = std::move(beforeData);
+				beforeData = {};
+				callback();
+			}
+		}
 
 		void on(UserConnectionListener::PrivateTransfer, UserConnection*, const std::string&) noexcept override { ++processed; }
 
@@ -357,6 +365,47 @@ protected:
 
 		return { pft::randomHex(16), peer.user->getCID().toBase32(), ClientManager::getInstance()->getMyCID().toBase32(), peerPin,
 			manager->ownFingerprint(), "received.txt", hashes.sha256, hashes.tth, body.size(), 900 };
+	}
+
+	pft::Metadata receiveWithBusyHashPool(const string& lifetime = "3600") {
+		auto& control = connect();
+		trust(control);
+		auto m = incoming("prefixsuffix");
+		write(control, m.record().encode());
+		waitState(m.id, DirectTransferManager::State::Offered);
+		manager->accept(m.id);
+		const auto accepted = pft::Record::decode(read(control));
+		const auto attempt = pft::randomHex(16), secret = pft::randomHex(32);
+		command(control, pft::Record { pft::Op::Grant,
+			{m.id, m.digest(), accepted.fields[2], attempt, secret, "0", "12", "60", lifetime} }.encode());
+		auto& data = connect(true, attempt);
+		read(data);
+		write(data, pft::Record { pft::Op::Ready, {m.id, m.digest(), attempt} }.encode());
+		read(data);
+		write(data, "CSND file private/" + m.id + " 0 12\nprefix");
+		auto deadline = pft::now() + 10000;
+		while(state(m.id).bytes != 6 && pft::now() < deadline)
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		if(state(m.id).bytes != 6) throw std::runtime_error("Prefix was not received");
+
+		// Four ordinary preparation futures consume the global hash-job quota.
+		// The real timer harvests them once per second; do not tick it between
+		// starting these jobs and delivering the last six bytes of the receive.
+		manager->offer(peer, source);
+		manager->offer(peer, source);
+		const auto receivingPeer = peer;
+		uint8_t cid[CID::SIZE] {}; cid[0] = 124;
+		peer = HintedUser(ClientManager::getInstance()->getUser(CID(cid)), receivingPeer.hint);
+		auto& otherControl = connect();
+		trust(otherControl);
+		manager->offer(peer, source);
+		manager->offer(peer, source);
+		peer = receivingPeer;
+		write(data, "suffix");
+		deadline = pft::now() + 10000;
+		while(state(m.id).state == DirectTransferManager::State::Receiving && pft::now() < deadline)
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		return m;
 	}
 };
 }
@@ -748,6 +797,161 @@ TEST_P(PrivateTransferTest, early_receipt_waits_for_local_transmit_completion) {
 	waitState(id, DirectTransferManager::State::Completed);
 	EXPECT_EQ(pft::Op::Ack, pft::Record::decode(read(control)).op);
 }
+
+TEST_P(PrivateTransferTest, pause_preserves_partial_when_data_callback_is_in_flight) {
+	auto& control = connect();
+	trust(control);
+	auto m = incoming("prefixsuffix");
+	write(control, m.record().encode());
+	waitState(m.id, DirectTransferManager::State::Offered);
+	manager->accept(m.id);
+	const auto accepted = pft::Record::decode(read(control));
+	const auto attempt = pft::randomHex(16), secret = pft::randomHex(32);
+	command(control, pft::Record { pft::Op::Grant,
+		{m.id, m.digest(), accepted.fields[2], attempt, secret, "0", "12", "60", "3600"} }.encode());
+	auto& data = connect(true, attempt);
+	read(data);
+	write(data, pft::Record { pft::Op::Ready, {m.id, m.digest(), attempt} }.encode());
+	read(data);
+	write(data, "CSND file private/" + m.id + " 0 12\nprefix");
+	auto deadline = pft::now() + 10000;
+	while(state(m.id).bytes != 6 && pft::now() < deadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	ASSERT_EQ(6u, state(m.id).bytes);
+
+	auto entered = std::make_shared<std::promise<void>>();
+	auto enteredFuture = entered->get_future();
+	auto released = std::make_shared<std::promise<void>>();
+	auto releaseFuture = released->get_future().share();
+	data.local->callAsync([&data, entered, releaseFuture] {
+		data.beforeData = [entered, releaseFuture] {
+			entered->set_value();
+			releaseFuture.wait_for(std::chrono::seconds(5));
+		};
+	});
+	barrier(*data.local);
+	write(data, "suffix");
+	const auto arrived = enteredFuture.wait_for(std::chrono::seconds(5));
+	if(arrived != std::future_status::ready) {
+		released->set_value();
+		FAIL() << "Timed out staging a real in-flight payload callback";
+	}
+	manager->pause(m.id);
+	EXPECT_EQ(DirectTransferManager::State::Paused, state(m.id).state);
+	released->set_value();
+	waitDisconnected(data);
+	EXPECT_EQ(DirectTransferManager::State::Paused, state(m.id).state)
+		<< "In-flight payload converted a resumable pause into failure";
+	EXPECT_TRUE(state(m.id).canResume);
+	EXPECT_EQ(6u, state(m.id).bytes);
+	EXPECT_EQ(pft::Op::Pause, pft::Record::decode(read(control)).op);
+	manager->resume(m.id);
+	waitState(m.id, DirectTransferManager::State::Connecting);
+	const auto request = pft::Record::decode(read(control));
+	ASSERT_EQ(pft::Op::Resume, request.op);
+	EXPECT_EQ("6", request.fields[3]);
+	EXPECT_EQ(pft::sha256("prefix", 6), request.fields[4]);
+	const auto nextAttempt = pft::randomHex(16);
+	command(control, pft::Record { pft::Op::Grant,
+		{m.id, m.digest(), request.fields[2], nextAttempt, pft::randomHex(32), "6", "12", "60", "3600"} }.encode());
+	auto& resumed = connect(true, nextAttempt);
+	read(resumed);
+	write(resumed, pft::Record { pft::Op::Ready, {m.id, m.digest(), nextAttempt} }.encode());
+	EXPECT_EQ("CGET file private/" + m.id + " 6 6", read(resumed));
+	write(resumed, "CSND file private/" + m.id + " 6 6\nsuffix");
+	waitState(m.id, DirectTransferManager::State::Completed);
+	EXPECT_EQ("prefixsuffix", File(state(m.id).savedPath, File::READ, File::OPEN).read());
+}
+
+TEST_P(PrivateTransferTest, pause_does_not_disconnect_control_on_crossing_grant) {
+	auto& control = connect();
+	trust(control);
+	auto m = incoming("prefixsuffix");
+	write(control, m.record().encode());
+	waitState(m.id, DirectTransferManager::State::Offered);
+	manager->accept(m.id);
+	const auto accepted = pft::Record::decode(read(control));
+	manager->pause(m.id);
+	EXPECT_EQ(pft::Op::Pause, pft::Record::decode(read(control)).op);
+	// This grant was already on its way when the recipient clicked Pause.
+	const auto staleGrant = pft::Record { pft::Op::Grant,
+		{m.id, m.digest(), accepted.fields[2], pft::randomHex(16), pft::randomHex(32), "0", "12", "60", "3600"} };
+	command(control, staleGrant.encode());
+	command(control, m.record().encode()); // Dispatch behind the grant on the same socket.
+	EXPECT_FALSE(control.failed.load());
+	EXPECT_NO_THROW(manager->checkSend(peer));
+	manager->resume(m.id);
+	waitState(m.id, DirectTransferManager::State::Connecting);
+	const auto request = pft::Record::decode(read(control));
+	ASSERT_EQ(pft::Op::Resume, request.op);
+	EXPECT_NE(accepted.fields[2], request.fields[2]);
+	command(control, staleGrant.encode()); // A superseded grant must not bind to this resume.
+	const auto nextAttempt = pft::randomHex(16);
+	command(control, pft::Record { pft::Op::Grant,
+		{m.id, m.digest(), request.fields[2], nextAttempt, pft::randomHex(32), "0", "12", "60", "3600"} }.encode());
+	auto& data = connect(true, nextAttempt);
+	const auto auth = pft::Record::decode(read(data));
+	EXPECT_EQ(nextAttempt, auth.fields[2]);
+	write(data, pft::Record { pft::Op::Ready, {m.id, m.digest(), nextAttempt} }.encode());
+	read(data);
+	write(data, "CSND file private/" + m.id + " 0 12\nprefixsuffix");
+	waitState(m.id, DirectTransferManager::State::Completed);
+	EXPECT_EQ("prefixsuffix", File(state(m.id).savedPath, File::READ, File::OPEN).read());
+}
+TEST_P(PrivateTransferTest, verification_waits_for_hash_capacity) {
+	const auto m = receiveWithBusyHashPool();
+	ASSERT_EQ(DirectTransferManager::State::Verifying, state(m.id).state);
+	EXPECT_EQ(12u, state(m.id).bytes);
+	EXPECT_TRUE(state(m.id).savedPath.empty());
+	EXPECT_FALSE(std::filesystem::exists(base / m.name));
+	waitState(m.id, DirectTransferManager::State::Completed);
+	EXPECT_EQ("prefixsuffix", File(state(m.id).savedPath, File::READ, File::OPEN).read());
+}
+
+TEST_P(PrivateTransferTest, queued_verification_can_be_cancelled) {
+	const auto m = receiveWithBusyHashPool();
+	ASSERT_EQ(DirectTransferManager::State::Verifying, state(m.id).state);
+	manager->cancel(m.id);
+	tick();
+	EXPECT_EQ(DirectTransferManager::State::Cancelled, state(m.id).state);
+	EXPECT_TRUE(state(m.id).savedPath.empty());
+	EXPECT_FALSE(std::filesystem::exists(base / m.name));
+	for(const auto& entry : std::filesystem::recursive_directory_iterator(base / "PrivateSend" / "Pending"))
+		EXPECT_FALSE(entry.is_regular_file());
+}
+
+TEST_P(PrivateTransferTest, queued_verification_obeys_hard_stop) {
+	const auto m = receiveWithBusyHashPool("1");
+	ASSERT_EQ(DirectTransferManager::State::Verifying, state(m.id).state);
+	// The peer grants a one-second hard stop. Let that real monotonic deadline
+	// pass before polling, so expiry wins over starting the queued hash job.
+	std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+	tick();
+	EXPECT_EQ(DirectTransferManager::State::Expired, state(m.id).state);
+	EXPECT_TRUE(state(m.id).savedPath.empty());
+	EXPECT_FALSE(std::filesystem::exists(base / m.name));
+	for(const auto& entry : std::filesystem::recursive_directory_iterator(base / "PrivateSend" / "Pending"))
+		EXPECT_FALSE(entry.is_regular_file());
+}
+
+TEST_P(PrivateTransferTest, paused_transfer_rejects_grant_for_unknown_request) {
+	auto& control = connect();
+	trust(control);
+	auto m = incoming("prefixsuffix");
+	write(control, m.record().encode());
+	waitState(m.id, DirectTransferManager::State::Offered);
+	manager->accept(m.id);
+	read(control);
+	manager->pause(m.id);
+	EXPECT_EQ(pft::Op::Pause, pft::Record::decode(read(control)).op);
+	write(control, pft::Record { pft::Op::Grant,
+		{m.id, m.digest(), pft::randomHex(16), pft::randomHex(16), pft::randomHex(32), "0", "12", "60", "3600"} }.encode());
+	waitDisconnected(control);
+	EXPECT_THROW(manager->checkSend(peer), Exception);
+	EXPECT_EQ(0u, state(m.id).bytes);
+	EXPECT_FALSE(std::filesystem::exists(base / m.name));
+}
+
 INSTANTIATE_TEST_SUITE_P(PrivateSendTLS, PrivateTransferTest,
 	::testing::Values(std::make_pair(TLS1_2_VERSION, true), std::make_pair(TLS1_3_VERSION, true),
 		std::make_pair(TLS1_2_VERSION, false), std::make_pair(TLS1_3_VERSION, false)),

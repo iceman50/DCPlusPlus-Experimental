@@ -119,6 +119,7 @@ private:
 	bool contactAllowed(const std::string& cid, const std::string& pin) const;
 	std::shared_ptr<Session> find(const std::string& id);
 
+	bool hasJobCapacity() const;
 	void limitJobs();
 	void limitTransfers(const Session& candidate);
 

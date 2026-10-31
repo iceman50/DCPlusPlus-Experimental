@@ -82,6 +82,9 @@ struct DirectTransferManager::Session {
 	pft::Metadata metadata;
 	string digest;
 	string nonce;
+	// Accept/resume requests retired by Pause. A grant can cross the pause or
+	// arrive while a later resume is preparing; it must never authorize that attempt.
+	std::vector<string> retiredNonces;
 	string attempt;
 	string secret;
 	string receipt;
@@ -516,13 +519,17 @@ std::shared_ptr<DirectTransferManager::Session> DirectTransferManager::find(cons
 	return i->second;
 }
 
-void DirectTransferManager::limitJobs() {
+bool DirectTransferManager::hasJobCapacity() const {
 	size_t count = 0;
 	for(auto& entry : sessions)
 		if(entry.second->job.valid())
 			++count;
 
-	need(count < 4);
+	return count < 4;
+}
+
+void DirectTransferManager::limitJobs() {
+	need(hasJobCapacity());
 }
 
 void DirectTransferManager::limitTransfers(const Session& candidate) {
@@ -565,6 +572,10 @@ void DirectTransferManager::suspend(Session& session) {
 		return;
 
 	++session.generation;
+	if(session.incoming && !session.nonce.empty() &&
+		std::find(session.retiredNonces.begin(), session.retiredNonces.end(), session.nonce) == session.retiredNonces.end())
+		session.retiredNonces.push_back(session.nonce);
+	session.awaitingGrant = false;
 	session.authorization.revoke();
 	pft::wipe(session.secret);
 	if(session.data)
@@ -720,6 +731,13 @@ void DirectTransferManager::process(Connection& connection, const pft::Record& r
 		break;
 
 	case pft::Op::Grant:
+		// Identity and metadata bindings have already been checked above. Ignore
+		// only known retired requests, without accepting their capability or
+		// disconnecting the control channel used by the current attempt.
+		if(session->incoming && std::find(session->retiredNonces.begin(), session->retiredNonces.end(), fields[2]) !=
+			session->retiredNonces.end())
+			return;
+
 		if(session->incoming && !session->awaitingGrant && fields[2] == session->nonce && fields[3] == session->attempt)
 			return;
 
@@ -855,10 +873,13 @@ void DirectTransferManager::processDataCommand(Connection& connection, const str
 }
 
 void DirectTransferManager::startVerify(Session& session) {
-	limitJobs();
 	need(session.file && session.bytes == session.metadata.size && !session.job.valid());
 
 	session.state = State::Verifying;
+	// Keep the complete staged file while other hash jobs occupy the pool.
+	// poll() retries after harvesting jobs, with cancellation and expiry intact.
+	if(!hasJobCapacity())
+		return;
 	session.jobKind = Session::Verify;
 
 	auto file = session.file;
@@ -966,6 +987,19 @@ void DirectTransferManager::poll() {
 			}
 		} catch(...) {
 			terminate(session, State::Failed);
+		}
+	}
+
+	// Harvest all completed jobs before admitting waiting verification work.
+	// This also avoids depending on the random offer-ID iteration order.
+	for(auto& entry : sessions) {
+		auto& session = *entry.second;
+		if(session.state == State::Verifying && !session.job.valid()) {
+			try {
+				startVerify(session);
+			} catch(...) {
+				terminate(session, State::Failed);
+			}
 		}
 	}
 
@@ -1085,6 +1119,12 @@ void DirectTransferManager::on(UserConnectionListener::PrivateTransfer, UserConn
 		userConnection->disconnect(true);
 		return;
 	}
+	const auto& session = i->second->session;
+	if(i->second->data && session && (session->data != userConnection || session->state == State::Paused || isTerminal(session->state))) {
+		// Already-dispatched RDY/SND records can outlive a deliberate disconnect.
+		userConnection->disconnect(true);
+		return;
+	}
 
 	try {
 		if(line.compare(0, 5, "CPFT ") == 0) {
@@ -1117,6 +1157,14 @@ void DirectTransferManager::on(UserConnectionListener::Data, UserConnection* use
 		return;
 
 	auto session = i->second->session;
+
+	if(session && session->incoming &&
+		(session->data != userConnection || session->state == State::Paused || isTerminal(session->state))) {
+		// Pause revokes the socket immediately, but a payload callback may already
+		// be waiting for mutex. Discard it without losing the resumable prefix.
+		userConnection->disconnect(true);
+		return;
+	}
 
 	try {
 		need(session && session->incoming && session->state == State::Receiving && pft::now() < session->hardStop &&
