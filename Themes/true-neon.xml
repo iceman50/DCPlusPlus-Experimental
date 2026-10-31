@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DCPlusPlusTheme Name="True Neon" Author="iceman50" License="GPL-3.0-or-later" Version="2">
+  <!-- Copyright (C) 2026 iceman50 -->
+  <Palette Background="#06070D" Surface="#101321" Text="#E6F1FF" DisabledText="#8896B8" Border="#303B59" Accent="#00D9FF" HighlightText="#06070D" />
+  <!-- Near-black surfaces keep the neon accents distinct; fonts inherit application defaults. -->
+  <Colors>
+    <Color Setting="TextColor" Value="#E6F1FF" />
+    <Color Setting="BackgroundColor" Value="#06070D" />
+    <Color Setting="UploadTextColor" Value="#39FF88" />
+    <Color Setting="UploadBgColor" Value="#0A2921" />
+    <Color Setting="DownloadTextColor" Value="#36A9FF" />
+    <Color Setting="DownloadBgColor" Value="#0B203C" />
+    <Color Setting="LinkColor" Value="#00F5FF" />
+    <Color Setting="LinkBgColor" Value="#06070D" />
+    <Color Setting="LogColor" Value="#9DA8C7" />
+    <Color Setting="LogBgColor" Value="#06070D" />
+    <Color Setting="SystemLogVerboseColor" Value="#8896B8" />
+    <Color Setting="SystemLogInfoColor" Value="#00F5FF" />
+    <Color Setting="SystemLogWarningColor" Value="#FFB52E" />
+    <Color Setting="SystemLogErrorColor" Value="#FF466F" />
+    <Color Setting="SystemLogAreaColor" Value="#BE78FF" />
+    <Color Setting="ChatTimestampColor" Value="#7D8AA8" />
+    <Color Setting="ChatTimestampBgColor" Value="#06070D" />
+    <Color Setting="ChatNickColor" Value="#FF4FD8" />
+    <Color Setting="ChatNickBgColor" Value="#06070D" />
+    <Color Setting="ChatTextColor" Value="#E6F1FF" />
+    <Color Setting="ChatTextBgColor" Value="#06070D" />
+    <Color Setting="ChatSystemColor" Value="#BE78FF" />
+    <Color Setting="ChatSystemBgColor" Value="#06070D" />
+    <Color Setting="ChatOwnTimestampColor" Value="#568DC4" />
+    <Color Setting="ChatOwnTimestampBgColor" Value="#06070D" />
+    <Color Setting="ChatOwnNickColor" Value="#249CFF" />
+    <Color Setting="ChatOwnNickBgColor" Value="#06070D" />
+    <Color Setting="ChatOwnTextColor" Value="#36A9FF" />
+    <Color Setting="ChatOwnTextBgColor" Value="#06070D" />
+    <Color Setting="ChatMentionColor" Value="#FF4FD8" />
+    <Color Setting="ChatMentionBgColor" Value="#29112C" />
+  </Colors>
+  <UserStyles>
+    <Style Name="Favorite users (added by DC++)" TextColor="#39FF88" BgColor="#06070D" />
+    <Style Name="Operators (added by DC++)" TextColor="#F4FF00" BgColor="#06070D" />
+  </UserStyles>
+</DCPlusPlusTheme>
