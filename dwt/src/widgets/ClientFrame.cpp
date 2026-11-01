@@ -123,7 +123,8 @@ void ClientFrame::refresh() {
 void ClientFrame::layout() {
 	if(layingOut || !owner->usesClientFrame()) return;
 	layingOut = true;
-	const auto width = owner->getClientSize().x;
+	const auto border = owner->getDialogBorderWidth();
+	const auto width = std::max(0L, owner->getClientSize().x - border * 2);
 	const bool rtl = owner->hasExStyle(WS_EX_LAYOUTRTL);
 	const long buttonWidth = owner->scale(42);
 	long edge = width;
@@ -218,7 +219,7 @@ void ClientFrame::layout() {
 	// Keep the one-pixel separator outside child bounds so their painting and
 	// WS_CLIPCHILDREN cannot obscure it beneath caption buttons or menu headings.
 	frameHeight = y + (items.empty() ? 0 : rowHeight) + 1;
-	::SetWindowPos(handle(), HWND_TOP, 0, 0, width, frameHeight, SWP_NOACTIVATE);
+	::SetWindowPos(handle(), HWND_TOP, border, border, width, frameHeight, SWP_NOACTIVATE);
 	layingOut = false;
 }
 
@@ -353,10 +354,10 @@ LRESULT ClientFrame::resizeHitTest(LPARAM position) const {
 LRESULT ClientFrame::hitTest(LPARAM position) const {
 	const auto resize = resizeHitTest(position);
 	if(resize != HTCLIENT) return resize;
-	const auto point = clientPoint(owner->handle(), position);
+	const auto point = clientPoint(handle(), position);
 	if(point.y >= 0 && point.y < captionHeight) {
 		// Buttons are real child controls; their own hit tests retain client input.
-		const auto width = owner->getClientSize().x;
+		const auto width = getClientSize().x;
 		const bool icon = owner->hasExStyle(WS_EX_LAYOUTRTL) ? point.x >= width - owner->scale(32) : point.x < owner->scale(32);
 		return icon && owner->hasStyle(WS_SYSMENU) ? HTSYSMENU : HTCAPTION;
 	}

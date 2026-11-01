@@ -174,6 +174,7 @@ const string SettingsManager::settingTags[] =
 	"EnableSUDP", "BroadDetection", "BroadDetection6", "HashDbVerifyStartup", "HashDbCompactOnRebuild",
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
 	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind", "PFTRequireVerification",
+	"ThemedDialogBorders",
 	"SENTRY",
 	// Int64
 	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize", "GeoIPLastSuccess", "GeoIPLastAttempt",
@@ -296,6 +297,7 @@ SettingsManager::SettingsManager() {
 	setDefault(CCPM_STABLE_CONNECTION_TIME, 60);
 	setDefault(CCPM_MAX_AUTOMATIC_ATTEMPTS, 5);
 	setDefault(THEME_MODE, THEME_SYSTEM);
+	setDefault(THEMED_DIALOG_BORDERS, true);
 	setDefault(THEME_BACKGROUND_COLOR, RGB(32, 32, 32));
 	setDefault(THEME_SURFACE_COLOR, RGB(45, 45, 48));
 	setDefault(THEME_TEXT_COLOR, RGB(241, 241, 241));

@@ -564,6 +564,12 @@ void Appearance::configure(Mode mode_, const Palette& palette, Rendering renderi
 	}
 }
 
+void Appearance::setDialogBorders(bool enabled) {
+	if(dialogBorders == enabled) return;
+	dialogBorders = enabled;
+	changed();
+}
+
 bool Appearance::refreshSystemState() {
 	const bool previousHighContrast = highContrast;
 	const bool previousSystemDark = systemDark;

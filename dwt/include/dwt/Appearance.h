@@ -122,6 +122,9 @@ public:
 
 	Mode getMode() const { return mode; }
 	Rendering getRendering() const { return rendering; }
+	/** Application preference, independent of imported palettes. Updates open dialogs. */
+	void setDialogBorders(bool enabled);
+	bool getDialogBorders() const { return dialogBorders; }
 	bool isDark() const { return dark; }
 	bool isHighContrast() const { return highContrast; }
 	bool isManual() const { return !highContrast && (dark || rendering == Rendering::CustomPalette); }
@@ -190,6 +193,7 @@ private:
 	bool systemRefreshRequiresApply;
 	unsigned generation;
 	unsigned updateDepth = 0;
+	bool dialogBorders = true;
 	std::vector<Widget*> widgets;
 	CallbackList callbacks;
 	BrushPtr backgroundBrush;

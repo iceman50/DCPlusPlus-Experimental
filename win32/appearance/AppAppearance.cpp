@@ -86,6 +86,7 @@ void updateApplicationColors() {
 }
 void init() {
 	auto& appearance = dwt::Application::instance().getAppearance();
+	appearance.setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
 	IconManager::initialize();
 	appearance.configure(themeMode(), themePalette());
 
@@ -142,8 +143,10 @@ void initStyleDefaults() {
 void refreshTheme() {
 	// Make custom row fonts available before appearance callbacks repaint lists.
 	UiFonts::updateUserMatchFonts();
-	dwt::Application::instance().getAppearance().configure(
-		themeMode(), themePalette());
+	auto& appearance = dwt::Application::instance().getAppearance();
+	dwt::Appearance::UpdateScope update(appearance);
+	appearance.setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
+	appearance.configure(themeMode(), themePalette());
 }
 
 void applyUserStyle(const dcpp::Style& snapshot, HFONT& font, COLORREF& text, COLORREF& background) {

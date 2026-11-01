@@ -67,24 +67,31 @@ void Frame::setFrameRendering(FrameRendering rendering) {
 	updateCaptionAppearance();
 }
 
+long Frame::getDialogBorderWidth() const {
+	return manualFrame && (edgeStyle & WS_EX_DLGMODALFRAME) &&
+		getAppearance().getDialogBorders() && !::IsZoomed(handle()) ? std::max(1, scale(1)) : 0;
+}
+
 Rectangle Frame::getContentRect() const {
 	auto size = getClientSize();
-	const long top = manualFrame && clientFrame ? std::min(size.y, clientFrame->height()) : 0;
+	const auto border = getDialogBorderWidth();
+	const long top = manualFrame && clientFrame ? std::min(size.y, border + clientFrame->height()) : 0;
 	const bool resize = manualFrame && hasStyle(WS_THICKFRAME) && !::IsZoomed(handle());
-	const long edgeX = resize ? getSystemMetric(SM_CXSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER) : 0;
-	const long edgeY = resize ? getSystemMetric(SM_CYSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER) : 0;
+	const long edgeX = std::max(border, resize ? getSystemMetric(SM_CXSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER) : 0L);
+	const long edgeY = std::max(border, resize ? getSystemMetric(SM_CYSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER) : 0L);
 	return Rectangle(std::min(edgeX, size.x / 2), top, std::max(0L, size.x - edgeX * 2), std::max(0L, size.y - top - edgeY));
 }
 
 bool Frame::adjustContentRect(RECT& rect) const {
 	if(!manualFrame) return adjustWindowRect(rect, ::GetMenu(handle()) != nullptr);
-	rect.top -= clientFrame ? clientFrame->height() : 0;
-	if(hasStyle(WS_THICKFRAME) && !::IsZoomed(handle())) {
-		const auto edgeX = getSystemMetric(SM_CXSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER);
-		rect.left -= edgeX;
-		rect.right += edgeX;
-		rect.bottom += getSystemMetric(SM_CYSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER);
-	}
+	const auto border = getDialogBorderWidth();
+	rect.top -= clientFrame ? clientFrame->height() + border : 0;
+	const bool resize = hasStyle(WS_THICKFRAME) && !::IsZoomed(handle());
+	const long edgeX = std::max(border, resize ? getSystemMetric(SM_CXSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER) : 0L);
+	const long edgeY = std::max(border, resize ? getSystemMetric(SM_CYSIZEFRAME) + getSystemMetric(SM_CXPADDEDBORDER) : 0L);
+	rect.left -= edgeX;
+	rect.right += edgeX;
+	rect.bottom += edgeY;
 	return true;
 }
 
@@ -103,14 +110,21 @@ void Frame::setMenuBar(HMENU menu) {
 void Frame::refreshClientFrame() {
 	if(!manualFrame || !clientFrame || changingFrame) return;
 	const long previousHeight = clientFrame->height();
+	const auto border = getDialogBorderWidth();
+	const bool borderChanged = lastDialogBorderWidth != border;
+	lastDialogBorderWidth = border;
 	clientFrame->layout();
-	if(previousHeight != clientFrame->height()) ::PostMessage(handle(), frameLayoutMessage(), 0, 0);
+	if(borderChanged || previousHeight != clientFrame->height()) ::PostMessage(handle(), frameLayoutMessage(), 0, 0);
+	if(borderChanged) redrawWindow(RDW_INVALIDATE | RDW_ERASE);
 }
 
 void Frame::appearanceChanged() {
 	BaseType::appearanceChanged();
 	updateCaptionAppearance();
-	if(manualFrame && clientFrame) clientFrame->refresh();
+	if(manualFrame && clientFrame) {
+		clientFrame->refresh();
+		refreshClientFrame();
+	}
 }
 
 bool Frame::handleMessage(const MSG& msg, LRESULT& result) {
@@ -136,8 +150,19 @@ bool Frame::handleMessage(const MSG& msg, LRESULT& result) {
 			return true;
 		case WM_NCACTIVATE:
 			if(clientFrame) clientFrame->handleFrameMessage(msg, result);
+			if(getDialogBorderWidth()) redrawWindow(RDW_INVALIDATE | RDW_ERASE);
 			result = TRUE;
 			return true;
+		case WM_ERASEBKGND:
+			if(getDialogBorderWidth() && msg.wParam) {
+				const auto dc = reinterpret_cast<HDC>(msg.wParam);
+				if(!BaseType::handleMessage(msg, result) && !handleEraseBackground(dc))
+					getDispatcher().chain(msg);
+				paintDialogBorder(dc);
+				result = TRUE;
+				return true;
+			}
+			break;
 		case WM_NCHITTEST:
 			if(clientFrame) {
 				result = clientFrame->hitTest(msg.lParam);
@@ -229,6 +254,20 @@ bool Frame::handleEraseBackground(HDC dc) {
 	FreeCanvas canvas(dc);
 	canvas.fill(Rectangle(getClientSize()), *getAppearance().getBackgroundBrush());
 	return true;
+}
+
+void Frame::paintDialogBorder(HDC dc) {
+	FreeCanvas canvas(dc);
+	const auto size = getClientSize();
+	const auto border = std::min(getDialogBorderWidth(), std::min(size.x, size.y) / 2);
+	if(border > 0) {
+		const auto& colors = getAppearance().getPalette();
+		Brush brush(clientFrame && clientFrame->isActive() ? colors.border : Appearance::blend(colors.background, colors.border, 128));
+		canvas.fill(Rectangle(0, 0, size.x, border), brush);
+		canvas.fill(Rectangle(0, size.y - border, size.x, border), brush);
+		canvas.fill(Rectangle(0, border, border, size.y - border * 2), brush);
+		canvas.fill(Rectangle(size.x - border, border, border, size.y - border * 2), brush);
+	}
 }
 
 void Frame::updateCaptionAppearance() {

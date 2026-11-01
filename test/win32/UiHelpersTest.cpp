@@ -10,8 +10,12 @@
 #include <win32/services/LinkActions.h>
 #include <win32/dialogs/ParamDlg.h>
 #include <win32/settings/connection/BandwidthLimitPage.h>
+#include <win32/settings/appearance/AppearancePage.h>
+#include <win32/appearance/ThemeManager.h>
+#include <dcpp/user/UserMatchManager.h>
 #include <dwt/widgets/Window.h>
 #include <dwt/widgets/Spinner.h>
+#include <dwt/widgets/CheckBox.h>
 #include <dcpp/app/ResourceManager.h>
 #include <dcpp/search/Magnet.h>
 #include <dcpp/settings/SettingsManager.h>
@@ -89,6 +93,51 @@ void manualLimitControls() {
 		}
 	}
 	DestroyWindow(window->handle());
+}
+
+void dialogBorderPreference() {
+	auto& appearance = dwt::Application::instance().getAppearance();
+	auto settings = SettingsManager::getInstance();
+	appearance.configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
+	check(settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Dialog borders were not enabled by default");
+	auto window = new dwt::Window();
+	auto seed = dwt::Window::Seed();
+	seed.style &= ~WS_VISIBLE;
+	window->create(seed);
+	{
+		ParamDlg dialog(window, L"Dialog border preview");
+		dialog.addTextBox(L"Content", L"Preview");
+		dialog.create(dwt::ModalDialog::Seed(dwt::Point(365, 0)));
+		for(bool save: { false, true }) {
+			auto page = new AppearancePage(window);
+			page->resize(dwt::Rectangle(0, 0, 640, 600));
+			page->layout();
+			std::vector<HWND> children;
+			EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
+			dwt::CheckBox* option = nullptr;
+			for(auto child: children) {
+				auto box = dwt::hwnd_cast<dwt::CheckBox*>(child);
+				if(box && box->getText() == T_("Show borders around themed dialogs")) option = box;
+			}
+			check(option && option->getChecked(), "Appearance did not expose the saved border preference");
+			option->sendMessage(BM_CLICK);
+			check(!appearance.getDialogBorders() && dialog.getDialogBorderWidth() == 0, "Border checkbox did not update an open dialog");
+			check(settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Border preview prematurely saved the setting");
+			if(save) page->write();
+			DestroyWindow(page->handle());
+			check(appearance.getDialogBorders() == !save && settings->get(SettingsManager::THEMED_DIALOG_BORDERS) == !save,
+				"Closing Appearance did not respect OK/Cancel");
+		}
+		UserMatchManager::newInstance();
+		auto theme = ThemeManager::capture();
+		ThemeManager::apply(theme, false);
+		check(!settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Applying a theme changed the border preference");
+		UserMatchManager::deleteInstance();
+		DestroyWindow(dialog.handle());
+	}
+	DestroyWindow(window->handle());
+	settings->set(SettingsManager::THEMED_DIALOG_BORDERS, true);
+	appearance.setDialogBorders(true);
 }
 
 void tableSettings() {
@@ -171,6 +220,7 @@ int dwtMain(dwt::Application&) {
 		tableSettings();
 		chatAndLinks();
 		manualLimitControls();
+		dialogBorderPreference();
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(0, 0, 0))) == RGB(0, 0, 0), "Black color conversion changed");
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(255, 255, 255))) == RGB(255, 255, 255), "White color conversion changed");
 		check(ColorUtil::modRed(RGB(250, 100, 100), 20) == RGB(255, 85, 85), "Color overflow adjustment changed");

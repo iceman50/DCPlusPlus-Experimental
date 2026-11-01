@@ -31,7 +31,8 @@
 #include <cmath>
 
 SplashWindow::SplashWindow() : dwt::Window(nullptr), started(GetTickCount64()) {
-	Seed seed(_T(APPNAME) _T(" ") _T(VERSIONSTRING));
+	const auto title = _T(APPNAME) _T(" ") _T(VERSIONSTRING) _T(" ") + Text::toT(buildLabel);
+	Seed seed(title);
 	seed.style = WS_POPUP;
 	seed.exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
 	create(seed);
@@ -40,7 +41,7 @@ SplashWindow::SplashWindow() : dwt::Window(nullptr), started(GetTickCount64()) {
 	status = T_("Starting up...");
 	pendingStatus = status;
 	enableAccessibility();
-	setAccessibleName(_T(APPNAME) _T(" ") _T(VERSIONSTRING));
+	setAccessibleName(title);
 	setAccessibleHelpText(status);
 	onClosing([this] { return finished; });
 	onPainting([this](dwt::PaintCanvas& canvas) { draw(canvas); });
@@ -168,7 +169,7 @@ void SplashWindow::draw(dwt::Canvas& target) {
 		canvas.drawText(value, rect, align | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 	};
 	text(_T(APPNAME), 128, 36, titleFont, palette.text, DT_CENTER);
-	text(_T(VERSIONSTRING), 168, 22, detailFont, palette.disabledText, DT_CENTER);
+	text(_T(VERSIONSTRING) _T(" ") + Text::toT(buildLabel), 168, 22, detailFont, palette.disabledText, DT_CENTER);
 	text(T_("Starting up..."), 196, 22, detailFont, palette.disabledText, DT_CENTER);
 	text(status, 240, 22, detailFont, palette.text, DT_LEFT);
 	const long left = pixels(32), top = pixels(272), width = size.x - pixels(64), height = pixels(4);

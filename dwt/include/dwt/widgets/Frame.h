@@ -111,6 +111,8 @@ public:
 
 	/** Client coordinates available for application content, below custom chrome. */
 	Rectangle getContentRect() const;
+	/** Painted outer edge of a custom modal frame, in physical pixels. */
+	long getDialogBorderWidth() const;
 	bool usesClientFrame() const { return manualFrame; }
 	bool isMenuBarFocused() const;
 	void refreshClientFrame();
@@ -138,6 +140,7 @@ protected:
 
 private:
 	bool handleEraseBackground(HDC dc);
+	void paintDialogBorder(HDC dc);
 	void updateCaptionAppearance();
 	void updateNativeFrameAppearance();
 
@@ -150,6 +153,7 @@ private:
 	bool changingFrame;
 	FrameRendering frameRendering = FrameRendering::Automatic;
 	bool nativeFrameAppearanceApplied = false;
+	long lastDialogBorderWidth = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

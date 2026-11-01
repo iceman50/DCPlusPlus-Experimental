@@ -37,6 +37,19 @@ TEST_F(SettingsMigrationTest, uses_readable_emoticon_size_by_default)
 	EXPECT_EQ(24, SettingsManager::getInstance()->get(SettingsManager::EMOTICON_SIZE));
 }
 
+TEST_F(SettingsMigrationTest, persists_optional_themed_dialog_borders)
+{
+	const auto path = Util::getTempPath() + "dcpp-test-dialog-border-settings.xml";
+	auto settings = SettingsManager::getInstance();
+	EXPECT_TRUE(settings->get(SettingsManager::THEMED_DIALOG_BORDERS));
+	settings->set(SettingsManager::THEMED_DIALOG_BORDERS, false);
+	settings->save(path);
+	settings->set(SettingsManager::THEMED_DIALOG_BORDERS, true);
+	settings->load(path);
+	EXPECT_FALSE(settings->get(SettingsManager::THEMED_DIALOG_BORDERS));
+	File::deleteFile(path);
+}
+
 TEST_F(SettingsMigrationTest, persists_global_hub_user_icon_size_and_embedded_icons)
 {
 	const auto path = Util::getTempPath() + "dcpp-test-hub-icon-settings.xml";

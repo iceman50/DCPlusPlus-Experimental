@@ -20,6 +20,7 @@ public:
 	void releaseFrameInput();
 	void layout() override;
 	long height() const { return frameHeight; }
+	bool isActive() const { return active; }
 	bool menuFocused() const;
 	bool handleFrameMessage(const MSG& msg, LRESULT& result);
 	LRESULT hitTest(LPARAM position) const;
