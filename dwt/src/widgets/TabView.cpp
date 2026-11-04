@@ -437,7 +437,7 @@ void TabView::swapWidgets(ContainerPtr oldW, ContainerPtr newW) {
 	newW->setFocus();
 	// Showing a page only queues painting. Once the old page is hidden and
 	// focus/layout have settled, paint the selected page and its descendants
-	// now so RichEdit does not display the previous hub until the queue idles.
+	// now so stale content is not displayed while the message queue is busy.
 	newW->redrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
