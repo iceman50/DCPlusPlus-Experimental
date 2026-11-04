@@ -22,6 +22,7 @@
 #include <dcpp/base/debug.h>
 #include <dcpp/system/File.h>
 #include <dcpp/util/Util.h>
+#include <set>
 
 #include <unzip.h>
 #ifdef _WIN32
@@ -105,6 +106,60 @@ void Archive::extract(const string& path) {
 	} while(check(unzGoToNextFile(file)) == UNZ_OK);
 }
 
+bool Archive::isPackagePath(const string& path) {
+	if(path.empty() || path.size() > 240 || path.front() == '/' || path.back() == '/') return false;
+	for(unsigned char c: path) {
+		if(c < 32 || c >= 127 || string("\\:<>\"|?*~").find(c) != string::npos) return false;
+	}
+	size_t begin = 0;
+	while(begin < path.size()) {
+		const auto end = path.find('/', begin);
+		auto part = path.substr(begin, end == string::npos ? string::npos : end - begin);
+		if(part.empty() || part == "." || part == ".." || part.back() == '.' || part.back() == ' ') return false;
+		std::transform(part.begin(), part.end(), part.begin(), [](unsigned char c) { return static_cast<char>(toupper(c)); });
+		part = part.substr(0, part.find('.'));
+		while(!part.empty() && part.back() == ' ') part.pop_back();
+		if(part == "CON" || part == "PRN" || part == "AUX" || part == "NUL" ||
+			(part.size() == 4 && (part.substr(0, 3) == "COM" || part.substr(0, 3) == "LPT") && part[3] >= '0' && part[3] <= '9')) return false;
+		if(end == string::npos) break;
+		begin = end + 1;
+	}
+	return true;
+}
+
+std::vector<string> Archive::packageEntries(size_t maxEntries, uint64_t maxFileBytes, uint64_t maxTotalBytes) {
+	std::vector<string> result;
+	std::set<string> names, regularNames;
+	uint64_t total = 0;
+	size_t count = 0;
+	if(check(unzGoToFirstFile(file)) != UNZ_OK) throw Exception("Empty plugin package");
+	do {
+		unz_file_info64 info {};
+		check(unzGetCurrentFileInfo64(file, &info, nullptr, 0, nullptr, 0, nullptr, 0));
+		if(++count > maxEntries || info.size_filename > 241 || info.uncompressed_size > maxFileBytes ||
+			info.uncompressed_size > maxTotalBytes - total) throw Exception("Plugin package exceeds size limits");
+		total += info.uncompressed_size;
+		vector<char> name(info.size_filename + 1, 0);
+		check(unzGetCurrentFileInfo64(file, nullptr, name.data(), static_cast<uLong>(name.size()), nullptr, 0, nullptr, 0));
+		string entry(name.data(), info.size_filename);
+		const bool directory = !entry.empty() && entry.back() == '/';
+		if(directory) entry.pop_back();
+		const auto mode = (info.external_fa >> 16) & 0170000;
+		if(!isPackagePath(entry) || (info.flag & 1) || (mode && mode != (directory ? 0040000 : 0100000)))
+			throw Exception("Invalid plugin package entry");
+		auto folded = entry;
+		std::transform(folded.begin(), folded.end(), folded.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
+		if(!names.insert(folded).second) throw Exception("Duplicate plugin package path");
+		if(!directory) { result.push_back(entry); regularNames.insert(folded); }
+	} while(check(unzGoToNextFile(file)) == UNZ_OK);
+	for(const auto& name: names) {
+		for(auto slash = name.find('/'); slash != string::npos; slash = name.find('/', slash + 1)) {
+			if(regularNames.count(name.substr(0, slash))) throw Exception("Conflicting plugin package paths");
+		}
+	}
+	return result;
+}
+
 string Archive::readFile(const string& name, size_t maxBytes) {
 	if(unzLocateFile(file, name.c_str(), 0) != UNZ_OK) throw Exception(_("Archive entry not found"));
 	unz_file_info64 info = {};
@@ -122,6 +177,8 @@ string Archive::readFile(const string& name, size_t maxBytes) {
 			if(read <= 0) throw Exception(_("Invalid archive"));
 			offset += static_cast<size_t>(read);
 		}
+		char extra;
+		if(unzReadCurrentFile(file, &extra, 1) != 0) throw Exception("Invalid archive entry length");
 	} catch(...) {
 		unzCloseCurrentFile(file);
 		throw;

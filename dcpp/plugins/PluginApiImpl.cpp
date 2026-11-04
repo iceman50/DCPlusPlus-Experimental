@@ -21,7 +21,6 @@
  * they are simply separated here.
  *
  * Notes:
- *	- Current implementation does not correctly run HOOK_CHAT_PM_OUT for PM's sent as a result of Client::sendUserCmd
  *	- dcpp may run HOOK_HUB_OFFLINE for hubs that never ran HOOK_HUB_ONLINE before (if socket creation fails in Client::connect)
  */
 
@@ -40,12 +39,28 @@
 #include <dcpp/chat/Tagger.h>
 #include <dcpp/connection/UserConnection.h>
 #include <dcpp/version.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/net/HttpConnection.h>
+#include <dcpp/plugins/PluginHttp.h>
+#include <mutex>
+#include <type_traits>
+#include <unordered_set>
+#include <limits>
+#include <filesystem>
 
 namespace dcpp {
 
-#define IMPL_HOOKS_COUNT 26
+namespace {
+template<auto Function> struct ApiBoundary;
+template<class R, class... Args, R (DCAPI *Function)(Args...)>
+struct ApiBoundary<Function> {
+	static R DCAPI call(Args... args) noexcept {
+		try { return Function(args...); }
+		catch(...) { if constexpr(!std::is_void_v<R>) return R {}; }
+	}
+};
+std::mutex udpMutex;
+}
+
+#define IMPL_HOOKS_COUNT 30
 
 static const char* hookGuids[IMPL_HOOKS_COUNT] = {
 	HOOK_CHAT_IN,
@@ -58,6 +73,8 @@ static const char* hookGuids[IMPL_HOOKS_COUNT] = {
 
 	HOOK_HUB_ONLINE,
 	HOOK_HUB_OFFLINE,
+	HOOK_USER_ONLINE,
+	HOOK_USER_OFFLINE,
 
 	HOOK_NETWORK_HUB_IN,
 	HOOK_NETWORK_HUB_OUT,
@@ -65,6 +82,8 @@ static const char* hookGuids[IMPL_HOOKS_COUNT] = {
 	HOOK_NETWORK_CONN_OUT,
 	HOOK_NETWORK_UDP_IN,
 	HOOK_NETWORK_UDP_OUT,
+	HOOK_NETWORK_UDP_IN2,
+	HOOK_NETWORK_UDP_OUT2,
 
 	HOOK_QUEUE_ADDED,
 	HOOK_QUEUE_MOVED,
@@ -87,112 +106,164 @@ static const char* hostName = APPNAME;
 DCHooks PluginApiImpl::dcHooks = {
 	DCINTF_HOOKS_VER,
 
-	&PluginApiImpl::createHook,
-	&PluginApiImpl::destroyHook,
+	&ApiBoundary<&PluginApiImpl::createHook>::call,
+	&ApiBoundary<&PluginApiImpl::destroyHook>::call,
 
-	&PluginApiImpl::bindHook,
-	&PluginApiImpl::runHook,
-	&PluginApiImpl::releaseHook
+	&ApiBoundary<&PluginApiImpl::bindHook>::call,
+	&ApiBoundary<&PluginApiImpl::runHook>::call,
+	&ApiBoundary<&PluginApiImpl::releaseHook>::call
 };
 
 DCConfig PluginApiImpl::dcConfig = {
 	DCINTF_CONFIG_VER,
 
-	&PluginApiImpl::getPath,
-	&PluginApiImpl::getInstallPath,
+	&ApiBoundary<&PluginApiImpl::getPath>::call,
+	&ApiBoundary<&PluginApiImpl::getInstallPath>::call,
 
-	&PluginApiImpl::setConfig,
-	&PluginApiImpl::getConfig,
+	&ApiBoundary<&PluginApiImpl::setConfig>::call,
+	&ApiBoundary<&PluginApiImpl::getConfig>::call,
 
-	&PluginApiImpl::getLanguage,
+	&ApiBoundary<&PluginApiImpl::getLanguage>::call,
 
-	&PluginApiImpl::copyData,
-	&PluginApiImpl::releaseData
+	&ApiBoundary<static_cast<ConfigValuePtr (DCAPI *)(ConfigValuePtr)>(&PluginApiImpl::copyData)>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(ConfigValuePtr)>(&PluginApiImpl::releaseData)>::call
 };
 
 DCLog PluginApiImpl::dcLog = {
 	DCINTF_LOGGING_VER,
 
-	&PluginApiImpl::log
+	&ApiBoundary<&PluginApiImpl::log>::call
 };
 
 DCConnection PluginApiImpl::dcConnection = {
 	DCINTF_DCPP_CONNECTIONS_VER,
 
-	&PluginApiImpl::sendUdpData,
-	&PluginApiImpl::sendProtocolCmd,
-	&PluginApiImpl::terminateConnection,
+	&ApiBoundary<&PluginApiImpl::sendUdpData>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(ConnectionDataPtr, const char*)>(&PluginApiImpl::sendProtocolCmd)>::call,
+	&ApiBoundary<&PluginApiImpl::terminateConnection>::call,
 
-	&PluginApiImpl::getUserFromConn
+	&ApiBoundary<&PluginApiImpl::getUserFromConn>::call
 };
 
 DCHub PluginApiImpl::dcHub = {
 	DCINTF_DCPP_HUBS_VER,
 
-	&PluginApiImpl::addHub,
-	&PluginApiImpl::findHub,
-	&PluginApiImpl::removeHub,
+	&ApiBoundary<&PluginApiImpl::addHub>::call,
+	&ApiBoundary<&PluginApiImpl::findHub>::call,
+	&ApiBoundary<&PluginApiImpl::removeHub>::call,
 
-	&PluginApiImpl::emulateProtocolCmd,
-	&PluginApiImpl::sendProtocolCmd,
+	&ApiBoundary<&PluginApiImpl::emulateProtocolCmd>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(HubDataPtr, const char*)>(&PluginApiImpl::sendProtocolCmd)>::call,
 
-	&PluginApiImpl::sendHubMessage,
-	&PluginApiImpl::sendLocalMessage,
-	&PluginApiImpl::sendPrivateMessage,
+	&ApiBoundary<&PluginApiImpl::sendHubMessage>::call,
+	&ApiBoundary<&PluginApiImpl::sendLocalMessage>::call,
+	&ApiBoundary<&PluginApiImpl::sendPrivateMessage>::call,
 
-	&PluginApiImpl::findUser,
-	&PluginApiImpl::copyData,
-	&PluginApiImpl::releaseData,
+	&ApiBoundary<&PluginApiImpl::findUser>::call,
+	&ApiBoundary<static_cast<UserDataPtr (DCAPI *)(UserDataPtr)>(&PluginApiImpl::copyData)>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(UserDataPtr)>(&PluginApiImpl::releaseData)>::call,
 
-	&PluginApiImpl::copyData,
-	&PluginApiImpl::releaseData
+	&ApiBoundary<static_cast<HubDataPtr (DCAPI *)(HubDataPtr)>(&PluginApiImpl::copyData)>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(HubDataPtr)>(&PluginApiImpl::releaseData)>::call
 };
 
 DCQueue PluginApiImpl::dcQueue = {
 	DCINTF_DCPP_QUEUE_VER,
 
-	&PluginApiImpl::addList,
-	&PluginApiImpl::addDownload,
-	&PluginApiImpl::findDownload,
-	&PluginApiImpl::removeDownload,
+	&ApiBoundary<&PluginApiImpl::addList>::call,
+	&ApiBoundary<&PluginApiImpl::addDownload>::call,
+	&ApiBoundary<&PluginApiImpl::findDownload>::call,
+	&ApiBoundary<&PluginApiImpl::removeDownload>::call,
 
-	&PluginApiImpl::setPriority,
-	&PluginApiImpl::pause,
+	&ApiBoundary<&PluginApiImpl::setPriority>::call,
+	&ApiBoundary<&PluginApiImpl::pause>::call,
 
-	&PluginApiImpl::copyData,
-	&PluginApiImpl::releaseData
+	&ApiBoundary<static_cast<QueueDataPtr (DCAPI *)(QueueDataPtr)>(&PluginApiImpl::copyData)>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(QueueDataPtr)>(&PluginApiImpl::releaseData)>::call
 };
 
 DCUtils PluginApiImpl::dcUtils = {
 	DCINTF_DCPP_UTILS_VER,
 
-	&PluginApiImpl::toUtf8,
-	&PluginApiImpl::fromUtf8,
+	&ApiBoundary<&PluginApiImpl::toUtf8>::call,
+	&ApiBoundary<&PluginApiImpl::fromUtf8>::call,
 
-	&PluginApiImpl::Utf8toWide,
-	&PluginApiImpl::WidetoUtf8,
+	&ApiBoundary<&PluginApiImpl::Utf8toWide>::call,
+	&ApiBoundary<&PluginApiImpl::WidetoUtf8>::call,
 
-	&PluginApiImpl::toBase32,
-	&PluginApiImpl::fromBase32
+	&ApiBoundary<&PluginApiImpl::toBase32>::call,
+	&ApiBoundary<&PluginApiImpl::fromBase32>::call
 };
 
 DCTagger PluginApiImpl::dcTagger = {
 	DCINTF_DCPP_TAGGER_VER,
 
-	&PluginApiImpl::getText,
+	&ApiBoundary<&PluginApiImpl::getText>::call,
 
-	&PluginApiImpl::addTag,
-	&PluginApiImpl::replaceText
+	&ApiBoundary<&PluginApiImpl::addTag>::call,
+	&ApiBoundary<&PluginApiImpl::replaceText>::call
 };
 
 DCDataAccess PluginApiImpl::dcDataAccess = {
 	DCINTF_DCPP_DATAACCESSOR_VER,
 
-	&PluginApiImpl::getHTTPResource,
+	&ApiBoundary<&PluginApiImpl::getHTTPResource>::call,
 
-	&PluginApiImpl::copyData,
-	&PluginApiImpl::releaseData
+	&ApiBoundary<static_cast<DataArrayPtr (DCAPI *)(DataArrayPtr)>(&PluginApiImpl::copyData)>::call,
+	&ApiBoundary<static_cast<void (DCAPI *)(DataArrayPtr)>(&PluginApiImpl::releaseData)>::call
 };
+
+namespace {
+template<class C, class F> size_t converted(C* dst, size_t capacity, F convert) noexcept {
+	try {
+		const auto value = convert();
+		const auto required = value.size() + 1;
+		if(dst && capacity >= required) memcpy(dst, value.c_str(), required * sizeof(C));
+		return required;
+	} catch(...) { return SIZE_MAX; }
+}
+size_t DCAPI utf8v2(char* dst, size_t capacity, const char* src) {
+	return src ? converted(dst, capacity, [&] { return Text::toUtf8(src); }) : SIZE_MAX;
+}
+size_t DCAPI localv2(char* dst, size_t capacity, const char* src) {
+	return src ? converted(dst, capacity, [&] { return Text::fromUtf8(src); }) : SIZE_MAX;
+}
+size_t DCAPI widev2(wchar_t* dst, size_t capacity, const char* src) {
+	return src ? converted(dst, capacity, [&] { return Text::utf8ToWide(src); }) : SIZE_MAX;
+}
+size_t DCAPI narrowv2(char* dst, size_t capacity, const wchar_t* src) {
+	return src ? converted(dst, capacity, [&] { return Text::wideToUtf8(src); }) : SIZE_MAX;
+}
+size_t DCAPI encodev2(char* dst, size_t capacity, const uint8_t* src, size_t length) {
+	if((length && !src) || length > (SIZE_MAX - 4) / 8) return SIZE_MAX;
+	return converted(dst, capacity, [&] { return Encoder::toBase32(src, length); });
+}
+size_t DCAPI decodev2(uint8_t* dst, size_t capacity, const char* src, size_t length) {
+	if((length && !src) || length > SIZE_MAX / 5) return SIZE_MAX;
+	const auto remainder = length % 8;
+	if(remainder == 1 || remainder == 3 || remainder == 6) return SIZE_MAX;
+	try {
+		ByteVector bytes;
+		bytes.reserve(length * 5 / 8);
+		unsigned bits = 0, value = 0;
+		for(size_t i = 0; i < length; ++i) {
+			const unsigned char c = src[i];
+			if(!((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7'))) return SIZE_MAX;
+			value = (value << 5) | (c >= 'A' ? c - 'A' : c - '2' + 26);
+			bits += 5;
+			if(bits >= 8) { bits -= 8; bytes.push_back(static_cast<uint8_t>(value >> bits)); }
+		}
+		if(bits && (value & ((1u << bits) - 1))) return SIZE_MAX;
+		if(dst && capacity >= bytes.size() && !bytes.empty()) memcpy(dst, bytes.data(), bytes.size());
+		return bytes.size();
+	} catch(...) { return SIZE_MAX; }
+}
+Bool DCAPI drainSubscription(subsHandle subscription) {
+	return PluginManager::getInstance()->drainHook(static_cast<HookSubscriber*>(subscription)) ? True : False;
+}
+DCHooks2 hooks2 { DCINTF_HOOKS2_VER, &ApiBoundary<&drainSubscription>::call };
+DCUtils2 utils2 { DCINTF_DCPP_UTILS2_VER, utf8v2, localv2, widev2, narrowv2, encodev2, decodev2 };
+}
 
 Socket* PluginApiImpl::udpSocket = nullptr;
 Socket& PluginApiImpl::getUdpSocket() {
@@ -208,23 +279,27 @@ void PluginApiImpl::init() {
 	dcCore.apiVersion = DCAPI_CORE_VER;
 
 	// Interface registry
-	dcCore.register_interface = &PluginApiImpl::registerInterface;
-	dcCore.query_interface = &PluginApiImpl::queryInterface;
-	dcCore.release_interface = &PluginApiImpl::releaseInterface;
+	dcCore.register_interface = &ApiBoundary<&PluginApiImpl::registerInterface>::call;
+	dcCore.query_interface = &ApiBoundary<&PluginApiImpl::queryInterface>::call;
+	dcCore.release_interface = &ApiBoundary<&PluginApiImpl::releaseInterface>::call;
 
 	// Core functions
-	dcCore.has_plugin = &PluginApiImpl::isLoaded;
-	dcCore.host_name = &PluginApiImpl::hostName;
+	dcCore.has_plugin = &ApiBoundary<&PluginApiImpl::isLoaded>::call;
+	dcCore.host_name = &ApiBoundary<&PluginApiImpl::hostName>::call;
 
 	// Interfaces (since these outlast any plugin they don't need to be explictly released)
 	dcCore.register_interface(DCINTF_HOOKS, &dcHooks);
+	dcCore.register_interface(DCINTF_HOOKS2, &hooks2);
+	static DCConfig2 config2 { DCINTF_CONFIG2_VER, &ApiBoundary<&PluginApiImpl::getConfig2>::call };
 	dcCore.register_interface(DCINTF_CONFIG, &dcConfig);
+	dcCore.register_interface(DCINTF_CONFIG2, &config2);
 	dcCore.register_interface(DCINTF_LOGGING, &dcLog);
 
 	dcCore.register_interface(DCINTF_DCPP_CONNECTIONS, &dcConnection);
 	dcCore.register_interface(DCINTF_DCPP_HUBS, &dcHub);
 	dcCore.register_interface(DCINTF_DCPP_QUEUE, &dcQueue);
 	dcCore.register_interface(DCINTF_DCPP_UTILS, &dcUtils);
+	dcCore.register_interface(DCINTF_DCPP_UTILS2, &utils2);
 	dcCore.register_interface(DCINTF_DCPP_TAGGER, &dcTagger);
 	dcCore.register_interface(DCINTF_DCPP_DATAACCESSOR, &dcDataAccess);
 
@@ -234,6 +309,7 @@ void PluginApiImpl::init() {
 }
 
 void PluginApiImpl::shutdown() {
+	std::lock_guard<std::mutex> lock(udpMutex);
 	if(udpSocket) {
 		udpSocket->disconnect();
 		delete udpSocket;
@@ -243,10 +319,12 @@ void PluginApiImpl::shutdown() {
 
 // Functions for DCCore
 intfHandle PluginApiImpl::registerInterface(const char* guid, dcptr_t pInterface) {
+	if(!guid || !pInterface) return nullptr;
 	return PluginManager::getInstance()->registerInterface(guid, pInterface);
 }
 
 DCInterfacePtr PluginApiImpl::queryInterface(const char* guid, uint32_t version) {
+	if(!guid) return nullptr;
 	// we only return the registered interface if it is same or newer than requested
 	DCInterface* dci = (DCInterface*)PluginManager::getInstance()->queryInterface(guid);
 	return (!dci || dci->apiVersion >= version) ? dci : nullptr;
@@ -257,6 +335,7 @@ Bool PluginApiImpl::releaseInterface(intfHandle hInterface) {
 }
 
 Bool PluginApiImpl::isLoaded(const char* guid) {
+	if(!guid) return False;
 	return PluginManager::getInstance()->isLoaded(guid) ? True : False;
 }
 
@@ -266,6 +345,7 @@ const char* PluginApiImpl::hostName() {
 
 // Functions for DCHook
 hookHandle PluginApiImpl::createHook(const char* guid, DCHOOK defProc) {
+	if(!guid) return nullptr;
 	return PluginManager::getInstance()->createHook(guid, defProc);
 }
 
@@ -276,6 +356,7 @@ Bool PluginApiImpl::destroyHook(hookHandle hHook) {
 }
 
 subsHandle PluginApiImpl::bindHook(const char* guid, DCHOOK hookProc, void* pCommon) {
+	if(!guid || !hookProc) return nullptr;
 	return PluginManager::getInstance()->bindHook(guid, hookProc, pCommon);
 }
 
@@ -289,18 +370,23 @@ size_t PluginApiImpl::releaseHook(subsHandle hHook) {
 
 // Functions for DCConfig
 ConfigStrPtr DCAPI PluginApiImpl::getPath(PathType type) {
+	if(type < PATH_GLOBAL_CONFIG || type > PATH_LOCALE) return nullptr;
 	auto str = Util::getPath(static_cast<Util::Paths>(type));
 	ConfigStr value = { CFG_TYPE_STRING, str.c_str() };
 	return reinterpret_cast<ConfigStrPtr>(copyData(reinterpret_cast<ConfigValuePtr>(&value)));
 }
 
 ConfigStrPtr DCAPI PluginApiImpl::getInstallPath(const char* guid) {
+	if(!guid) return nullptr;
 	auto str = PluginManager::getInstallPath(guid);
+	const auto installed = PluginManager::getInstance()->getPlugin(guid);
+	if(!installed.path.empty()) str = std::filesystem::u8path(installed.path).parent_path().u8string() + PATH_SEPARATOR_STR;
 	ConfigStr value = { CFG_TYPE_STRING, str.c_str() };
 	return reinterpret_cast<ConfigStrPtr>(copyData(reinterpret_cast<ConfigValuePtr>(&value)));
 }
 
 void PluginApiImpl::setConfig(const char* guid, const char* setting, ConfigValuePtr val) {
+	if(!guid || !setting || !val) return;
 	PluginManager* pm = PluginManager::getInstance();
 	switch(val->type) {
 		case CFG_TYPE_REMOVE:
@@ -327,63 +413,80 @@ void PluginApiImpl::setConfig(const char* guid, const char* setting, ConfigValue
 			break;
 		}
 		default:
-			dcassert(0);
+			break;
 	}
 }
 
 ConfigValuePtr PluginApiImpl::getConfig(const char* guid, const char* setting, ConfigType type) {
+	if(!guid || !setting) return nullptr;
 	// Attempt to retrieve core setting...
 	if(strcmp(guid, "CoreSetup") == 0) {
 		int n;
-		SettingsManager::Types type;
-		if(SettingsManager::getInstance()->getType(setting, n, type)) {
-			switch(type) {
+		SettingsManager::Types coreType;
+		if(SettingsManager::getInstance()->getType(setting, n, coreType)) {
+			switch(coreType) {
 				case SettingsManager::TYPE_STRING: {
+					if(type != CFG_TYPE_UNKNOWN && type != CFG_TYPE_STRING) return nullptr;
 					string settingValue = SettingsManager::getInstance()->get(static_cast<SettingsManager::StrSetting>(n));
 					ConfigStr value = { CFG_TYPE_STRING, settingValue.c_str() };
 
 					return copyData((ConfigValuePtr)&value);
 				}
 				case SettingsManager::TYPE_INT: {
+					if(type != CFG_TYPE_UNKNOWN && type != CFG_TYPE_INT) return nullptr;
 					ConfigInt value = { CFG_TYPE_INT, SettingsManager::getInstance()->get(static_cast<SettingsManager::IntSetting>(n)) };
 					return copyData((ConfigValuePtr)&value);
 				}
 				case SettingsManager::TYPE_BOOL: {
+					if(type != CFG_TYPE_UNKNOWN && type != CFG_TYPE_BOOL) return nullptr;
 					ConfigBool value = { CFG_TYPE_BOOL, SettingsManager::getInstance()->get(static_cast<SettingsManager::BoolSetting>(n)) ? True : False };
 					return copyData((ConfigValuePtr)&value);
 				}
 				case SettingsManager::TYPE_INT64: {
+					if(type != CFG_TYPE_UNKNOWN && type != CFG_TYPE_INT64) return nullptr;
 					ConfigInt64 value = { CFG_TYPE_INT64, SettingsManager::getInstance()->get(static_cast<SettingsManager::Int64Setting>(n)) };
 					return copyData((ConfigValuePtr)&value);
 				}
 				default:
-					dcassert(0);
+					break;
 			}
 
 			return NULL;
 		}
+		return nullptr;
 	}
 
-	PluginManager* pm = PluginManager::getInstance();
+	return makeConfig(PluginManager::getInstance()->getPluginSetting(guid, setting), type);
+}
+
+ConfigValuePtr PluginApiImpl::getConfig2(const char* guid, const char* setting, ConfigType type) {
+	if(!guid || !setting) return nullptr;
+	if(strcmp(guid, "CoreSetup") == 0) return getConfig(guid, setting, type);
+	string stored;
+	if(!PluginManager::getInstance()->tryGetPluginSetting(guid, setting, stored)) return nullptr;
+	return makeConfig(stored, type);
+}
+
+ConfigValuePtr PluginApiImpl::makeConfig(const string& stored, ConfigType type) {
 	switch(type) {
 		case CFG_TYPE_STRING: {
-			ConfigStr value = { type, pm->getPluginSetting(guid, setting).c_str() };
+			ConfigStr value = { type, stored.c_str() };
 			return copyData((ConfigValuePtr)&value);
 		}
 		case CFG_TYPE_INT: {
-			ConfigInt value = { type, Util::toInt(pm->getPluginSetting(guid, setting)) };
+			ConfigInt value = { type, Util::toInt(stored) };
 			return copyData((ConfigValuePtr)&value);
 		}
 		case CFG_TYPE_BOOL: {
-			ConfigBool value = { type, pm->getPluginSetting(guid, setting) != "0" ? True : False };
+			ConfigBool value = { type, Util::toInt(stored) != 0 ? True : False };
 			return copyData((ConfigValuePtr)&value);
 		}
 		case CFG_TYPE_INT64: {
-			ConfigInt64 value = { type, Util::toInt64(pm->getPluginSetting(guid, setting)) };
+			ConfigInt64 value = { type, Util::toInt64(stored) };
 			return copyData((ConfigValuePtr)&value);
 		}
 		default:
-			dcassert(0);
+			break;
 	}
 
 	return NULL;
@@ -396,14 +499,18 @@ ConfigStrPtr DCAPI PluginApiImpl::getLanguage() {
 }
 
 ConfigValuePtr PluginApiImpl::copyData(const ConfigValuePtr val) {
+	if(!val) return nullptr;
 	switch(val->type) {
 		case CFG_TYPE_STRING: {
 			auto str = (ConfigStrPtr)val;
+			if(!str->value) return nullptr;
 			auto copy = (ConfigStrPtr)malloc(sizeof(ConfigStr));
+			if(!copy) return nullptr;
 			memcpy(copy, str, sizeof(ConfigStr));
 
 			size_t bufLen = strlen(str->value) + 1;
 			copy->value = (char*)malloc(bufLen);
+			if(!copy->value) { free(copy); return nullptr; }
 			strncpy((char*)copy->value, str->value, bufLen);
 
 			return (ConfigValuePtr)copy;
@@ -411,6 +518,7 @@ ConfigValuePtr PluginApiImpl::copyData(const ConfigValuePtr val) {
 		case CFG_TYPE_INT: {
 			auto num = (ConfigIntPtr)val;
 			auto copy = (ConfigIntPtr)malloc(sizeof(ConfigInt));
+			if(!copy) return nullptr;
 			memcpy(copy, num, sizeof(ConfigInt));
 
 			return (ConfigValuePtr)copy;
@@ -418,6 +526,7 @@ ConfigValuePtr PluginApiImpl::copyData(const ConfigValuePtr val) {
 		case CFG_TYPE_BOOL: {
 			auto num = (ConfigBoolPtr)val;
 			auto copy = (ConfigBoolPtr)malloc(sizeof(ConfigBool));
+			if(!copy) return nullptr;
 			memcpy(copy, num, sizeof(ConfigBool));
 			
 			return (ConfigValuePtr)copy;
@@ -425,18 +534,20 @@ ConfigValuePtr PluginApiImpl::copyData(const ConfigValuePtr val) {
 		case CFG_TYPE_INT64: {
 			auto num = (ConfigInt64Ptr)val;
 			auto copy = (ConfigInt64Ptr)malloc(sizeof(ConfigInt64));
+			if(!copy) return nullptr;
 			memcpy(copy, num, sizeof(ConfigInt64));
 
 			return (ConfigValuePtr)copy;
 		}
 		default:
-			dcassert(0);
+			break;
 	}
 
 	return NULL;
 }
 
 void PluginApiImpl::releaseData(ConfigValuePtr val) {
+	if(!val) return;
 	switch(val->type) {
 		case CFG_TYPE_STRING: {
 			auto str = (ConfigStrPtr)val;
@@ -460,29 +571,35 @@ void PluginApiImpl::releaseData(ConfigValuePtr val) {
 			break;
 		}
 		default:
-			dcassert(0);
+			break;
 	}
 }
 
 // Functions for DCLog
 void PluginApiImpl::log(const char* msg) {
+	if(!msg) return;
 	LogManager::getInstance()->message(msg, LogMessage::SEV_INFO, _("Plugins"));
 }
 
 // Functions for DCConnection
 void PluginApiImpl::sendProtocolCmd(ConnectionDataPtr conn, const char* cmd) {
+	if(!PluginManager::isCallbackObject(conn) || !conn->object || !cmd) return;
 	reinterpret_cast<UserConnection*>(conn->object)->sendRaw(cmd);
 }
 
 void PluginApiImpl::terminateConnection(ConnectionDataPtr conn, Bool graceless) {
+	if(!PluginManager::isCallbackObject(conn) || !conn->object) return;
 	reinterpret_cast<UserConnection*>(conn->object)->disconnect(graceless != False);
 }
 
 void PluginApiImpl::sendUdpData(const char* ip, uint32_t port, dcptr_t data, size_t n) {
+	if(!ip || !data || !n || port > 65535) return;
+	std::lock_guard<std::mutex> lock(udpMutex);
 	try { getUdpSocket().writeTo(ip, Util::toString(port), data, n); } catch (const Exception&) { /* ... */ }
 }
 
 UserDataPtr PluginApiImpl::getUserFromConn(ConnectionDataPtr conn) {
+	if(!PluginManager::isCallbackObject(conn) || !conn->object) return nullptr;
 	auto user = reinterpret_cast<UserConnection*>(conn->object)->getHintedUser();
 	if(!user.user) { return nullptr; }
 
@@ -494,65 +611,78 @@ UserDataPtr PluginApiImpl::getUserFromConn(ConnectionDataPtr conn) {
 
 // Functions for DCUtils
 size_t PluginApiImpl::toUtf8(char* dst, const char* src, size_t n) {
+	if(!src) return 0;
 	string str(Text::toUtf8(src));
-	if(n >= str.size()) {
-		strncpy(dst, str.c_str(), str.size());
+	if(dst && n >= str.size()) {
+		memcpy(dst, str.data(), str.size());
+		if(n > str.size()) dst[str.size()] = 0;
 	}
 	return str.size();
 }
 
 size_t PluginApiImpl::fromUtf8(char* dst, const char* src, size_t n) {
+	if(!src) return 0;
 	string str(Text::fromUtf8(src));
-	if(n >= str.size()) {
-		strncpy(dst, str.c_str(), str.size());
+	if(dst && n >= str.size()) {
+		memcpy(dst, str.data(), str.size());
+		if(n > str.size()) dst[str.size()] = 0;
 	}
 	return str.size();
 }
 
 size_t PluginApiImpl::Utf8toWide(wchar_t* dst, const char* src, size_t n) {
+	if(!src) return 0;
 	wstring str(Text::utf8ToWide(src));
-	if(n >= str.size()) {
-		wcsncpy(dst, str.c_str(), str.size());
+	if(dst && n >= str.size()) {
+		memcpy(dst, str.data(), str.size() * sizeof(wchar_t));
+		if(n > str.size()) dst[str.size()] = 0;
 	}
 	return str.size();
 }
 
 size_t PluginApiImpl::WidetoUtf8(char* dst, const wchar_t* src, size_t n) {
+	if(!src) return 0;
 	string str(Text::wideToUtf8(src));
-	if(n >= str.size()) {
-		strncpy(dst, str.c_str(), str.size());
+	if(dst && n >= str.size()) {
+		memcpy(dst, str.data(), str.size());
+		if(n > str.size()) dst[str.size()] = 0;
 	}
 	return str.size();
 }
 
 size_t PluginApiImpl::toBase32(char* dst, const uint8_t* src, size_t n) {
-	string str(Encoder::toBase32(src, n));
-	if(n >= str.size()) {
-		strncpy(dst, str.c_str(), str.size());
-	}
-	return str.size();
+	if((n && !src) || n > (std::numeric_limits<size_t>::max() - 4) / 8) return 0;
+	const auto encoded = Encoder::toBase32(src, n);
+	if(dst) memcpy(dst, encoded.data(), encoded.size());
+	return encoded.size();
 }
 
 size_t PluginApiImpl::fromBase32(uint8_t* dst, const char* src, size_t n) {
-	Encoder::fromBase32(src, dst, n);
-	return n;
+	if(!src || !dst || !n) return 0;
+	const auto count = std::min(n, strlen(src) * 5 / 8);
+	Encoder::fromBase32(src, dst, count);
+	return count;
 }
 
 // Functions for DCTagger
 const char* PluginApiImpl::getText(TagDataPtr hTags) {
+	if(!hTags || !hTags->object) return nullptr;
 	return reinterpret_cast<Tagger*>(hTags->object)->getText().c_str();
 }
 
 void PluginApiImpl::addTag(TagDataPtr hTags, size_t start, size_t end, const char* id, const char* attributes) {
+	if(!hTags || !hTags->object || !id || !attributes) return;
 	reinterpret_cast<Tagger*>(hTags->object)->addTag(start, end, id, attributes);
 }
 
 void PluginApiImpl::replaceText(TagDataPtr hTags, size_t start, size_t end, const char* replacement) {
+	if(!hTags || !hTags->object || !replacement) return;
 	reinterpret_cast<Tagger*>(hTags->object)->replaceText(start, end, replacement);
 }
 
 // Functions for DCQueue
 QueueDataPtr PluginApiImpl::addList(UserDataPtr user, Bool silent) {
+	if(!user || !user->cid || !user->hubHint) return nullptr;
 	auto u = ClientManager::getInstance()->findUser(CID(user->cid));
 	if(!u) return NULL;
 
@@ -568,6 +698,7 @@ QueueDataPtr PluginApiImpl::addList(UserDataPtr user, Bool silent) {
 }
 
 QueueDataPtr PluginApiImpl::addDownload(const char* hash, uint64_t size, const char* target) {
+	if(!hash || strlen(hash) != 39 || !target || size > INT64_MAX) return nullptr;
 	QueueData* data = NULL;
 	try {
 		string sTarget = File::isAbsolute(target) ? target : SETTING(DOWNLOAD_DIRECTORY) + target;
@@ -581,6 +712,7 @@ QueueDataPtr PluginApiImpl::addDownload(const char* hash, uint64_t size, const c
 }
 
 QueueDataPtr PluginApiImpl::findDownload(const char* target) {
+	if(!target) return nullptr;
 	QueueData* data = NULL;
 	QueueManager::getInstance()->lockedOperation([&data, target](const QueueItem::StringMap& lst) {
 		string sTarget = target;
@@ -594,42 +726,43 @@ QueueDataPtr PluginApiImpl::findDownload(const char* target) {
 }
 
 void PluginApiImpl::removeDownload(QueueDataPtr qi) {
+	if(!qi || !qi->target) return;
 	QueueManager::getInstance()->remove(qi->target);
 }
 
 void PluginApiImpl::setPriority(QueueDataPtr qi, QueuePrio priority) {
-	reinterpret_cast<QueueItem*>(qi->object)->setPriority(static_cast<QueueItem::Priority>(priority));
+	if(!qi || !qi->target || static_cast<int>(priority) < QueueItem::DEFAULT || static_cast<int>(priority) >= QueueItem::LAST) return;
+	QueueManager::getInstance()->setPriority(qi->target, static_cast<int>(priority) == QueueItem::DEFAULT ? QueueItem::NORMAL : static_cast<QueueItem::Priority>(priority));
 }
 
 Bool PluginApiImpl::pause(QueueDataPtr qi) {
-	auto item = reinterpret_cast<QueueItem*>(qi->object);
-	bool paused = (item->getPriority() == QueueItem::PAUSED);
-
-	item->setPriority(paused ? QueueItem::DEFAULT : QueueItem::PAUSED);
-	return (!paused ? True : False);
+	if(!qi || !qi->target) return False;
+	return QueueManager::getInstance()->togglePause(qi->target) ? True : False;
 }
 
 QueueDataPtr PluginApiImpl::copyData(const QueueDataPtr qi) {
-	QueueDataPtr copy = (QueueDataPtr)malloc(sizeof(QueueData));
-	memcpy(copy, qi, sizeof(QueueData));
-
-	size_t bufLen = strlen(qi->target) + 1;
-	copy->target = (char*)malloc(bufLen);
-	strncpy((char*)copy->target, qi->target, bufLen);
-
-	bufLen = strlen(qi->location) + 1;
-	copy->location = (char*)malloc(bufLen);
-	strncpy((char*)copy->location, qi->location, bufLen);
-
-	bufLen = strlen(qi->hash) + 1;
-	copy->hash = (char*)malloc(bufLen);
-	strncpy((char*)copy->hash, qi->hash, bufLen);
-
+	if(!qi || !qi->target || !qi->location || !qi->hash) return nullptr;
+	auto copy = static_cast<QueueDataPtr>(malloc(sizeof(QueueData)));
+	if(!copy) return nullptr;
+	*copy = *qi;
+	copy->target = nullptr;
+	copy->location = nullptr;
+	copy->hash = nullptr;
 	copy->isManaged = False;
+	copy->target = static_cast<char*>(malloc(strlen(qi->target) + 1));
+	if(!copy->target) { releaseData(copy); return nullptr; }
+	memcpy(const_cast<char*>(copy->target), qi->target, strlen(qi->target) + 1);
+	copy->location = static_cast<char*>(malloc(strlen(qi->location) + 1));
+	if(!copy->location) { releaseData(copy); return nullptr; }
+	memcpy(const_cast<char*>(copy->location), qi->location, strlen(qi->location) + 1);
+	copy->hash = static_cast<char*>(malloc(strlen(qi->hash) + 1));
+	if(!copy->hash) { releaseData(copy); return nullptr; }
+	memcpy(const_cast<char*>(copy->hash), qi->hash, strlen(qi->hash) + 1);
 	return copy;
 }
 
 void PluginApiImpl::releaseData(QueueDataPtr qi) {
+	if(!qi) return;
 	if(qi->isManaged) {
 		LogManager::getInstance()->message("Plugin trying to free a managed object !", LogMessage::SEV_WARNING, _("Plugins"));
 		return;
@@ -644,29 +777,33 @@ void PluginApiImpl::releaseData(QueueDataPtr qi) {
 
 // Functions for DCHub
 HubDataPtr PluginApiImpl::addHub(const char* url, const char* nick, const char* password) {
-	HubData* data = findHub(url);
+	if(!url || !*url) return nullptr;
+	auto lock = ClientManager::getInstance()->lock();
+	if(auto existing = findHub(url)) return existing;
+	try {
+		auto client = ClientManager::getInstance()->getClient(url);
+		client->connectWithCredentials(nick ? nick : "", password ? password : "");
+		return client->copyPluginObject(); // accepted asynchronous connection
+	} catch(...) { return nullptr; }
+}
 
-	if(data == NULL && !SETTING(NICK).empty()) {
-		Client* client = ClientManager::getInstance()->getClient(url);
-		client->connect();
-		client->setPassword(password);
-		client->get(HubSettings::Nick) = nick;
-
-		// check that socket is waitting for connection...
-		if(client->isConnected()) {
-			return client->copyPluginObject();
-		}
+namespace {
+Client* currentHub(HubDataPtr hub) {
+	if(!hub || !hub->url) return nullptr;
+	for(auto client: ClientManager::getInstance()->getClients()) {
+		if(hubHintsEqual(client->getHubUrl(), hub->url)) return client;
 	}
-
-	return data;
+	return nullptr;
+}
 }
 
 HubDataPtr PluginApiImpl::findHub(const char* url) {
+	if(!url) return nullptr;
 	auto lock = ClientManager::getInstance()->lock();
 	const auto& list = ClientManager::getInstance()->getClients();
 
 	for(auto i = list.begin(); i != list.end(); ++i) {
-		if(hubHintsEqual((*i)->getHubUrl(), url) && (*i)->isConnected())
+		if(hubHintsEqual((*i)->getHubUrl(), url))
 			 return (*i)->copyPluginObject();
 	}
 
@@ -674,15 +811,21 @@ HubDataPtr PluginApiImpl::findHub(const char* url) {
 }
 
 void PluginApiImpl::removeHub(HubDataPtr hub) {
-	ClientManager::getInstance()->putClient(reinterpret_cast<Client*>(hub->object));
+	auto lock = ClientManager::getInstance()->lock();
+	if(auto client = currentHub(hub)) ClientManager::getInstance()->putClient(client);
 }
 
 void PluginApiImpl::emulateProtocolCmd(HubDataPtr hub, const char* cmd) {
-	reinterpret_cast<Client*>(hub->object)->emulateCommand(cmd);
+	if(!cmd) return;
+	auto lock = ClientManager::getInstance()->lock();
+	if(auto client = currentHub(hub)) client->emulateCommand(cmd);
 }
 
 void PluginApiImpl::sendProtocolCmd(HubDataPtr hub, const char* cmd) {
-	auto client = reinterpret_cast<Client*>(hub->object);
+	if(!cmd) return;
+	auto lock = ClientManager::getInstance()->lock();
+	auto client = currentHub(hub);
+	if(!client) return;
 	if(hub->protocol != PROTOCOL_ADC) {
 		client->send(cmd);
 		return;
@@ -700,8 +843,9 @@ void PluginApiImpl::sendProtocolCmd(HubDataPtr hub, const char* cmd) {
 }
 
 void PluginApiImpl::sendHubMessage(HubDataPtr hub, const char* message, Bool thirdPerson) {
-	if(hub && hub->object) {
-		Client* client = reinterpret_cast<Client*>(hub->object);
+	if(!message) return;
+	auto lock = ClientManager::getInstance()->lock();
+	if(auto client = currentHub(hub)) {
 
 		// Lets make plugins life easier...
 		ParamMap params;
@@ -713,12 +857,15 @@ void PluginApiImpl::sendHubMessage(HubDataPtr hub, const char* message, Bool thi
 }
 
 void PluginApiImpl::sendLocalMessage(HubDataPtr hub, const char* msg, MsgType type) {
-	Client* client = reinterpret_cast<Client*>(hub->object);
+	if(!msg) return;
+	auto lock = ClientManager::getInstance()->lock();
+	auto client = currentHub(hub);
+	if(!client) return;
 	client->fire(ClientListener::ClientLine(), client, msg, type);
 }
 
 Bool PluginApiImpl::sendPrivateMessage(UserDataPtr user, const char* message, Bool thirdPerson) {
-	if(user) {
+	if(user && user->cid && user->hubHint && message) {
 		auto lock = ClientManager::getInstance()->lock();
 		OnlineUser* ou = ClientManager::getInstance()->findOnlineUser(CID(user->cid), user->hubHint);
 		if(!ou) return False;
@@ -729,30 +876,34 @@ Bool PluginApiImpl::sendPrivateMessage(UserDataPtr user, const char* message, Bo
 		ou->getClient().getMyIdentity().getParams(params, "my", true);
 		ou->getClient().getHubIdentity().getParams(params, "hub", false);
 
-		// plugins do not get notified about this... todo: fix note 1.
-		ou->getClient().privateMessage(*ou, Util::formatParams(message, params), thirdPerson != False);
-		return True;
+		return ClientManager::getInstance()->privateMessage(HintedUser(ou->getUser(), user->hubHint),
+			Util::formatParams(message, params), thirdPerson != False) ? True : False;
 	}
 	return False;
 }
 
 HubDataPtr PluginApiImpl::copyData(const HubDataPtr hub) {
+	if(!hub || !hub->url || !hub->ip) return nullptr;
 	HubDataPtr copy = (HubDataPtr)malloc(sizeof(HubData));
+	if(!copy) return nullptr;
 	memcpy(copy, hub, sizeof(HubData));
 
 	size_t bufLen = strlen(hub->url) + 1;
 	copy->url = (char*)malloc(bufLen);
+	if(!copy->url) { free(copy); return nullptr; }
 	strncpy((char*)copy->url, hub->url, bufLen);
 
 	bufLen = strlen(hub->ip) + 1;
 	copy->ip = (char*)malloc(bufLen);
-	strncpy((char*)copy->ip, hub->url, bufLen);
+	if(!copy->ip) { free(const_cast<char*>(copy->url)); free(copy); return nullptr; }
+	memcpy((char*)copy->ip, hub->ip, bufLen);
 
 	copy->isManaged = False;
 	return copy;
 }
 
 void PluginApiImpl::releaseData(HubDataPtr hub) {
+	if(!hub) return;
 	if(hub->isManaged) {
 		LogManager::getInstance()->message("Plugin trying to free a managed object !", LogMessage::SEV_WARNING, _("Plugins"));
 		return;
@@ -765,6 +916,7 @@ void PluginApiImpl::releaseData(HubDataPtr hub) {
 }
 
 UserDataPtr PluginApiImpl::findUser(const char* cid, const char* hubUrl) {
+	if(!cid || strlen(cid) != 39 || !hubUrl) return nullptr;
 	auto lock = ClientManager::getInstance()->lock();
 	OnlineUser* ou = ClientManager::getInstance()->findOnlineUser(CID(cid), hubUrl);
 	if(!ou) return NULL;
@@ -772,26 +924,28 @@ UserDataPtr PluginApiImpl::findUser(const char* cid, const char* hubUrl) {
 }
 
 UserDataPtr PluginApiImpl::copyData(const UserDataPtr user) {
-	UserDataPtr copy = (UserDataPtr)malloc(sizeof(UserData));
-	memcpy(copy, user, sizeof(UserData));
-
-	size_t bufLen = strlen(user->nick) + 1;
-	copy->nick = (char*)malloc(bufLen);
-	strncpy((char*)copy->nick, user->nick, bufLen);
-
-	bufLen = strlen(user->hubHint) + 1;
-	copy->hubHint = (char*)malloc(bufLen);
-	strncpy((char*)copy->hubHint, user->hubHint, bufLen);
-
-	bufLen = strlen(user->cid) + 1;
-	copy->cid = (char*)malloc(bufLen);
-	strncpy((char*)copy->cid, user->cid, bufLen);
-
+	if(!user || !user->nick || !user->hubHint || !user->cid) return nullptr;
+	auto copy = static_cast<UserDataPtr>(malloc(sizeof(UserData)));
+	if(!copy) return nullptr;
+	*copy = *user;
+	copy->nick = nullptr;
+	copy->hubHint = nullptr;
+	copy->cid = nullptr;
 	copy->isManaged = False;
+	copy->nick = static_cast<char*>(malloc(strlen(user->nick) + 1));
+	if(!copy->nick) { releaseData(copy); return nullptr; }
+	memcpy(const_cast<char*>(copy->nick), user->nick, strlen(user->nick) + 1);
+	copy->hubHint = static_cast<char*>(malloc(strlen(user->hubHint) + 1));
+	if(!copy->hubHint) { releaseData(copy); return nullptr; }
+	memcpy(const_cast<char*>(copy->hubHint), user->hubHint, strlen(user->hubHint) + 1);
+	copy->cid = static_cast<char*>(malloc(strlen(user->cid) + 1));
+	if(!copy->cid) { releaseData(copy); return nullptr; }
+	memcpy(const_cast<char*>(copy->cid), user->cid, strlen(user->cid) + 1);
 	return copy;
 }
 
 void PluginApiImpl::releaseData(UserDataPtr user) {
+	if(!user) return;
 	if(user->isManaged) {
 		LogManager::getInstance()->message("Plugin trying to free a managed object !", LogMessage::SEV_WARNING, _("Plugins"));
 		return;
@@ -806,120 +960,41 @@ void PluginApiImpl::releaseData(UserDataPtr user) {
 
 /* Functions for DataAccess */
 void PluginApiImpl::getHTTPResource(const char* uri, const char* localPath) {
+	if(!uri) return;
 	try {
-		class HTTPDownloader : private dcpp::HttpManagerListener
-		{
-		public:
+		if(PluginHttp::submit(uri, localPath ? localPath : "")) return;
+	} catch(...) { }
+	PluginManager::getInstance()->runHook(HOOK_DATAACESSOR_HTTP_RESOURCE_NOTIFICATION_FAILED, const_cast<char*>(uri));
+}
 
-			HTTPDownloader() { }
-			virtual ~HTTPDownloader() { };
-
-			void getResource(const char* uri, const char* file)
-			{
-				HttpManager::getInstance()->addListener(this);
-				if(strlen(file) == 0)
-				{
-					HttpManager::getInstance()->download(uri);
-				}
-				else
-				{
-					HttpManager::getInstance()->download(uri, file);
-				}
-			}
-
-		private:
-
-			DataArrayPtr getDataArrayPtr(const std::string& str)
-			{
-				return getDataArrayPtr((void*)str.c_str(), str.size() + 1);
-			};
-
-			DataArrayPtr getDataArrayPtr(const uint8_t* data, size_t len)
-			{
-				return getDataArrayPtr((void*)data, len);
-			};
-
-			DataArrayPtr getDataArrayPtr(const void* data, size_t len)
-			{
-				DataArrayPtr pDataArray = (DataArrayPtr)malloc(sizeof(DataArray));
-				memset(pDataArray, 0, sizeof(DataArray));
-
-				size_t bufLen = len;
-				void* pData = (void*)malloc(bufLen);
-				memcpy(pData, data, bufLen);
-				pDataArray->pData = pData;
-
-				pDataArray->size = bufLen;
-
-				return pDataArray;
-			};
-
-			void runHookCompleted(const std::string& url)
-			{
-				PluginManager::getInstance()->runHook(HOOK_DATAACESSOR_HTTP_RESOURCE_NOTIFICATION, const_cast<char*>(url.c_str()));
-
-				HttpManager::getInstance()->removeListener(this);
-
-				delete this;
-			}
-
-			void runHookFailed(const std::string& url)
-			{
-				PluginManager::getInstance()->runHook(HOOK_DATAACESSOR_HTTP_RESOURCE_NOTIFICATION_FAILED, const_cast<char*>(url.c_str()));
-
-				HttpManager::getInstance()->removeListener(this);
-
-				delete this;
-			}
-
-			void runHookPartial(const std::string& url, const uint8_t* data, size_t len)
-			{
-				DataArrayPtr streamArray = getDataArrayPtr(data, len);
-
-				PluginManager::getInstance()->runHook(HOOK_DATAACESSOR_HTTP_RESOURCE_STREAM, const_cast<char*>(url.c_str()), streamArray);
-				
-			}
-
-			// HttpManagerListener
-			void on(HttpManagerListener::Failed, HttpConnection* c, const string&) noexcept
-			{
-				runHookFailed(c->getUrl());
-			}
-
-			void on(HttpManagerListener::Complete, HttpConnection* c, OutputStream* stream) noexcept
-			{
-				runHookCompleted(c->getUrl());
-			}
-
-			void on(HttpManagerListener::Updated, HttpConnection* c, const uint8_t* data, size_t len) noexcept
-			{
-				runHookPartial(c->getUrl(), data, len);
-			}
-		};
-
-		HTTPDownloader* downloader = new HTTPDownloader();
-		downloader->getResource(uri, localPath);
-
-	} catch(const Exception& e) {
-		LogManager::getInstance()->message(e.getError(), LogMessage::SEV_ERROR, _("Plugins"));
-	}
+namespace {
+std::mutex dataCopiesMutex;
+std::unordered_set<DataArrayPtr> dataCopies;
 }
 
 DataArrayPtr PluginApiImpl::copyData(const DataArrayPtr val)
 {
+	if(!val || (val->size && !val->pData) || val->size > std::numeric_limits<size_t>::max()) return nullptr;
 	DataArrayPtr copy = (DataArrayPtr)malloc(sizeof(DataArray));
-	memcpy(copy, val, sizeof(DataArray));
+	if(!copy) return nullptr;
+	copy->size = val->size;
+	copy->pData = nullptr;
+	if(val->size) {
+		auto data = malloc(static_cast<size_t>(val->size));
+		if(!data) { free(copy); return nullptr; }
+		memcpy(data, val->pData, static_cast<size_t>(val->size));
+		copy->pData = data;
+	}
 
-	size_t bufLen = strlen((char*)val->pData) + 1;
-	char* pData = (char*)malloc(bufLen);
-	strncpy(pData, (char*)val->pData, bufLen);
-	copy->pData = pData;
-
+	try { std::lock_guard<std::mutex> lock(dataCopiesMutex); dataCopies.insert(copy); }
+	catch(...) { free(const_cast<void*>(copy->pData)); free(copy); return nullptr; }
 	return copy;
 }
 
 void PluginApiImpl::releaseData(DataArrayPtr val)
 {
+	if(!val) return;
+	{ std::lock_guard<std::mutex> lock(dataCopiesMutex); if(!dataCopies.erase(val)) return; }
 	free(const_cast<void*>(val->pData));
 
 	free(val);

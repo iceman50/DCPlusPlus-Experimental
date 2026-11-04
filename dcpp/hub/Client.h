@@ -49,6 +49,7 @@ public:
 	Client& operator=(const Client&) = delete;
 
 	virtual void connect();
+	void connectWithCredentials(const string& nick, const string& password);
 	virtual void disconnect(bool graceless);
 
 	virtual void connect(const OnlineUser& user, const string& token, ConnectionType type) = 0;
@@ -191,7 +192,7 @@ private:
 	bool setConnectionUrl(const string& hubURL, bool validateProtocol = true);
 	void setFailoverUrls(const StringList& urls);
 	bool advanceFailoverUrl();
-	void connectImpl(bool resetAttemptedHubUrls);
+	void connectImpl(bool resetAttemptedHubUrls, const string* nick = nullptr, const string* password = nullptr);
 	void markHubUrlAttempted(const string& connectionURL);
 	bool hasAttemptedHubUrl(const string& hubURL) const;
 

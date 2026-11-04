@@ -32,11 +32,14 @@
 #include <dcpp/version.h>
 
 #include <utility>
+#include <filesystem>
+#include <cmath>
+#include <dcpp/plugins/PluginHttp.h>
 
 #ifdef _WIN32
 # define PLUGIN_EXT "*.dll"
 
-# define LOAD_LIBRARY(filename) ::LoadLibrary(File::toNativePath(filename).c_str())
+# define LOAD_LIBRARY(filename) ::LoadLibraryExW(File::toNativePath(filename).c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
 # define FREE_LIBRARY(lib) ::FreeLibrary(lib)
 # define GET_ADDRESS(lib, name) ::GetProcAddress(lib, name)
 # define GET_ERROR() Util::translateError(GetLastError())
@@ -44,7 +47,7 @@
 # include "dlfcn.h"
 # define PLUGIN_EXT "*.so"
 
-# define LOAD_LIBRARY(filename) ::dlopen(filename.c_str(), RTLD_LAZY | RTLD_GLOBAL)
+# define LOAD_LIBRARY(filename) ::dlopen(filename.c_str(), RTLD_NOW | RTLD_LOCAL)
 # define FREE_LIBRARY(lib) ::dlclose(lib)
 # define GET_ADDRESS(lib, name) ::dlsym(lib, name)
 # define GET_ERROR() ::dlerror()
@@ -54,6 +57,63 @@ namespace dcpp {
 
 using std::make_unique;
 using std::swap;
+namespace {
+thread_local vector<HookSubscriber*> callbackFrames;
+thread_local string activeOwner;
+thread_local vector<const void*> callbackObjects;
+struct Changing {
+	std::atomic<bool>& busy;
+	explicit Changing(std::atomic<bool>& flag) : busy(flag) {
+		if(busy.exchange(true)) throw Exception("A plugin lifecycle operation is already in progress");
+	}
+	~Changing() { busy = false; }
+};
+bool safePluginId(const string& id) {
+	return Archive::isPackagePath(id) && id.find('/') == string::npos && id.size() <= 80;
+}
+}
+
+
+PluginManager::CallbackScope::CallbackScope(const string& owner) : previous(activeOwner) { activeOwner = owner; }
+PluginManager::CallbackScope::~CallbackScope() { activeOwner = std::move(previous); }
+string PluginManager::callbackOwner() { return activeOwner; }
+bool PluginManager::isCallbackObject(const void* object) {
+	return object && std::find(callbackObjects.begin(), callbackObjects.end(), object) != callbackObjects.end();
+}
+
+string PluginManager::ownerForAddress(const void* address) {
+	if(!activeOwner.empty()) return activeOwner;
+#ifdef _WIN32
+	HMODULE module = nullptr;
+	if(address && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		reinterpret_cast<LPCWSTR>(address), &module)) {
+		Lock l(csHook);
+		auto i = moduleOwners.find(module);
+		if(i != moduleOwners.end()) return i->second;
+	}
+#endif
+	return {};
+}
+
+void PluginManager::revokeOwner(const string& owner) {
+	PluginHttp::cancelOwner(owner);
+	vector<HookSubscriber*> subscriptions;
+	vector<PluginHook*> ownedHooks;
+	{
+		Lock l(csHook);
+		revokedOwners.insert(owner);
+		for(const auto& hook: hooks) {
+			if(hook.second->owner == owner) ownedHooks.push_back(hook.second.get());
+			for(const auto& sub: hook.second->subscribers) if(sub->owner == owner) subscriptions.push_back(sub.get());
+		}
+		for(auto i = interfaceOwners.begin(); i != interfaceOwners.end();) {
+			if(i->second == owner) { releaseInterface(i->first); i = interfaceOwners.begin(); }
+			else ++i;
+		}
+	}
+	for(auto sub: subscriptions) releaseHook(sub);
+	for(auto hook: ownedHooks) destroyHook(hook);
+}
 
 PluginManager::PluginManager() : dcCore(), shutdown(false), secNum(Util::rand()) {
 }
@@ -62,13 +122,10 @@ PluginManager::~PluginManager() {
 }
 
 DcextInfo PluginManager::extract(const string& path) {
-	const auto dir = Util::getTempPath() + "dcext" PATH_SEPARATOR_STR;
-	const auto info_path = dir + "info.xml";
-	File::deleteFile(info_path);
-	Archive(path).extract(dir);
-
+	Archive archive(path);
+	const auto entries = archive.packageEntries(1024, 64 * 1024 * 1024, 128 * 1024 * 1024);
 	SimpleXML xml;
-	xml.fromXML(File(info_path, File::READ, File::OPEN).read());
+	xml.fromXML(archive.readFile("info.xml", 256 * 1024));
 
 	DcextInfo info { };
 
@@ -79,6 +136,7 @@ DcextInfo PluginManager::extract(const string& path) {
 			xml.resetCurrentChild();
 			if(xml.findChild(tag)) {
 				out = xml.getChildData();
+				if(xml.findChild(tag)) throw Exception("Duplicate plugin metadata field");
 			}
 		};
 
@@ -102,13 +160,18 @@ DcextInfo PluginManager::extract(const string& path) {
 
 		string version;
 		parse("ApiVersion", version);
-		if(Util::toInt(version) != DCAPI_CORE_VER) {
+		if(version != Util::toString(DCAPI_CORE_VER)) {
 			throw Exception(str(F_("%1% is not compatible with %2%") % Util::getFileName(path) % APPNAME));
 		}
 
 		parse("UUID", info.uuid);
 		parse("Name", info.name);
-		version.clear(); parse("Version", version); info.version = Util::toDouble(version);
+		version.clear(); parse("Version", version);
+		try {
+			size_t end = 0;
+			info.version = std::stod(version, &end);
+			if(end != version.size()) throw Exception("Invalid plugin version");
+		} catch(const std::exception&) { throw Exception("Invalid plugin version"); }
 		parse("Author", info.author);
 		parse("Description", info.description);
 		parse("Website", info.website);
@@ -116,6 +179,7 @@ DcextInfo PluginManager::extract(const string& path) {
 		xml.resetCurrentChild();
 		while(xml.findChild("Plugin")) {
 			if(checkPlatform(false)) {
+				if(!info.plugin.empty()) throw Exception("Multiple plugin binaries for this platform");
 				info.plugin = xml.getChildData();
 			}
 		}
@@ -136,7 +200,7 @@ DcextInfo PluginManager::extract(const string& path) {
 		xml.stepOut();
 	}
 
-	if(info.uuid.empty() || info.name.empty() || info.version == 0) {
+	if(!safePluginId(info.uuid) || info.name.empty() || !std::isfinite(info.version) || info.version <= 0) {
 		throw Exception(str(F_("%1% is not a valid plugin") % Util::getFileName(path)));
 	}
 	if(info.plugin.empty()) {
@@ -156,39 +220,78 @@ DcextInfo PluginManager::extract(const string& path) {
 		}
 	}
 
+	auto package = std::make_shared<DcextInfo::Package>();
+	package->uuid = info.uuid;
+	package->plugin = info.plugin;
+	package->version = info.version;
+	auto files = info.files;
+	files.push_back(info.plugin);
+	std::set<string> targets;
+	for(const auto& name: files) {
+		if(!Archive::isPackagePath(name) || std::find(entries.begin(), entries.end(), name) == entries.end() || package->contents.count(name))
+			throw Exception("Invalid or duplicate plugin manifest path");
+		auto target = name == info.plugin ? Util::getFileName(name, '/') : name;
+		std::transform(target.begin(), target.end(), target.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
+		if(!targets.insert(target).second) throw Exception("Conflicting plugin installation paths");
+		package->contents.emplace(name, archive.readFile(name, 64 * 1024 * 1024));
+	}
+	for(const auto& target: targets) {
+		for(auto slash = target.find('/'); slash != string::npos; slash = target.find('/', slash + 1))
+			if(targets.count(target.substr(0, slash))) throw Exception("Conflicting plugin installation paths");
+	}
+	info.package = package; // immutable bytes bind the review dialog to this package
+
 	return info;
 }
 
 void PluginManager::install(const DcextInfo& info) {
+	if(shutdown) throw Exception("Plugin manager is shutting down");
+	Changing change(changing);
+	if(!info.package || info.uuid != info.package->uuid || info.plugin != info.package->plugin || info.version != info.package->version)
+		throw Exception("Plugin package approval does not match the installation request");
 	{
 		Lock l(cs);
-
-		auto dupe = findPlugin(info.uuid);
-		if(dupe) {
-			if(dupe->version < info.version) {
-				// disable when updating or the file copy will fail...
-				if(dupe->handle) {
-					disable(*dupe, false);
-				}
-			} else {
-				throw Exception(str(F_("%1% is already installed") % dupe->name));
-			}
+		auto old = findPlugin(info.uuid);
+		if(old && (old->handle || old->version >= info.version))
+			throw Exception("Disable the installed plugin and restart before updating it");
+	}
+	namespace fs = std::filesystem;
+	fs::path target;
+	try {
+		const auto base = fs::absolute(fs::u8path(getInstallPath(info.uuid))).lexically_normal();
+		// Reject reparse points/symlinks in the destination ancestry.
+		for(auto part = base; !part.empty(); part = part.parent_path()) {
+#ifdef _WIN32
+			const auto attributes = GetFileAttributesW(part.c_str());
+			if(attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) throw Exception("Plugin destination is a reparse point");
+#else
+			if(fs::is_symlink(fs::symlink_status(part))) throw Exception("Plugin destination is a symlink");
+#endif
+			if(part == part.parent_path()) break;
 		}
+		fs::create_directories(base);
+		for(unsigned attempt = 0; attempt < 32; ++attempt) {
+			auto candidate = base / ("package-" + Util::toString(Util::rand()));
+			if(fs::create_directory(candidate)) { target = candidate; break; }
+		}
+		if(target.empty()) throw Exception("Cannot create a private plugin installation directory");
+		for(const auto& entry: info.package->contents) {
+			auto file = target / fs::u8path(entry.first == info.plugin ? Util::getFileName(info.plugin, '/') : entry.first);
+			fs::create_directories(file.parent_path());
+			File output(file.u8string(), File::WRITE, File::CREATE | File::TRUNCATE);
+			output.write(entry.second);
+		}
+		Plugin plugin {};
+		plugin.path = (target / fs::u8path(Util::getFileName(info.plugin, '/'))).u8string();
+		plugin.guid = info.uuid;
+		plugin.version = info.version;
+		plugin.name = info.name;
+		enable(plugin, true, true);
+	} catch(...) {
+		// Loaded DLLs are pinned: failure cleanup may leave a DLL until exit.
+		if(!target.empty()) { std::error_code ignored; fs::remove_all(target, ignored); }
+		try { throw; } catch(const fs::filesystem_error& e) { throw Exception(e.what()); }
 	}
-
-	const auto source = Util::getTempPath() + "dcext" PATH_SEPARATOR_STR;
-	const auto target = getInstallPath(info.uuid);
-	const auto lib = target + Util::getFileName(info.plugin);
-
-	File::ensureDirectory(lib);
-	File::renameFile(source + info.plugin, lib);
-
-	for(auto& file: info.files) {
-		File::ensureDirectory(target + file);
-		File::renameFile(source + file, target + file);
-	}
-
-	addPlugin(lib);
 }
 
 void PluginManager::loadPlugins(function<void (const string&)> f) {
@@ -200,7 +303,7 @@ void PluginManager::loadPlugins(function<void (const string&)> f) {
 	loadSettings();
 
 	for(auto& plugin: plugins) {
-		if(!plugin.dcMain) { continue; } // a little trick to avoid an additonal "bool enabled"
+		if(!plugin.enabled) { continue; }
 		if(f) { f(plugin.name); }
 		try { enable(plugin, false, false); }
 		catch(const Exception& e) { LogManager::getInstance()->message(e.getError(), LogMessage::SEV_ERROR, _("Plugins")); }
@@ -208,88 +311,98 @@ void PluginManager::loadPlugins(function<void (const string&)> f) {
 }
 
 void PluginManager::unloadPlugins() {
+	if(shutdown.exchange(true)) return;
 	TimerManager::getInstance()->removeListener(this);
 	ClientManager::getInstance()->removeListener(this);
 	QueueManager::getInstance()->removeListener(this);
 	SettingsManager::getInstance()->removeListener(this);
 
-	Lock l(cs);
-	shutdown = true;
-
+	PluginHttp::stop(); // join requests before callbacks or plugin shutdown
+	{
+		Lock l(csHook);
+		hookCV.wait(l, [this] {
+			for(const auto& h: hooks) {
+				if(h.second->defaultSubscription && h.second->defaultSubscription->active) return false;
+				for(const auto& sub: h.second->subscribers) if(sub->active) return false;
+			}
+			for(const auto& sub: retiredSubscriptions) if(sub->active) return false;
+			return true;
+		});
+	}
 	saveSettings();
-
-	// Off we go...
 	for(auto it = plugins.rbegin(); it != plugins.rend(); ++it) {
-		auto& plugin = *it;
-		if(plugin.handle) {
-			disable(plugin, false);
+		if(it->handle && it->dcMain) {
+			try { it->dcMain(ON_UNLOAD, nullptr, nullptr); } catch(...) { }
 		}
 	}
-	plugins.clear();
-
-	// Really unload plugins that have been flagged inactive (ON_UNLOAD returns False)
-	for(auto& i: inactive)
-		FREE_LIBRARY(i);
-
-	// Destroy hooks that may have not been correctly freed
+	// ABI 8 cannot establish worker-thread quiescence. Modules remain mapped
+	// until process exit, including plugins that refuse ON_UNLOAD.
+	Lock l(csHook);
 	hooks.clear();
+	interfaces.clear();
+	interfaceHandles.clear();
 }
 
 void PluginManager::addPlugin(const string& path) {
-	Lock l(cs);
-
-	Plugin plugin { };
+	Changing change(changing);
+	Plugin plugin {};
 	plugin.name = Util::getFileName(path);
 	plugin.path = path;
-
 	enable(plugin, true, true);
 }
 
 bool PluginManager::configPlugin(const string& guid, dcptr_t data) {
-	Lock l(cs);
-	auto p = findPlugin(guid);
-	if(p && p->handle) {
-		return p->dcMain(ON_CONFIGURE, &dcCore, data);
+	if(shutdown) return false;
+	DCMAIN callback = nullptr;
+	{
+		Lock l(cs);
+		auto p = findPlugin(guid);
+		if(p && p->handle) callback = p->dcMain;
 	}
-	return false;
+	if(!callback) return false;
+	CallbackScope scope(guid);
+	try { return callback(ON_CONFIGURE, &dcCore, data) != False; } catch(...) { return false; }
 }
 
 void PluginManager::enablePlugin(const string& guid) {
-	Lock l(cs);
-	auto p = findPlugin(guid);
-	if(p && !p->handle) {
-		enable(*p, false, true);
+	Changing change(changing);
+	Plugin* p;
+	{
+		Lock l(cs);
+		p = findPlugin(guid);
+		if(!p) return;
+		p->enabled = true;
+		if(p->handle) return;
 	}
+	enable(*p, false, true);
 }
 
 void PluginManager::disablePlugin(const string& guid) {
 	Lock l(cs);
 	auto p = findPlugin(guid);
-	if(p && p->handle) {
-		disable(*p, false);
-	}
+	if(p) p->enabled = false;
 }
 
 void PluginManager::movePlugin(const string& guid, int delta) {
+	Changing change(changing);
 	Lock l(cs);
 	auto i = findPluginIter(guid);
-	if(i != plugins.end()) {
-		swap(*i, *(i + delta));
-	}
+	const auto index = i - plugins.begin();
+	const auto target = static_cast<int64_t>(index) + delta;
+	if(i != plugins.end() && target >= 0 && target < static_cast<int64_t>(plugins.size())) swap(*i, plugins[static_cast<size_t>(target)]);
 }
 
 void PluginManager::removePlugin(const string& guid) {
+	Changing change(changing);
 	Lock l(cs);
 	auto i = findPluginIter(guid);
-	if(i != plugins.end()) {
-		if(i->handle) {
-			disable(*i, true);
-		}
-		plugins.erase(i);
-	}
+	if(i == plugins.end()) return;
+	if(i->handle) throw Exception("Disable the plugin and restart before removing it");
+	plugins.erase(i);
 }
 
 bool PluginManager::isLoaded(const string& guid) const {
+	if(shutdown) return false;
 	Lock l(cs);
 	auto p = findPlugin(guid);
 	return p ? bool(p->handle) : false;
@@ -311,6 +424,8 @@ Plugin PluginManager::getPlugin(const string& guid) const {
 // Functions that call the plugin
 bool PluginManager::onUDP(bool out, const string& ip, const string& port, const string& data) {
 	UDPData udp = { ip.c_str(), static_cast<uint16_t>(Util::toUInt(port)) };
+	DataArray payload { data.data(), data.size() };
+	if(runHook(out ? HOOK_NETWORK_UDP_OUT2 : HOOK_NETWORK_UDP_IN2, &udp, &payload)) return true;
 	return runHook(out ? HOOK_NETWORK_UDP_OUT : HOOK_NETWORK_UDP_IN, &udp,
 		reinterpret_cast<dcptr_t>(const_cast<char*>(data.c_str())));
 }
@@ -369,119 +484,154 @@ bool PluginManager::onChatCommandPM(const HintedUser& user, const string& line) 
 
 // Plugin interface registry
 intfHandle PluginManager::registerInterface(const string& guid, dcptr_t funcs) {
-	if(interfaces.find(guid) == interfaces.end())
-		interfaces.insert(make_pair(guid, funcs));
-	// Following ensures that only the original provider may remove this
-	return reinterpret_cast<intfHandle>((uintptr_t)funcs ^ secNum);
+	Lock l(csHook);
+	if(shutdown || guid.empty() || !funcs || interfaces.count(guid) || revokedOwners.count(ownerForAddress(funcs))) return nullptr;
+	interfaces.emplace(guid, funcs);
+	// Monotonic opaque tokens are never derived from a provider's address.
+	auto handle = reinterpret_cast<intfHandle>(++secNum);
+	interfaceHandles.emplace(handle, guid);
+	interfaceOwners.emplace(handle, ownerForAddress(funcs));
+	return handle;
 }
 
 dcptr_t PluginManager::queryInterface(const string& guid) {
+	Lock l(csHook);
 	auto i = interfaces.find(guid);
-	if(i != interfaces.end()) {
-		return i->second;
-	} else return NULL;
+	return shutdown || i == interfaces.end() ? nullptr : i->second;
 }
 
-bool PluginManager::releaseInterface(intfHandle hInterface) {
-	// Following ensures that only the original provider may remove this
-	dcptr_t funcs = reinterpret_cast<dcptr_t>((uintptr_t)hInterface ^ secNum);
-	for(auto i = interfaces.begin(); i != interfaces.end(); ++i) {
-		if(i->second == funcs) {
-			interfaces.erase(i);
-			return true;
-		}
-	}
-	return false;
+bool PluginManager::releaseInterface(intfHandle handle) {
+	Lock l(csHook);
+	auto i = interfaceHandles.find(handle);
+	if(i == interfaceHandles.end()) return false;
+	interfaces.erase(i->second);
+	interfaceHandles.erase(i);
+	interfaceOwners.erase(handle);
+	return true;
 }
 
-// Plugin Hook system
 PluginHook* PluginManager::createHook(const string& guid, DCHOOK defProc) {
 	Lock l(csHook);
-
-	auto i = hooks.find(guid);
-	if(i != hooks.end()) return NULL;
-
-	auto hook = make_unique<PluginHook>();
-	auto pHook = hook.get();
+	if(shutdown || guid.empty() || hooks.count(guid) || revokedOwners.count(ownerForAddress(reinterpret_cast<const void*>(defProc)))) return nullptr;
+	auto hook = std::make_shared<PluginHook>();
 	hook->guid = guid;
 	hook->defProc = defProc;
-	hooks[guid] = move(hook);
-	return pHook;
+	hook->owner = ownerForAddress(reinterpret_cast<const void*>(defProc));
+	if(defProc) {
+		hook->defaultSubscription = std::make_shared<HookSubscriber>();
+		hook->defaultSubscription->hookProc = defProc;
+		hook->defaultSubscription->common = nullptr;
+		hook->defaultSubscription->owner = hook->owner;
+	}
+	hooks.emplace(guid, hook);
+	return hook.get();
 }
 
-bool PluginManager::destroyHook(PluginHook* hook) {
+bool PluginManager::destroyHook(PluginHook* handle) {
 	Lock l(csHook);
-
-	auto i = hooks.find(hook->guid);
-	if(i != hooks.end()) {
+	for(auto i = hooks.begin(); i != hooks.end(); ++i) {
+		if(i->second.get() != handle) continue;
+		auto hook = i->second;
+		hook->removed = true;
+		if(hook->defaultSubscription) hook->subscribers.push_back(hook->defaultSubscription);
+		for(auto& sub: hook->subscribers) { sub->removed = true; retiredSubscriptions.push_back(sub); }
+		retiredHooks.push_back(hook);
 		hooks.erase(i);
+		for(const auto& sub: hook->subscribers) {
+			const auto depth = std::count(callbackFrames.begin(), callbackFrames.end(), sub.get());
+			if(callbackFrames.empty()) hookCV.wait(l, [&] { return sub->active <= static_cast<size_t>(depth); });
+		}
 		return true;
 	}
 	return false;
 }
 
-HookSubscriber* PluginManager::bindHook(const string& guid, DCHOOK hookProc, void* pCommon) {
+HookSubscriber* PluginManager::bindHook(const string& guid, DCHOOK callback, void* common) {
 	Lock l(csHook);
-
 	auto i = hooks.find(guid);
-	if(i == hooks.end()) {
-		return NULL;
-	}
-	auto& hook = i->second;
+	if(shutdown || i == hooks.end() || !callback || revokedOwners.count(ownerForAddress(reinterpret_cast<const void*>(callback)))) return nullptr;
+	auto sub = std::make_shared<HookSubscriber>();
+	sub->hookProc = callback;
+	sub->common = common;
+	sub->owner = ownerForAddress(reinterpret_cast<const void*>(callback));
+	i->second->subscribers.push_back(sub);
+	return sub.get();
+}
+
+bool PluginManager::runHook(const string& guid, dcptr_t object, dcptr_t data) {
+	PluginHook* handle;
 	{
-		Lock l(hook->cs);
-		auto subscription = make_unique<HookSubscriber>();
-		auto pSub = subscription.get();
-		subscription->hookProc = hookProc;
-		subscription->common = pCommon;
-		subscription->owner = hook->guid;
-		hook->subscribers.push_back(move(subscription));
-
-		return pSub;
+		Lock l(csHook);
+		auto i = hooks.find(guid);
+		if(shutdown || i == hooks.end()) return false;
+		handle = i->second.get();
 	}
+	return runHook(handle, object, data);
 }
 
-bool PluginManager::runHook(PluginHook* hook, dcptr_t pObject, dcptr_t pData) {
-	dcassert(hook);
-
-	// Using shared lock (csHook) might be a tad safer, but it is also slower and I prefer not to teach plugins to rely on the effect it creates
-	Lock l(hook->cs);
-
-	Bool bBreak = False;
-	Bool bRes = False;
-	for(auto& sub: hook->subscribers) {
-		if(sub->hookProc(pObject, pData, sub->common, &bBreak))
-			bRes = True;
-		if(bBreak) return (bRes != False);
+bool PluginManager::runHook(PluginHook* handle, dcptr_t object, dcptr_t data) {
+	std::shared_ptr<PluginHook> hook;
+	vector<std::shared_ptr<HookSubscriber>> snapshot;
+	{
+		Lock l(csHook);
+		if(shutdown) return false;
+		for(const auto& entry: hooks) if(entry.second.get() == handle) { hook = entry.second; break; }
+		if(!hook) return false;
+		snapshot = hook->subscribers;
+		if(snapshot.empty() && hook->defaultSubscription) snapshot.push_back(hook->defaultSubscription);
 	}
-
-	// Call default hook procedure for all unused hooks
-	if(hook->defProc && hook->subscribers.empty()) {
-		if(hook->defProc(pObject, pData, NULL, &bBreak))
-			bRes = True;
+	Bool stop = False;
+	bool handled = false;
+	for(const auto& sub: snapshot) {
+		{
+			Lock l(csHook);
+			if(shutdown || hook->removed || sub->removed) continue;
+			++sub->active;
+		}
+		CallbackScope scope(sub->owner);
+		callbackFrames.push_back(sub.get());
+		callbackObjects.push_back(object);
+		try { if(sub->hookProc(object, data, sub->common, &stop) != False) handled = true; } catch(...) { }
+		callbackObjects.pop_back();
+		callbackFrames.pop_back();
+		{
+			Lock l(csHook);
+			--sub->active;
+			hookCV.notify_all();
+		}
+		if(stop) break;
 	}
-
-	return (bRes != False);
+	return handled;
 }
 
-size_t PluginManager::releaseHook(HookSubscriber* subscription) {
+size_t PluginManager::releaseHook(HookSubscriber* handle) {
 	Lock l(csHook);
-
-	if(subscription == NULL)
-		return 0;
-
-	auto i = hooks.find(subscription->owner);
-	if(i == hooks.end()) {
-		return 0;
+	for(auto& entry: hooks) {
+		auto& subscriptions = entry.second->subscribers;
+		for(auto i = subscriptions.begin(); i != subscriptions.end(); ++i) {
+			if(i->get() != handle) continue;
+			auto sub = *i;
+			sub->removed = true;
+			retiredSubscriptions.push_back(sub);
+			subscriptions.erase(i);
+			const auto remaining = subscriptions.size();
+			const auto depth = std::count(callbackFrames.begin(), callbackFrames.end(), handle);
+			if(callbackFrames.empty()) hookCV.wait(l, [&] { return sub->active <= static_cast<size_t>(depth); });
+			return remaining;
+		}
 	}
-	auto& hook = i->second;
-	{
-		Lock l(hook->cs);
-		hook->subscribers.erase(std::remove_if(hook->subscribers.begin(), hook->subscribers.end(),
-			[subscription](const unique_ptr<HookSubscriber>& sub) { return sub.get() == subscription; }), hook->subscribers.end());
+	return 0;
+}
 
-		return hook->subscribers.size();
+bool PluginManager::drainHook(HookSubscriber* handle) {
+	if(!callbackFrames.empty()) return false; // cross-callback waits can deadlock
+	Lock l(csHook);
+	for(auto sub: retiredSubscriptions) {
+		if(sub.get() != handle) continue;
+		hookCV.wait(l, [&] { return sub->active == 0; });
+		return true;
 	}
+	return false;
 }
 
 // Plugin configuration
@@ -493,17 +643,20 @@ void PluginManager::setPluginSetting(const string& guid, const string& setting, 
 	}
 }
 
-const string& PluginManager::getPluginSetting(const string& guid, const string& setting) {
-	Lock l(cs);
+string PluginManager::getPluginSetting(const string& guid, const string& setting) {
+	string value;
+	tryGetPluginSetting(guid, setting, value);
+	return value;
+}
 
+bool PluginManager::tryGetPluginSetting(const string& guid, const string& setting, string& value) {
+	Lock l(cs);
 	auto p = findPlugin(guid);
-	if(p) {
-		auto i = p->settings.find(setting);
-		if(i != p->settings.end()) {
-			return i->second;
-		}
-	}
-	return Util::emptyString;
+	if(!p) return false;
+	auto i = p->settings.find(setting);
+	if(i == p->settings.end()) return false;
+	value = i->second;
+	return true;
 }
 
 void PluginManager::removePluginSetting(const string& guid, const string& setting) {
@@ -519,112 +672,68 @@ void PluginManager::removePluginSetting(const string& guid, const string& settin
 }
 
 string PluginManager::getInstallPath(const string& uuid) {
+	if(!safePluginId(uuid)) throw Exception("Invalid plugin identifier");
 	return Util::getPath(Util::PATH_USER_LOCAL) + "Plugins" PATH_SEPARATOR_STR + uuid + PATH_SEPARATOR_STR;
 }
 
-void PluginManager::enable(Plugin& plugin, bool install, bool runtime) {
-	Lock l(cs);
-
-	dcassert(dcCore.apiVersion != 0);
-
-	plugin.handle = LOAD_LIBRARY(plugin.path);
-	if(!plugin.handle) {
-		throw Exception(str(F_("Error loading %1%: %2%") % plugin.name % GET_ERROR()));
-	}
-	bool unload = true;
-	ScopedFunctor(([&plugin, &unload] { if(unload) { FREE_LIBRARY(plugin.handle); plugin.handle = nullptr; plugin.dcMain = nullptr; } }));
-
-	auto pluginInfo = reinterpret_cast<DCMAIN (DCAPI *)(MetaDataPtr)>(GET_ADDRESS(plugin.handle, "pluginInit"));
-	MetaData info { };
-	if(!pluginInfo || !(plugin.dcMain = pluginInfo(&info))) {
-		throw Exception(str(F_("%1% is not a valid plugin") % plugin.name));
-	}
-
-	// Check API compatibility (this should only block on absolutely wrecking api changes, which generally should not happen)
-	if(info.apiVersion != DCAPI_CORE_VER) {
-		throw Exception(str(F_("%1% is not compatible with %2%") % info.name % APPNAME));
-	}
-
-	// Check that all dependencies are loaded
+void PluginManager::enable(Plugin& original, bool install, bool runtime) {
+	if(shutdown) throw Exception("Plugin manager is shutting down");
+	Plugin candidate = original;
+	try { candidate.path = std::filesystem::absolute(std::filesystem::u8path(candidate.path)).u8string(); }
+	catch(const std::filesystem::filesystem_error& e) { throw Exception(e.what()); }
+	candidate.handle = LOAD_LIBRARY(candidate.path);
+	if(!candidate.handle) throw Exception(str(F_("Error loading %1%: %2%") % candidate.name % GET_ERROR()));
+	// Even a rejected native plugin can have started threads in its initializer.
+	// Retain every successful loader reference until process exit.
+	inactive.push_back(candidate.handle);
+	DCMAIN (DCAPI *initialize)(MetaDataPtr) = nullptr;
+	const auto address = GET_ADDRESS(candidate.handle, "pluginInit");
+	static_assert(sizeof(initialize) == sizeof(address), "Plugin function pointer size");
+	memcpy(&initialize, &address, sizeof(initialize));
+	MetaData info {};
+	try { candidate.dcMain = initialize ? initialize(&info) : nullptr; }
+	catch(...) { throw Exception("Plugin metadata initialization failed"); }
+	if(!candidate.dcMain || !info.guid || !safePluginId(info.guid) || !info.name || !*info.name ||
+		!std::isfinite(info.version) || info.version <= 0 || info.apiVersion != DCAPI_CORE_VER ||
+		(info.numDependencies && !info.dependencies) || info.numDependencies > 128)
+		throw Exception("Invalid or incompatible plugin metadata");
+	if(!original.guid.empty() && (original.guid != info.guid || (install && original.version != info.version)))
+		throw Exception("Plugin binary identity does not match its manifest or installed identity");
 	for(decltype(info.numDependencies) i = 0; i < info.numDependencies; ++i) {
-		if(!isLoaded(info.dependencies[i])) {
-			throw Exception(str(F_("Missing dependencies for %1%") % info.name));
-		}
+		if(!info.dependencies[i] || !isLoaded(info.dependencies[i])) throw Exception("Missing plugin dependency");
 	}
-
-	auto pluginPtr = &plugin;
-
-	// When installing, check for duplicates and possible updates
-	if(install) {
-		auto dupe = findPlugin(info.guid);
-		if(dupe) {
-
-			if(dupe->version < info.version) {
-				// in-place updating to keep settings etc.
-
-				LogManager::getInstance()->message(str(F_("Updating the %1% plugin from version %2% to version %3%") %
-					string(dupe->name) % dupe->version % info.version), LogMessage::SEV_INFO, _("Plugins"));
-
-				if(dupe->handle) {
-					disable(*dupe, false);
-				}
-				dupe->handle = plugin.handle;
-				dupe->dcMain = plugin.dcMain;
-				pluginPtr = dupe;
-
-				install = false;
-
-			} else {
-				throw Exception(str(F_("%1% is already installed") % info.name));
-			}
-
-		} else {
-			// add to the list before executing dcMain, to guarantee a correct state (eg for settings).
-			plugins.push_back(move(plugin));
-			pluginPtr = &plugins.back();
-		}
+	candidate.guid = info.guid;
+	candidate.name = info.name;
+	candidate.version = info.version;
+	candidate.author = info.author ? info.author : "";
+	candidate.description = info.description ? info.description : "";
+	candidate.website = info.web ? info.web : "";
+	candidate.enabled = true;
+	Plugin previous {};
+	bool added = false;
+	{
+		Lock l(cs);
+		auto existing = findPlugin(candidate.guid);
+		if(install && existing && (existing->handle || existing->version >= candidate.version))
+			throw Exception("Disable the installed plugin and restart before updating it");
+		if(existing) {
+			previous = *existing;
+			candidate.settings = existing->settings;
+			*existing = candidate;
+			install = false;
+		} else { plugins.push_back(candidate); added = true; }
 	}
-
-	{ // scope to change the plugin ref
-		auto& plugin = *pluginPtr;
-
-		if(plugin.dcMain(install ? ON_INSTALL : runtime ? ON_LOAD_RUNTIME : ON_LOAD, &dcCore, nullptr) == False) {
-
-			if(install) {
-				// remove from the list.
-				FREE_LIBRARY(plugin.handle);
-				plugins.pop_back();
-				unload = false;
-			}
-
-			throw Exception(str(F_("Error loading %1%") % plugin.name));
-		}
-
-		unload = false;
-
-		// refresh the info we have on the plugin.
-		plugin.guid = info.guid;
-		plugin.name = info.name;
-		plugin.version = info.version;
-		plugin.author = info.author;
-		plugin.description = info.description;
-		plugin.website = info.web;
-	}
-}
-
-void PluginManager::disable(Plugin& plugin, bool uninstall) {
-	bool isSafe = true;
-	if(plugin.dcMain(uninstall ? ON_UNINSTALL : ON_UNLOAD, nullptr, nullptr) == False) {
-		// Plugin performs operation critical tasks (runtime unload not possible)
-		isSafe = std::find(inactive.begin(), inactive.end(), plugin.handle) != inactive.end();
-		if(!isSafe) {
-			inactive.push_back(plugin.handle);
-		}
-	}
-	if(isSafe) {
-		FREE_LIBRARY(plugin.handle);
-		plugin.handle = nullptr;
-		plugin.dcMain = nullptr;
+	{ Lock l(csHook); moduleOwners[candidate.handle] = candidate.guid; revokedOwners.erase(candidate.guid); }
+	CallbackScope scope(candidate.guid);
+	bool accepted = false;
+	try { accepted = candidate.dcMain(install ? ON_INSTALL : runtime ? ON_LOAD_RUNTIME : ON_LOAD, &dcCore, nullptr) != False; }
+	catch(...) { }
+	if(!accepted) {
+		revokeOwner(candidate.guid);
+		Lock l(cs);
+		auto it = findPluginIter(candidate.guid);
+		if(added) plugins.erase(it); else *it = previous;
+		throw Exception("Plugin rejected initialization: " + candidate.name);
 	}
 }
 
@@ -646,7 +755,8 @@ void PluginManager::loadSettings() noexcept {
 					Util::toDouble(xml.getChildAttrib("Version")), xml.getChildAttrib("Author"),
 					xml.getChildAttrib("Description"), xml.getChildAttrib("Website"),
 					xml.getChildAttrib("Path"), nullptr,
-					reinterpret_cast<DCMAIN>(xml.getBoolChildAttrib("Enabled")) };
+					nullptr };
+				plugin.enabled = xml.getBoolChildAttrib("Enabled");
 
 				if(plugin.guid.empty() || plugin.path.empty()) { continue; }
 				if(plugin.name.empty()) { plugin.name = Util::getFileName(plugin.path); }
@@ -685,7 +795,7 @@ void PluginManager::saveSettings() noexcept {
 			xml.addChildAttrib("Description", plugin.description);
 			xml.addChildAttrib("Website", plugin.website);
 			xml.addChildAttrib("Path", plugin.path);
-			xml.addChildAttrib("Enabled", static_cast<bool>(plugin.handle));
+			xml.addChildAttrib("Enabled", plugin.enabled);
 
 			xml.stepIn();
 			for(auto& i: plugin.settings) {
@@ -701,8 +811,14 @@ void PluginManager::saveSettings() noexcept {
 		f.write(SimpleXML::utf8Header);
 		f.write(xml.toXML());
 		f.close();
-		File::deleteFile(fname);
-		File::renameFile(fname + ".tmp", fname);
+		#ifdef _WIN32
+		if(!MoveFileExW(File::toNativePath(fname + ".tmp").c_str(), File::toNativePath(fname).c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+			throw Exception(Util::translateError(GetLastError()));
+#else
+		std::error_code error;
+		std::filesystem::rename(std::filesystem::u8path(fname + ".tmp"), std::filesystem::u8path(fname), error);
+		if(error) throw Exception(error.message());
+#endif
 	} catch(const Exception& e) {
 		dcdebug("PluginManager::saveSettings: %s\n", e.getError().c_str());
 	}

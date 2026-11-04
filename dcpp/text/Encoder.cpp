@@ -78,6 +78,7 @@ string& Encoder::toBase32(const uint8_t* src, size_t len, string& dst) {
 }
 
 void Encoder::fromBase32(const char* src, uint8_t* dst, size_t len) {
+	if(!len || !src || !dst) return;
 	size_t i, index, offset;
 
 	memset(dst, 0, len);

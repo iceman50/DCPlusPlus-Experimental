@@ -119,6 +119,7 @@ public:
 	void recheck(const string& aTarget);
 
 	void setPriority(const string& aTarget, QueueItem::Priority p) noexcept;
+	bool togglePause(const string& target) noexcept;
 
 	StringList getTargets(const TTHValue& tth);
 
@@ -150,6 +151,7 @@ public:
 	GETSET(string, queueFile, QueueFile);
 
 private:
+	bool changePriority(const string& target, QueueItem::Priority priority, bool toggle) noexcept;
 	static const int64_t MOVER_LIMIT = 10*1024*1024;
 
 	template<typename T>

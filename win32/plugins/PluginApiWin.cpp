@@ -48,23 +48,40 @@ void PluginApiWin::init() {
 }
 
 // Functions for DCUI
-void PluginApiWin::addCommand(const char* guid, const char* name, DCCommandFunc command, const char* icon) {
-	MainWindow::addPluginCommand(guid, Text::toT(name), [=] { command(name); }, icon ? Text::toT(icon) : Util::emptyStringT);
-}
+void PluginApiWin::addCommand(const char* guid, const char* name, DCCommandFunc command, const char* icon) try {
+	if(!guid || !name || !command) return;
+	const string owner(guid), label(name);
+	const auto image = icon ? Text::toT(icon) : Util::emptyStringT;
+	dwt::Application::instance().callAsync([owner, label, command, image] {
+		if(!PluginManager::getInstance()->isLoaded(owner)) return;
+		MainWindow::addPluginCommand(owner, Text::toT(label), [owner, label, command] {
+			if(!PluginManager::getInstance()->isLoaded(owner)) return;
+			PluginManager::CallbackScope scope(owner);
+			try { command(label.c_str()); } catch(...) { }
+		}, image);
+	});
+} catch(...) { }
 
-void PluginApiWin::removeCommand(const char* guid, const char* name) {
-	MainWindow::removePluginCommand(guid, Text::toT(name));
-}
+void PluginApiWin::removeCommand(const char* guid, const char* name) try {
+	if(!guid || !name) return;
+	const string owner(guid);
+	const auto label = Text::toT(name);
+	dwt::Application::instance().callAsync([owner, label] { MainWindow::removePluginCommand(owner, label); });
+} catch(...) { }
 
-void PluginApiWin::playSound(const char* path) {
-	Notifications::playSound(Text::toT(path));
-}
+void PluginApiWin::playSound(const char* path) try {
+	if(!path) return;
+	const auto file = Text::toT(path);
+	dwt::Application::instance().callAsync([file] { Notifications::playSound(file); });
+} catch(...) { }
 
-void PluginApiWin::notify(const char* title, const char* message) {
-	if(UiServices::mainWindow) {
-		UiServices::mainWindow->notify(Text::toT(title), Text::toT(message));
-	}
-}
+void PluginApiWin::notify(const char* title, const char* message) try {
+	if(!title || !message) return;
+	const auto heading = Text::toT(title), body = Text::toT(message);
+	dwt::Application::instance().callAsync([heading, body] {
+		if(UiServices::mainWindow && !UiServices::mainWindow->closing()) UiServices::mainWindow->notify(heading, body);
+	});
+} catch(...) { }
 
 void PluginUtils::addPlugin(dwt::Widget* w) {
 	tstring path_t;

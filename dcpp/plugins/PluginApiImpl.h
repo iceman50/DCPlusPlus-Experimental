@@ -74,6 +74,8 @@ private:
 	static ConfigStrPtr DCAPI getInstallPath(const char* guid);
 	static void DCAPI setConfig(const char* guid, const char* setting, ConfigValuePtr val);
 	static ConfigValuePtr DCAPI getConfig(const char* guid, const char* setting, ConfigType type);
+	static ConfigValuePtr DCAPI getConfig2(const char* guid, const char* setting, ConfigType type);
+	static ConfigValuePtr makeConfig(const string& stored, ConfigType type);
 	static ConfigStrPtr DCAPI getLanguage();
 
 	// Functions for DCLog

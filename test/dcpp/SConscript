@@ -6,7 +6,13 @@ env.VariantDir(dev.get_build_path(source_path), ".", duplicate=0)
 sources = dev.get_sources(source_path, "test*.cpp")
 program = env.Program(dev.get_target(source_path, "dcpp_tests", False),
                       [sources, tests.google(), tests.core_libraries()])
-tests.register(env, "dcpp", program, tests.google_args())
+fixture_env = env.Clone()
+fixture_env.Replace(LIBS=[], SHLIBPREFIX="")
+fixture_object = fixture_env.SharedObject(dev.get_target(source_path, "plugin-repair-fixture", False),
+                                          "#/test/dcpp/plugin-repair-fixture.cpp")
+fixture = fixture_env.SharedLibrary(dev.get_target(source_path, "plugin-repair-fixture", False), fixture_object)
+env.Depends(program, fixture)
+tests.register(env, "dcpp", program, tests.google_args(), dependencies=fixture)
 
 # Benchmark translation units are absent from the normal unit-test executable.
 bench_sources = dev.get_sources(source_path, "bench*.cpp", recursive=True)

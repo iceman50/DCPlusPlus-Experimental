@@ -1,5 +1,6 @@
 /* 
  * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -74,6 +75,8 @@ extern "C" {
 
 #define DCINTF_DCPP_UTILS			"dcpp.utils.DCUtils"		/* Utility and convenience functions */
 #define DCINTF_DCPP_UTILS_VER		1
+#define DCINTF_DCPP_UTILS2 "dcpp.utils.DCUtils2"
+#define DCINTF_DCPP_UTILS2_VER 2
 
 #define DCINTF_DCPP_TAGGER			"dcpp.xml.DCTagger"			/* Manipulation of an XML tagger */
 #define DCINTF_DCPP_TAGGER_VER		1
@@ -211,7 +214,7 @@ typedef struct tagConfigInt64 {
 /* String Data (for substitutions) */
 typedef struct tagStringData {
 	const char* in;												/* Incoming string */
-	char* out;													/* Resulting new string (take care to free!) */
+	char* out;													/* Plugin-owned, NUL-terminated; keep valid until the hook dispatch returns. Host does not free it. */
 } StringData, *StringDataPtr;
 
 /* Client side chat commands */
@@ -260,6 +263,11 @@ typedef struct tagUDPData {
 	const char* ip;												/* The ip address (remote) for this connection */
 	uint16_t port;												/* The port for this connection */
 } UDPData, *UDPDataPtr;
+
+/* Length-aware UDP hooks: object is UDPData; data is a borrowed DataArray.
+ * If handled, legacy UDP dispatch is suppressed. */
+#define HOOK_NETWORK_UDP_IN2 "dcpp.network.onUDPIn2"
+#define HOOK_NETWORK_UDP_OUT2 "dcpp.network.onUDPOut2"
 
 /* Queue items and files */
 typedef struct tagQueueData {
@@ -341,6 +349,17 @@ typedef struct tagDCHooks {
 	Bool				(DCAPI *run_hook)			(hookHandle hHook, dcptr_t pObject, dcptr_t pData);
 	size_t				(DCAPI *release_hook)		(subsHandle hHook);
 } DCHooks, *DCHooksPtr;
+
+/* Callbacks can run concurrently. Release/destroy prevent new invocation.
+ * Outside a callback, they also wait for active invocations. Inside a callback,
+ * removal is deferred: keep common/state alive, then drain from another context.
+ * wait_idle returns False from callbacks or for unknown/non-retired handles. */
+#define DCINTF_HOOKS2 "dcpp.hooks.DCHooks2"
+#define DCINTF_HOOKS2_VER 2
+typedef struct tagDCHooks2 {
+	uint32_t apiVersion;
+	Bool (DCAPI *wait_idle)(subsHandle subscription);
+} DCHooks2, *DCHooks2Ptr;
 
 /* Recommended interfaces */
 
@@ -425,12 +444,25 @@ typedef struct tagDCQueue {
 	void			(DCAPI *release)				(QueueDataPtr hCopy);
 } DCQueue, *DCQueuePtr;
 
+/* Presence-aware plugin configuration. Returns NULL for absent values or errors.
+ * Release returned values with DCConfig.release. Explicit empty/zero/False values
+ * still return a ConfigValue. CoreSetup also rejects incompatible requested types. */
+#define DCINTF_CONFIG2 "dcpp.config.DCConfig2"
+#define DCINTF_CONFIG2_VER 2
+typedef struct tagDCConfig2 {
+	uint32_t apiVersion;
+	ConfigValuePtr (DCAPI *get_cfg)(const char* guid, const char* setting, ConfigType type);
+} DCConfig2, *DCConfig2Ptr;
+
 /* Utility and convenience functions */
 typedef struct tagDCUtils {
 	/* Utility API version */
 	uint32_t apiVersion;
 
-	/* These functions attempt a conversion; they return the required buffer size. */
+	/* Legacy conversions return the output length excluding NUL. Text functions
+	 * take destination capacity; an exact fit is not terminated. to_base32 takes
+	 * SOURCE length: dst must hold ceil(n*8/5) bytes (no NUL), or be NULL for a
+	 * size query. from_base32 takes binary destination capacity. Prefer DCUtils2. */
 
 	size_t		(DCAPI *to_utf8)					(char* dst, const char* src, size_t n);
 	size_t		(DCAPI *from_utf8)					(char* dst, const char* src, size_t n);
@@ -441,6 +473,21 @@ typedef struct tagDCUtils {
 	size_t		(DCAPI *to_base32)					(char* dst, const uint8_t* src, size_t n);
 	size_t		(DCAPI *from_base32)				(uint8_t* dst, const char* src, size_t n);
 } DCUtils, *DCUtilsPtr;
+
+/* Capacity-safe conversions. Text results include a terminating NUL in the
+ * required size. Binary decode returns bytes. A NULL destination queries size;
+ * insufficient capacity leaves it untouched. SIZE_MAX signals invalid input.
+ * Lengths and capacities are in elements of the corresponding pointer type.
+ * Base32 uses canonical, uppercase, unpadded RFC 4648 encoding. */
+typedef struct tagDCUtils2 {
+	uint32_t apiVersion;
+	size_t (DCAPI *to_utf8)(char* dst, size_t capacity, const char* src);
+	size_t (DCAPI *from_utf8)(char* dst, size_t capacity, const char* src);
+	size_t (DCAPI *utf8_to_wcs)(wchar_t* dst, size_t capacity, const char* src);
+	size_t (DCAPI *wcs_to_utf8)(char* dst, size_t capacity, const wchar_t* src);
+	size_t (DCAPI *to_base32)(char* dst, size_t capacity, const uint8_t* src, size_t length);
+	size_t (DCAPI *from_base32)(uint8_t* dst, size_t capacity, const char* src, size_t length);
+} DCUtils2, *DCUtils2Ptr;
 
 /* Manipulation of an XML tagger */
 typedef struct tagDCTagger {
@@ -476,12 +523,16 @@ typedef struct DCDataAccess {
 
 	/* "uri" is the HTTP file path to grab.
 	"localPath" is the local file path to download to.
-	"localPath" may be NULL or empty to not download to a specific file. */
+	"localPath" may be NULL or empty to not download to a specific file.
+	Verified HTTPS only; same-origin redirects, bounded response and timeouts.
+	HTTP hook DataArray objects are borrowed for callback duration. Use copy()
+	to retain bytes and release() only those copies. Callbacks run on a worker.
+	The v1 events are broadcasts identified by original URL, not request handles. */
 	void		(DCAPI *get_http_resource)	(const char* uri, const char* localPath);
 
 	DataArrayPtr	(DCAPI *copy)					(const DataArrayPtr hItem);
 	void			(DCAPI *release)				(DataArrayPtr hCopy);
-} DCDataAcess, *DCDataAccessPtr;
+} DCDataAcess, DCDataAccess, *DCDataAccessPtr;
 
 #ifdef __cplusplus
 }

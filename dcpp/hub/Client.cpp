@@ -127,7 +127,11 @@ void Client::connect() {
 	connectImpl(true);
 }
 
-void Client::connectImpl(bool resetAttemptedHubUrls) {
+void Client::connectWithCredentials(const string& nick, const string& password) {
+	connectImpl(true, &nick, &password);
+}
+
+void Client::connectImpl(bool resetAttemptedHubUrls, const string* nick, const string* password) {
 	if(resetAttemptedHubUrls) {
 		attemptedHubUrls.clear();
 		setConnectionUrl(hubUrl, false);
@@ -149,6 +153,8 @@ void Client::connectImpl(bool resetAttemptedHubUrls) {
 	setAutoReconnect(true);
 	setReconnDelay(120 + Util::rand(0, 60));
 	reloadSettings(true);
+	if(nick && !nick->empty()) get(HubSettings::Nick) = *nick;
+	if(password) setPassword(*password);
 	setRegistered(false);
 	setMyIdentity(Identity(ClientManager::getInstance()->getMe(), 0));
 	setHubIdentity(Identity());

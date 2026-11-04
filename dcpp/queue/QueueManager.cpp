@@ -1526,7 +1526,15 @@ void QueueManager::removeSource(const UserPtr& aUser, int reason) noexcept {
 	}
 }
 
-void QueueManager::setPriority(const string& aTarget, QueueItem::Priority p) noexcept {
+void QueueManager::setPriority(const string& target, QueueItem::Priority priority) noexcept {
+	changePriority(target, priority, false);
+}
+
+bool QueueManager::togglePause(const string& target) noexcept {
+	return changePriority(target, QueueItem::PAUSED, true);
+}
+
+bool QueueManager::changePriority(const string& aTarget, QueueItem::Priority p, bool toggle) noexcept {
 	HintedUserList getConn;
 	UserList fileConnections;
 
@@ -1534,6 +1542,8 @@ void QueueManager::setPriority(const string& aTarget, QueueItem::Priority p) noe
 		Lock l(cs);
 
 		QueueItem* q = fileQueue.find(aTarget);
+		if(!q || q->isFinished() || p < QueueItem::PAUSED || p >= QueueItem::LAST) return false;
+		if(toggle) p = q->getPriority() == QueueItem::PAUSED ? QueueItem::NORMAL : QueueItem::PAUSED;
 		if( (q != NULL) && (q->getPriority() != p) && !q->isFinished() ) {
 			if(q->getPriority() == QueueItem::PAUSED || p == QueueItem::HIGHEST) {
 				// Problem, we have to request connections to all these users...
@@ -1562,6 +1572,7 @@ void QueueManager::setPriority(const string& aTarget, QueueItem::Priority p) noe
 	for(auto& i: fileConnections) {
 		ConnectionManager::getInstance()->disconnect(i, CONNECTION_TYPE_DOWNLOAD);
 	}
+	return p == QueueItem::PAUSED;
 }
 
 int QueueManager::countOnlineSources(const string& aTarget) {

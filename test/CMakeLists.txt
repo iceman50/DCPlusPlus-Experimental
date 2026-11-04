@@ -63,6 +63,16 @@ foreach(component IN ITEMS dcpp win32 dwarf)
         target_link_libraries(${component}_tests PRIVATE dcpp dwt)
     endif()
     register_component_test(${component}_tests ${component} --gtest_fail_if_no_test_linked)
+    if(component STREQUAL "dcpp")
+        add_library(plugin_repair_fixture SHARED EXCLUDE_FROM_ALL dcpp/plugin-repair-fixture.cpp)
+        target_link_libraries(plugin_repair_fixture PRIVATE dcpp_options)
+        set_target_properties(plugin_repair_fixture PROPERTIES
+            PREFIX "" OUTPUT_NAME "plugin-repair-fixture"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test/dcpp/$<CONFIG>"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test/dcpp/$<CONFIG>"
+            EXCLUDE_FROM_DEFAULT_BUILD TRUE FOLDER Tests/dcpp)
+        add_dependencies(dcpp_tests plugin_repair_fixture)
+    endif()
 endforeach()
 
 if("dwt" IN_LIST DCPP_TEST_COMPONENTS)

@@ -105,7 +105,7 @@ pluginInfo(0)
 			enable->onClicked([this] { handleEnable(); });
 			enable->setHelpId(IDH_SETTINGS_PLUGINS_ENABLE);
 
-			disable = buttons->addChild(Button::Seed(T_("Disable")));
+			disable = buttons->addChild(Button::Seed(T_("Disable after restart")));
 			disable->onClicked([this] { handleDisable(); });
 			disable->setHelpId(IDH_SETTINGS_PLUGINS_DISABLE);
 
@@ -182,9 +182,10 @@ bool PluginPage::handleKeyDown(int c) {
 
 void PluginPage::handleSelectionChanged() {
 	auto selected = plugins->hasSelected();
-	auto enabled = selected ? PluginManager::getInstance()->isLoaded(sel()) : false;
+	const auto state = selected ? PluginManager::getInstance()->getPlugin(sel()) : Plugin {};
+	const auto enabled = selected && state.enabled;
 	configure->setEnabled(selected);
-	enable->setEnabled(selected && !enabled);
+	enable->setEnabled(selected && (!enabled || !state.handle));
 	disable->setEnabled(selected && enabled);
 	moveUp->setEnabled(selected);
 	moveDown->setEnabled(selected);
@@ -236,6 +237,7 @@ void PluginPage::handleSelectionChanged() {
 	auto plugin = PluginManager::getInstance()->getPlugin(sel());
 
 	addInfo(T_("Name: "), plugin.name, Name);
+	addInfo(T_("Status: "), plugin.handle ? (plugin.enabled ? "Running" : "Running; disabled after restart") : "Stopped", Name);
 	addInfo(T_("Version: "), Util::toString(plugin.version), Version);
 	addInfo(T_("Description: "), plugin.description, Description);
 	addInfo(T_("Author: "), plugin.author, Author);
@@ -250,7 +252,8 @@ bool PluginPage::handleContextMenu(dwt::ScreenCoordinate pt) {
 	}
 
 	auto selected = plugins->hasSelected();
-	auto enabled = selected ? PluginManager::getInstance()->isLoaded(sel()) : false;
+	const auto state = selected ? PluginManager::getInstance()->getPlugin(sel()) : Plugin {};
+	const auto enabled = selected && state.enabled;
 
 	auto menu = addChild(ControlSeeds::menu);
 
@@ -258,8 +261,8 @@ bool PluginPage::handleContextMenu(dwt::ScreenCoordinate pt) {
 	menu->appendItem(T_("&Add"), [this] { handleAddPlugin(); });
 	menu->appendSeparator();
 	menu->appendItem(T_("&Configure"), [this] { handleConfigurePlugin(); }, nullptr, selected);
-	menu->appendItem(T_("Enable"), [this] { handleEnable(); }, nullptr, selected && !enabled);
-	menu->appendItem(T_("Disable"), [this] { handleDisable(); }, nullptr, selected && enabled);
+	menu->appendItem(T_("Enable"), [this] { handleEnable(); }, nullptr, selected && (!enabled || !state.handle));
+	menu->appendItem(T_("Disable after restart"), [this] { handleDisable(); }, nullptr, selected && enabled);
 	menu->appendSeparator();
 	menu->appendItem(T_("Move &Up"), [this] { handleMovePluginUp(); }, nullptr, selected);
 	menu->appendItem(T_("Move &Down"), [this] { handleMovePluginDown(); }, nullptr, selected);
@@ -342,7 +345,11 @@ void PluginPage::handleRemovePlugin() {
 	if(dwt::MessageBox(this).show(T_("Really remove?"), T_("Plugins"), dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) == IDYES) {
 		int i;
 		while((i = plugins->getNext(-1, LVNI_SELECTED)) != -1) {
-			PluginManager::getInstance()->removePlugin(Text::fromT(plugins->getText(i, COLUMN_GUID)));
+			try { PluginManager::getInstance()->removePlugin(Text::fromT(plugins->getText(i, COLUMN_GUID))); }
+			catch(const Exception& e) {
+				dwt::MessageBox(this).show(Text::toT(e.getError()), T_("Plugins"), dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONINFORMATION);
+				break;
+			}
 			plugins->erase(i);
 		}
 	}

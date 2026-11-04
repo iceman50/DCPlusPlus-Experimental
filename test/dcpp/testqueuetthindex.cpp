@@ -33,6 +33,7 @@
 #include <dcpp/system/Streams.h>
 #include <dcpp/system/TimerManager.h>
 #include <dcpp/version.h>
+#include <dcpp/plugins/PluginManager.h>
 
 using namespace dcpp;
 
@@ -214,6 +215,73 @@ TEST_F(QueueTTHIndexTest, tracks_additions_after_an_empty_lookup)
 	EXPECT_EQ(file, targets.front());
 	queue->remove(file);
 }
+
+TEST_F(QueueTTHIndexTest, plugin_priority_changes_notify_persist_and_ignore_stale_objects) {
+	PluginManager::newInstance();
+	PluginApiImpl::init();
+	struct Cleanup { ~Cleanup() { PluginApiImpl::shutdown(); PluginManager::deleteInstance(); } } cleanup;
+	auto manager = QueueManager::getInstance();
+	const auto file = target("plugin-priority.bin");
+	manager->add(file, 4096, makeTTH(77), HintedUser(makeUser(77), "adc://queue-index.example.invalid"));
+	struct Listener : QueueManagerListener {
+		unsigned changes = 0;
+		void on(StatusUpdated, QueueItem*) noexcept override { ++changes; }
+	} listener;
+	manager->addListener(&listener);
+	auto queue = reinterpret_cast<DCQueuePtr>(PluginManager::getInstance()->getCore()->query_interface(DCINTF_DCPP_QUEUE, 1));
+	auto snapshot = queue->find_download(file.c_str());
+	ASSERT_NE(nullptr, snapshot);
+	snapshot->object = reinterpret_cast<void*>(1); // the API must resolve by target
+	queue->set_priority(snapshot, PRIO_HIGH);
+	EXPECT_EQ(1u, listener.changes);
+	EXPECT_EQ(True, queue->pause(snapshot));
+	EXPECT_EQ(False, queue->pause(snapshot));
+	EXPECT_EQ(3u, listener.changes);
+	manager->saveQueue(true);
+	const auto saved = File(manager->getQueueFile(), File::READ, File::OPEN).read();
+	EXPECT_NE(string::npos, saved.find("Priority=\"3\"")); // NORMAL on resume
+	manager->remove(file);
+	queue->set_priority(snapshot, PRIO_HIGHEST);
+	EXPECT_EQ(False, queue->pause(snapshot));
+	EXPECT_EQ(3u, listener.changes);
+	queue->release(snapshot);
+	manager->removeListener(&listener);
+}
+
+#ifdef _WIN32
+TEST_F(QueueTTHIndexTest, plugin_shutdown_is_idempotent_and_saves_restart_disable) {
+	PluginManager::newInstance();
+	PluginApiImpl::init();
+	auto pm = PluginManager::getInstance();
+	pm->loadPlugins({});
+	struct Cleanup {
+		~Cleanup() {
+			PluginManager::getInstance()->unloadPlugins();
+			PluginApiImpl::shutdown();
+			PluginManager::deleteInstance();
+		}
+	} cleanup;
+	std::wstring program(32768, 0);
+	program.resize(GetModuleFileNameW(nullptr, program.data(), static_cast<DWORD>(program.size())));
+	const auto library = (std::filesystem::path(program).parent_path() / "plugin-repair-fixture.dll").u8string();
+	ASSERT_NO_THROW(pm->addPlugin(library));
+	const string id = "{15503cbe-b840-4ab8-bc95-2ebf2646afe7}";
+	struct Counters { uint32_t apiVersion, unloads; };
+	auto counters = static_cast<Counters*>(pm->queryInterface("fixture.interface"));
+	ASSERT_NE(nullptr, counters);
+	pm->disablePlugin(id);
+	pm->unloadPlugins();
+	pm->unloadPlugins();
+	EXPECT_EQ(1u, counters->unloads); // refusal never causes a second call or unload
+	SimpleXML saved;
+	saved.fromXML(File(Util::getPath(Util::PATH_USER_CONFIG) + "Plugins.xml", File::READ, File::OPEN).read());
+	ASSERT_TRUE(saved.findChild("Plugins")); saved.stepIn();
+	ASSERT_TRUE(saved.findChild("Plugin"));
+	EXPECT_EQ(id, saved.getChildAttrib("Guid"));
+	EXPECT_FALSE(saved.getBoolChildAttrib("Enabled"));
+	EXPECT_EQ(nullptr, pm->queryInterface("fixture.interface"));
+}
+#endif
 
 TEST_F(QueueTTHIndexTest, keeps_distinct_tths_isolated)
 {

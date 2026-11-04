@@ -372,6 +372,7 @@ void ClientManager::putOnline(OnlineUser* ou) noexcept {
 		onlineUsers.emplace(ou->getUser()->getCID(), ou);
 	}
 
+	PluginManager::getInstance()->runHook(HOOK_USER_ONLINE, ou);
 	if(!ou->getUser()->isOnline()) {
 		ou->getUser()->setFlag(User::ONLINE);
 		fire(ClientManagerListener::UserConnected(), ou->getUser());
@@ -394,6 +395,7 @@ void ClientManager::putOffline(OnlineUser* ou, bool disconnect) noexcept {
 		}
 	}
 
+	if(diff) PluginManager::getInstance()->runHook(HOOK_USER_OFFLINE, ou);
 	if(diff == 1) { //last user
 		UserPtr& u = ou->getUser();
 		u->unsetFlag(User::ONLINE);

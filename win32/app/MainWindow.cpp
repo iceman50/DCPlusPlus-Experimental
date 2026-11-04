@@ -839,19 +839,20 @@ void MainWindow::addPluginCommands(Menu* menu) {
 
 	for(auto& guid: plugins) {
 		const auto enabled = PluginManager::getInstance()->isLoaded(guid);
-		const auto name = Text::toT(PluginManager::getInstance()->getPlugin(guid).name);
+		const auto plugin = PluginManager::getInstance()->getPlugin(guid);
+		const auto name = Text::toT(plugin.name + (enabled && !plugin.enabled ? " (disabled after restart)" : ""));
 
 		auto sub = menu->appendPopup(name, IconManager::menuIcon(enabled ? IDI_GREEN_BALL : IDI_RED_BALL), false);
 		sub->setTitle(name); // don't want the enabled/disabled icon repeated there
 
-		sub->appendItem(T_("Enable"), [this, guid] { PluginUtils::enablePlugin(guid, this); }, IconManager::menuIcon(IDI_GREEN_BALL), !enabled);
-		sub->appendItem(T_("Disable"), [this, guid] { PluginUtils::disablePlugin(guid, this); }, IconManager::menuIcon(IDI_RED_BALL), enabled);
+		sub->appendItem(T_("Enable"), [this, guid] { PluginUtils::enablePlugin(guid, this); }, IconManager::menuIcon(IDI_GREEN_BALL), !plugin.enabled || !enabled);
+		sub->appendItem(T_("Disable after restart"), [this, guid] { PluginUtils::disablePlugin(guid, this); }, IconManager::menuIcon(IDI_RED_BALL), plugin.enabled);
 
 		sub->appendSeparator();
 		sub->appendItem(T_("Configure"), [this, guid] { PluginUtils::configPlugin(guid, this); }, nullptr, enabled);
 
 		auto commandIt = pluginCommands.find(guid);
-		if(commandIt != pluginCommands.end()) {
+		if(enabled && commandIt != pluginCommands.end()) {
 			sub->appendSeparator();
 
 			for(auto& i: commandIt->second) {

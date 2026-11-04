@@ -20,7 +20,9 @@
 #define DCPLUSPLUS_DCPP_ARCHIVE_H
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 typedef void* unzFile;
 
@@ -38,6 +40,9 @@ public:
 	void extract(const string& path);
 	/** Read one archive entry without extracting its siblings. */
 	string readFile(const string& name, size_t maxBytes);
+	/** Validate a bounded package before reading any payloads. Returns regular file names. */
+	std::vector<string> packageEntries(size_t maxEntries, uint64_t maxFileBytes, uint64_t maxTotalBytes);
+	static bool isPackagePath(const string& path);
 
 private:
 	inline int check(int ret);

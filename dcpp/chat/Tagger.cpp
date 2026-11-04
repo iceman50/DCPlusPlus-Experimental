@@ -40,6 +40,7 @@ const string& Tagger::getText() const {
 }
 
 void Tagger::addTag(size_t start, size_t end, string id, string attributes) {
+	if(start > end || end > text.size()) return;
 	Tag openingTag { start, "<" + id + " " + move(attributes) + ">", true };
 	Tag closingTag { end, "</" + move(id) + ">", false };
 
@@ -54,9 +55,10 @@ void Tagger::addTag(size_t start, size_t end, string id, string attributes) {
 }
 
 void Tagger::replaceText(size_t start, size_t end, const string& replacement) {
+	if(start > end || end > text.size()) return;
 	text.replace(start, end - start, replacement);
 
-	const auto delta = static_cast<int>(replacement.size()) - static_cast<int>(end - start);
+	const auto delta = static_cast<int64_t>(replacement.size()) - static_cast<int64_t>(end - start);
 
 	for(auto& tag: tags) {
 		if(tag.pos >= end) {
