@@ -144,6 +144,7 @@ const string SettingsManager::settingTags[] =
 	"ThemeMode", "ThemeBackgroundColor", "ThemeSurfaceColor", "ThemeTextColor",
 	"ThemeDisabledTextColor", "ThemeBorderColor", "ThemeAccentColor",
 	"ThemeHighlightTextColor",
+	"OutboxMaxEntries", "OutboxMaxMessageBytes", "OutboxExpiryDays",
 	"SENTRY",
 	// Bools
 	"AddFinishedInstantly", "AdlsBreakOnFirst",
@@ -298,6 +299,9 @@ SettingsManager::SettingsManager() {
 	setDefault(CCPM_MAX_AUTOMATIC_ATTEMPTS, 5);
 	setDefault(THEME_MODE, THEME_SYSTEM);
 	setDefault(THEMED_DIALOG_BORDERS, true);
+	setDefault(OUTBOX_MAX_ENTRIES, 500);
+	setDefault(OUTBOX_MAX_MESSAGE_BYTES, 16 * 1024);
+	setDefault(OUTBOX_EXPIRY_DAYS, 7);
 	setDefault(THEME_BACKGROUND_COLOR, RGB(32, 32, 32));
 	setDefault(THEME_SURFACE_COLOR, RGB(45, 45, 48));
 	setDefault(THEME_TEXT_COLOR, RGB(241, 241, 241));

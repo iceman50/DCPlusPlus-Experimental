@@ -27,7 +27,6 @@
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/Spinner.h>
-#include <dwt/widgets/CheckBox.h>
 
 #include <win32/resource.h>
 
@@ -51,7 +50,7 @@ PropPage::ListItem AppearancePage::listItems[] = {
 };
 
 AppearancePage::AppearancePage(dwt::Widget* parent) :
-	PropPage(parent, 7, 1),
+	PropPage(parent, 6, 1),
 	options(0),
 	languages(0) {
 	setHelpId(IDH_APPEARANCEPAGE);
@@ -61,16 +60,6 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 	grid->row(0).align = GridInfo::STRETCH;
 
 	options = grid->addChild(GroupBox::Seed(T_("Options")))->addChild(ControlSeeds::Dialog::optionsTable);
-	auto borders = grid->addChild(CheckBox::Seed(T_("Show borders around themed dialogs")));
-	borders->setHelpId(IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS);
-	items.emplace_back(borders, SettingsManager::THEMED_DIALOG_BORDERS, PropPage::T_BOOL);
-	borders->onClicked([borders] {
-		dwt::Application::instance().getAppearance().setDialogBorders(borders->getChecked());
-	});
-	// Cancel discards the preview; after OK the persisted value is the new choice.
-	onDestroy([] {
-		dwt::Application::instance().getAppearance().setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
-	});
 
 	{
 		auto cur = grid->addChild(Grid::Seed(1, 2));

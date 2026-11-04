@@ -54,7 +54,7 @@ bool MessageOutboxDlg::init() {
 		MessageOutboxManager::getInstance()->setEnabled(enable->getChecked());
 		refresh();
 	});
-	grid->addChild(dwt::Label::Seed(T_("Messages are stored as local text. Pending messages expire after 7 days. NMDC identifies recipients by nickname and hub.")));
+	grid->addChild(dwt::Label::Seed(T_("Messages are stored as local text. Limits and expiry: Settings > Experimental > Interface. NMDC uses nickname and hub.")));
 	status = grid->addChild(dwt::Label::Seed());
 	auto seed = ControlSeeds::Dialog::table;
 	seed.style |= LVS_SINGLESEL;

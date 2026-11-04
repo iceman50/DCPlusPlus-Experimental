@@ -14,8 +14,13 @@
 #include <set>
 
 namespace dcpp {
+void MessageOutboxManager::configure() {
+	store.configure(SETTING(OUTBOX_MAX_ENTRIES), SETTING(OUTBOX_MAX_MESSAGE_BYTES), SETTING(OUTBOX_EXPIRY_DAYS));
+}
+
 void MessageOutboxManager::start() noexcept {
 	try {
+		configure();
 		store.open(Util::getPath(Util::PATH_USER_LOCAL) + "MessageOutbox.sqlite");
 		enabled = SETTING(ENABLE_MESSAGE_OUTBOX);
 		worker = std::thread([this] { run(); });

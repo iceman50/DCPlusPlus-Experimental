@@ -15,6 +15,8 @@
 namespace dcpp {
 class MessageOutboxManager : public Singleton<MessageOutboxManager> {
 public:
+	static bool available() { return instance != nullptr; }
+	void configure(); // Called on startup and when interface settings are applied.
 	void start() noexcept;
 	void shutdown();
 	~MessageOutboxManager() { shutdown(); }

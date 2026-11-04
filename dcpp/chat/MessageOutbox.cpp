@@ -9,6 +9,13 @@
 
 namespace dcpp {
 
+void MessageOutbox::configure(int entries, int messageBytes, int expiryDays) {
+	std::lock_guard<std::mutex> l(mutex);
+	entryLimit = std::clamp(entries, entryLimitMin, entryLimitMax);
+	messageLimit = std::clamp(messageBytes, messageLimitMin, messageLimitMax);
+	expiryInterval = int64_t(std::clamp(expiryDays, expiryDaysMin, expiryDaysMax)) * 24 * 60 * 60;
+}
+
 void MessageOutbox::open(const string& path) {
 	std::lock_guard<std::mutex> l(mutex);
 	db.open(path);
@@ -30,27 +37,28 @@ void MessageOutbox::open(const string& path) {
 }
 
 int64_t MessageOutbox::enqueue(Entry e, int64_t now) {
+	std::lock_guard<std::mutex> l(mutex);
 	if(e.cid.size() != 39 || e.cid.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567") != string::npos ||
 		e.hub.empty() || e.hub.size() > 2048 || e.hub.find('\0') != string::npos ||
 		e.nick.empty() || e.nick.size() > 1024 || e.nick.find('\0') != string::npos ||
-		e.text.empty() || e.text.size() > maxMessageBytes || e.text.find('\0') != string::npos ||
+		e.text.empty() || e.text.size() > messageLimit || e.text.find('\0') != string::npos ||
 		!Text::validateUtf8(e.text) || (e.nmdc && e.direct))
 	{
-		throw SQLiteException("Invalid recipient, route or message (maximum 16 KiB of UTF-8 text).");
+		throw SQLiteException("Invalid recipient, route or message. The configured UTF-8 message size limit is " +
+			std::to_string(messageLimit) + " bytes.");
 	}
-	std::lock_guard<std::mutex> l(mutex);
 	SQLiteTransaction tx(db);
 	{
 		auto count = db.prepare("SELECT count(*) FROM messages");
 		count.step();
-		if(count.columnInt64(0) >= static_cast<int64_t>(maxEntries))
+		if(count.columnInt64(0) >= static_cast<int64_t>(entryLimit))
 			throw SQLiteException("The message outbox is full. Remove old entries before queuing more messages.");
 	}
 	auto q = db.prepare("INSERT INTO messages (cid,nick,hub,body,nmdc,direct,third_person,created,expires,state) "
 		"VALUES (?,?,?,?,?,?,?,?,?,0)");
 	q.bind(1, e.cid); q.bind(2, e.nick); q.bind(3, Text::toLower(e.hub)); q.bind(4, e.text);
 	q.bind(5, int(e.nmdc)); q.bind(6, int(e.direct)); q.bind(7, int(e.thirdPerson));
-	q.bind(8, now); q.bind(9, now + lifetime); q.stepDone();
+	q.bind(8, now); q.bind(9, now + expiryInterval); q.stepDone();
 	auto id = sqlite3_last_insert_rowid(db.getHandle());
 	tx.commit();
 	return id;
@@ -92,7 +100,7 @@ bool MessageOutbox::erase(int64_t id) {
 bool MessageOutbox::retry(int64_t id, int64_t now) {
 	std::lock_guard<std::mutex> l(mutex);
 	auto q = db.prepare("UPDATE messages SET state=0, expires=? WHERE id=? AND state IN (3,4)");
-	q.bind(1, now + lifetime); q.bind(2, id); q.stepDone();
+	q.bind(1, now + expiryInterval); q.bind(2, id); q.stepDone();
 	return sqlite3_changes(db.getHandle()) != 0;
 }
 

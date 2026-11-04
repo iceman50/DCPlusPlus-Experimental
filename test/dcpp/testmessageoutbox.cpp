@@ -159,6 +159,41 @@ TEST(MessageOutbox, ConcurrentDispatchDoesNotSendSameMessageTwice) {
 	EXPECT_EQ(sends, 1);
 }
 
+TEST(MessageOutbox, ConfiguredLimitsApplyWithoutChangingSavedDeadlines) {
+	MessageOutbox box;
+	box.open(":memory:");
+	box.enqueue(message("original"), 100);
+	box.configure(2, 2048, 3);
+	EXPECT_THROW(box.enqueue(message(string(2049, 'x')), 101), SQLiteException);
+	auto id = box.enqueue(message(string(2048, 'x')), 101);
+	EXPECT_THROW(box.enqueue(message(), 102), SQLiteException);
+	auto entries = box.list();
+	ASSERT_EQ(entries.size(), 2u);
+	EXPECT_EQ(entries[0].expires, 100 + MessageOutbox::lifetime);
+	EXPECT_EQ(entries[1].expires, 101 + 3 * 86400);
+	box.configure(1, 1024, 2);
+	EXPECT_EQ(box.list().size(), 2u); // Lower limits never discard existing messages.
+	box.process(101 + 3 * 86400, [](const auto&) { return false; }, accepted);
+	EXPECT_TRUE(box.retry(id, 101 + 3 * 86400));
+	EXPECT_EQ(box.list()[1].expires, 101 + 5 * 86400);
+	box.configure(10, 32 * 1024, 7);
+	EXPECT_NO_THROW(box.enqueue(message(string(32 * 1024, 'x')), 102));
+}
+
+TEST(MessageOutbox, ConfiguredLimitsAreBoundedEvenOutsideTheSettingsUI) {
+	MessageOutbox box;
+	box.open(":memory:");
+	box.configure(-1, -1, -1);
+	EXPECT_THROW(box.enqueue(message(string(1025, 'x')), 100), SQLiteException);
+	box.enqueue(message(string(1024, 'x')), 100);
+	EXPECT_THROW(box.enqueue(message(), 100), SQLiteException);
+	EXPECT_EQ(box.list()[0].expires, 100 + 86400);
+	box.configure(INT_MAX, INT_MAX, INT_MAX);
+	EXPECT_THROW(box.enqueue(message(string(MessageOutbox::messageLimitMax + 1, 'x')), 101), SQLiteException);
+	box.enqueue(message(), 101);
+	EXPECT_EQ(box.list()[1].expires, 101 + int64_t(MessageOutbox::expiryDaysMax) * 86400);
+}
+
 TEST(MessageOutbox, PersistenceFailurePreventsUntrackedSendingAndAutomaticDuplicates) {
 	const auto path = std::filesystem::temp_directory_path() /
 		("dcpp-outbox-lock-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".sqlite");

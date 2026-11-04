@@ -9,6 +9,7 @@
 
 #include "stdafx.h"
 #include <dcpp/util/Util.h>
+#include <dcpp/chat/MessageOutboxManager.h>
 #include <win32/appearance/ControlSeeds.h>
 #include <win32/appearance/IconManager.h>
 #include <win32/controls/TableLayout.h>
@@ -359,7 +360,32 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 	}
 
-	auto themeGrid = tabs->addPage(T_("Interface"), 4)->content();
+	auto themeGrid = tabs->addPage(T_("Interface"), 6)->content();
+
+	auto borders = themeGrid->addChild(CheckBox::Seed(T_("Show borders around themed dialogs")));
+	borders->setHelpId(IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS);
+	items.emplace_back(borders, SettingsManager::THEMED_DIALOG_BORDERS, PropPage::T_BOOL);
+	borders->onClicked([borders] {
+		dwt::Application::instance().getAppearance().setDialogBorders(borders->getChecked());
+	});
+	// Cancel discards the preview; after OK the persisted value is the new choice.
+	onDestroy([] {
+		dwt::Application::instance().getAppearance().setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
+	});
+
+	{
+		auto group = themeGrid->addChild(GroupBox::Seed(T_("Offline message outbox")));
+		auto cur = group->addChild(Grid::Seed(4, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Maximum retained messages"), SettingsManager::OUTBOX_MAX_ENTRIES,
+			IDH_EXPERIMENTALPAGE, T_("messages"), MessageOutbox::entryLimitMin, MessageOutbox::entryLimitMax);
+		addIntItem(cur, T_("Maximum message size"), SettingsManager::OUTBOX_MAX_MESSAGE_BYTES,
+			IDH_EXPERIMENTALPAGE, T_("KiB"), MessageOutbox::messageLimitMin / BYTES_PER_KIB,
+			MessageOutbox::messageLimitMax / BYTES_PER_KIB, BYTES_PER_KIB);
+		addIntItem(cur, T_("Pending messages expire after"), SettingsManager::OUTBOX_EXPIRY_DAYS,
+			IDH_EXPERIMENTALPAGE, T_("days"), MessageOutbox::expiryDaysMin, MessageOutbox::expiryDaysMax);
+		cur->addChild(Label::Seed(T_("Applies to new messages and retries. Existing messages keep their deadlines.")));
+	}
 
 	{
 		auto group = themeGrid->addChild(GroupBox::Seed(T_("Hub user lists")));
@@ -441,6 +467,10 @@ void ExperimentalPage::write() {
 	auto clampRange = [settings](SettingsManager::IntSetting setting, int minimum, int maximum) {
 		settings->set(setting, std::clamp(settings->get(setting), minimum, maximum));
 	};
+	clampRange(SettingsManager::OUTBOX_MAX_ENTRIES, MessageOutbox::entryLimitMin, MessageOutbox::entryLimitMax);
+	clampRange(SettingsManager::OUTBOX_MAX_MESSAGE_BYTES, MessageOutbox::messageLimitMin, MessageOutbox::messageLimitMax);
+	clampRange(SettingsManager::OUTBOX_EXPIRY_DAYS, MessageOutbox::expiryDaysMin, MessageOutbox::expiryDaysMax);
+	if(MessageOutboxManager::available()) MessageOutboxManager::getInstance()->configure();
 	clamp(SettingsManager::MAX_MCN_DOWNLOADS, 1);
 	clamp(SettingsManager::MAX_MCN_UPLOADS, 1);
 	clamp(SettingsManager::MAX_HASH_SPEED, 0);

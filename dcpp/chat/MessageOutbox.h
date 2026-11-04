@@ -25,6 +25,11 @@ public:
 	};
 	static constexpr int64_t lifetime = 7 * 24 * 60 * 60;
 	static constexpr size_t maxEntries = 500, maxMessageBytes = 16 * 1024;
+	static constexpr int entryLimitMin = 1, entryLimitMax = 10000;
+	static constexpr int messageLimitMin = 1024, messageLimitMax = 64 * 1024;
+	static constexpr int expiryDaysMin = 1, expiryDaysMax = 365;
+	// Applies to new entries and explicit retries; saved deadlines stay intact.
+	void configure(int entries, int messageBytes, int expiryDays);
 	using Ready = std::function<bool(const Entry&)>;
 	// False is permitted only when nothing was handed to the transport.
 	using Send = std::function<bool(const Entry&)>;
@@ -43,6 +48,8 @@ private:
 	mutable std::mutex mutex;
 	std::mutex dispatchMutex;
 	mutable SQLiteDB db;
+	size_t entryLimit = maxEntries, messageLimit = maxMessageBytes;
+	int64_t expiryInterval = lifetime;
 	std::vector<Entry> listLocked() const;
 	bool transition(int64_t id, State from, State to);
 };

@@ -50,6 +50,27 @@ TEST_F(SettingsMigrationTest, persists_optional_themed_dialog_borders)
 	File::deleteFile(path);
 }
 
+TEST_F(SettingsMigrationTest, persists_outbox_limits)
+{
+	const auto path = Util::getTempPath() + "dcpp-test-outbox-settings.xml";
+	auto settings = SettingsManager::getInstance();
+	EXPECT_EQ(500, settings->get(SettingsManager::OUTBOX_MAX_ENTRIES));
+	EXPECT_EQ(16 * 1024, settings->get(SettingsManager::OUTBOX_MAX_MESSAGE_BYTES));
+	EXPECT_EQ(7, settings->get(SettingsManager::OUTBOX_EXPIRY_DAYS));
+	settings->set(SettingsManager::OUTBOX_MAX_ENTRIES, 42);
+	settings->set(SettingsManager::OUTBOX_MAX_MESSAGE_BYTES, 32 * 1024);
+	settings->set(SettingsManager::OUTBOX_EXPIRY_DAYS, 14);
+	settings->save(path);
+	SettingsManager::deleteInstance();
+	SettingsManager::newInstance();
+	settings = SettingsManager::getInstance();
+	settings->load(path);
+	EXPECT_EQ(42, settings->get(SettingsManager::OUTBOX_MAX_ENTRIES));
+	EXPECT_EQ(32 * 1024, settings->get(SettingsManager::OUTBOX_MAX_MESSAGE_BYTES));
+	EXPECT_EQ(14, settings->get(SettingsManager::OUTBOX_EXPIRY_DAYS));
+	File::deleteFile(path);
+}
+
 TEST_F(SettingsMigrationTest, persists_global_hub_user_icon_size_and_embedded_icons)
 {
 	const auto path = Util::getTempPath() + "dcpp-test-hub-icon-settings.xml";

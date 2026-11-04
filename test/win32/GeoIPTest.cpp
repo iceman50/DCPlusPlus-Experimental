@@ -61,6 +61,18 @@ void check(bool value, const char* message) {
 		throw std::runtime_error(message);
 }
 
+HWND findCaption(HWND parent, const wchar_t* caption) {
+	struct Search { const wchar_t* caption; HWND found = nullptr; } search { caption };
+	EnumChildWindows(parent, [](HWND child, LPARAM data) -> BOOL {
+		auto& search = *reinterpret_cast<Search*>(data);
+		wchar_t text[256] {};
+		GetWindowTextW(child, text, std::size(text));
+		if(std::wstring(text) == search.caption) { search.found = child; return FALSE; }
+		return TRUE;
+	}, reinterpret_cast<LPARAM>(&search));
+	return search.found;
+}
+
 struct TransferEvents :
 	HttpManagerListener
 {
@@ -419,6 +431,7 @@ int dwtMain(dwt::Application& app) {
 		}
 
 		auto appearance = new AppearancePage(window);
+		check(!findCaption(appearance->handle(), L"Show borders around themed dialogs"), "Dialog borders still appear on Appearance");
 		appearance->resize(dwt::Rectangle(0, 0, 620, 620));
 		appearance->layout();
 		snapshot(appearance->handle(), directory + "appearance-dark.bmp");
@@ -541,6 +554,20 @@ int dwtMain(dwt::Application& app) {
 			0);
 		page->layout();
 		HWND password = nullptr;
+		auto borders = findCaption(page->handle(), L"Show borders around themed dialogs");
+		check(borders != nullptr, "Dialog borders are missing from Experimental Interface");
+		SendMessage(borders, BM_CLICK, 0, 0);
+		check(!app.getAppearance().getDialogBorders(), "Dialog border preview did not apply");
+		auto setLimit = [&](const wchar_t* caption, const wchar_t* value) {
+			auto label = findCaption(page->handle(), caption);
+			check(label != nullptr, "Offline message limit setting is missing");
+			auto edit = GetWindow(label, GW_HWNDNEXT);
+			check(dwt::hwnd_cast<dwt::TextBox*>(edit) != nullptr, "Offline message limit field is missing");
+			SetWindowTextW(edit, value);
+		};
+		setLimit(L"Maximum retained messages", L"123");
+		setLimit(L"Maximum message size", L"32");
+		setLimit(L"Pending messages expire after", L"14");
 		EnumChildWindows(
 			page->handle(),
 			[](HWND child, LPARAM data) -> BOOL {
@@ -559,6 +586,15 @@ int dwtMain(dwt::Application& app) {
 			"MaxMind key field is clipped");
 		SetWindowTextW(password, Text::toT(key).c_str());
 		page->write();
+		check(SETTING(OUTBOX_MAX_ENTRIES) == 123 && SETTING(OUTBOX_MAX_MESSAGE_BYTES) == 32 * 1024 &&
+			SETTING(OUTBOX_EXPIRY_DAYS) == 14, "Offline message settings were not applied in the expected units");
+		auto& outboxStore = MessageOutboxManager::getInstance()->getStore();
+		MessageOutbox::Entry queued;
+		queued.cid = CID::generate().toBase32(); queued.nick = "Settings test";
+		queued.hub = "adcs://settings-test.invalid"; queued.text = string(32 * 1024, 'x');
+		outboxStore.enqueue(queued, 100);
+		check(outboxStore.list().back().expires == 100 + 14 * 86400, "Applied limits did not reach the running outbox");
+		check(!SETTING(THEMED_DIALOG_BORDERS), "Dialog border preference did not save from Experimental Interface");
 		check(GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY)) == key, "Experimental settings did not protect the license key");
 		snapshot(page->handle(), directory + "settings-dark.bmp");
 		EnumChildWindows(
@@ -578,6 +614,24 @@ int dwtMain(dwt::Application& app) {
 			app.dispatch();
 		snapshot(page->handle(), directory + "sharing-dark-resized.bmp");
 		DestroyWindow(page->handle());
+		check(!app.getAppearance().getDialogBorders(), "Saved dialog border preference did not survive closing Settings");
+		{
+			auto cancelled = new ExperimentalPage(window);
+			cancelled->resize(dwt::Rectangle(0, 0, 620, 620));
+			cancelled->setVisible(true);
+			EnumChildWindows(cancelled->handle(), [](HWND child, LPARAM) -> BOOL {
+				if(auto tabs = dwt::hwnd_cast<dwt::TabView*>(child))
+					tabs->setActive(tabs->getChildren().back());
+				return TRUE;
+			}, 0);
+			cancelled->layout();
+			auto preview = findCaption(cancelled->handle(), L"Show borders around themed dialogs");
+			check(preview != nullptr, "Dialog border preview is missing");
+			SendMessage(preview, BM_CLICK, 0, 0);
+			check(app.getAppearance().getDialogBorders(), "Dialog border preview did not toggle");
+			DestroyWindow(cancelled->handle());
+			check(!app.getAppearance().getDialogBorders(), "Cancelling Settings did not restore dialog borders");
+		}
 		DestroyWindow(window->handle());
 
 		// Optional live check against a public synthetic fixture, never user settings.
