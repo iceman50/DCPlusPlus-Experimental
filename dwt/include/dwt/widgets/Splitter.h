@@ -99,7 +99,7 @@ private:
 	bool hovering;
 	std::optional<Point> moving; // store the last point to only handle actual moves
 
-	void handlePainting(PaintCanvas& canvas);
+	void handlePainting(Canvas& canvas, const Rectangle& paint);
 
 	bool handleLButtonDown(const MouseEvent& mouseEvent);
 	bool handleLButtonUp();

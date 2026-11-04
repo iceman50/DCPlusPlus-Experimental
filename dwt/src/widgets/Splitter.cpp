@@ -51,7 +51,16 @@ void Splitter::create(const Seed& cs) {
 	BaseType::create(cs);
 
 	theme.load(VSCLASS_WINDOW, this, false);
-	onPainting([this](PaintCanvas& canvas) { handlePainting(canvas); });
+	// Paint the background and divider together. The default class brush would
+	// otherwise flash system gray during erases (for example, opening a modal).
+	onRaw([](WPARAM, LPARAM) -> LRESULT { return TRUE; }, Message(WM_ERASEBKGND));
+	onPainting([this](PaintCanvas& target) {
+		const auto paint = target.getPaintRect();
+		BufferedCanvas<FreeCanvas> canvas(target.handle(), paint);
+		handlePainting(canvas, paint);
+		canvas.blast(paint);
+	});
+	onPrinting([this](Canvas& canvas) { handlePainting(canvas, Rectangle(getClientSize())); });
 
 	onLeftMouseDown([this](const MouseEvent& mouseEvent) { return handleLButtonDown(mouseEvent); });
 	onMouseMove([this](const MouseEvent& mouseEvent) { return handleMouseMove(mouseEvent); });
@@ -98,10 +107,9 @@ SplitterContainerPtr Splitter::getParent() const {
 	return static_cast<SplitterContainerPtr>(BaseType::getParent());
 }
 
-void Splitter::handlePainting(PaintCanvas& canvas) {
+void Splitter::handlePainting(Canvas& canvas, const Rectangle& paint) {
 	if(isManualAppearance()) {
 		const auto& palette = getAppearance().getPalette();
-		const auto paint = canvas.getPaintRect();
 		const auto background = hovering ?
 			Appearance::blend(palette.background, palette.accent, 48) :
 			palette.background;
@@ -128,6 +136,8 @@ void Splitter::handlePainting(PaintCanvas& canvas) {
 		return;
 	}
 
+	// Native painting also owns its background now that WM_ERASEBKGND is suppressed.
+	canvas.fill(paint, Brush(Color::predefined(COLOR_3DFACE)));
 	if(hovering) {
 		if(theme) {
 			Rectangle rect { getClientSize() };
@@ -135,10 +145,10 @@ void Splitter::handlePainting(PaintCanvas& canvas) {
 			(horizontal ? rect.pos.x : rect.pos.y) -= 2;
 			(horizontal ? rect.size.x : rect.size.y) += 4;
 
-			theme.drawBackground(canvas, WP_CAPTION, CS_ACTIVE, rect, true, canvas.getPaintRect());
+			theme.drawBackground(canvas, WP_CAPTION, CS_ACTIVE, rect, true, paint);
 
 		} else {
-			canvas.fill(canvas.getPaintRect(), Brush(Brush::ActiveCaption));
+			canvas.fill(paint, Brush(Brush::ActiveCaption));
 		}
 
 	} else {
