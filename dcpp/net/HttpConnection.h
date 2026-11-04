@@ -15,88 +15,72 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #ifndef DCPLUSPLUS_DCPP_HTTP_CONNECTION_H
 #define DCPLUSPLUS_DCPP_HTTP_CONNECTION_H
 
-#include <string>
-
-#include <dcpp/net/BufferedSocketListener.h>
+#include <atomic>
+#include <functional>
+#include <thread>
 #include <dcpp/net/HttpConnectionListener.h>
 #include <dcpp/base/GetSet.h>
 #include <dcpp/base/Speaker.h>
 #include <dcpp/util/Util.h>
 
 namespace dcpp {
-
-using std::string;
-
-class HttpConnection : BufferedSocketListener, public Speaker<HttpConnectionListener>
-{
+class HttpConnection : public Speaker<HttpConnectionListener> {
 public:
-	HttpConnection(const HttpConnection&) = delete;
-	HttpConnection& operator=(const HttpConnection&) = delete;
+	struct Url {
+		string scheme, host, port, target;
+		string authority() const;
+		string origin() const;
+	};
+	struct Options {
+		uint64_t maxBody = 256ULL * 1024 * 1024;
+		uint64_t timeoutMs = 120000;
+		uint64_t idleTimeoutMs = 10000;
+		unsigned maxRedirects = 5;
+		bool httpsOnly = false;
+		bool sameOrigin = false;
+		bool checkRevocation = false;
+		string proxy;
+		string bindAddress4, bindAddress6;
+		// Credentials are scoped to an exact origin, never a proxy or other host.
+		string authorization, authorizationOrigin;
+		std::function<bool(const Url&)> allowedUrl;
+		std::function<bool()> cancelled;
+	};
+	using DataCallback = std::function<void(const HttpConnection&, const uint8_t*, size_t)>;
 
 	HttpConnection(const string& aUserAgent = Util::emptyString);
 	virtual ~HttpConnection();
-
+	HttpConnection(const HttpConnection&) = delete;
+	HttpConnection& operator=(const HttpConnection&) = delete;
 	virtual void download();
 	void download(const StringMap& postData);
-
 	virtual void abort();
+	// Existing background jobs use the same transport/parser as HttpManager.
+	// The sink may throw to stop the transfer. No asynchronous events are fired.
+	void downloadBlocking(const string& source, const Options& options, const DataCallback& sink);
+	static Url parseUrl(const string& value);
+	static string resolveRedirect(const string& source, const string& location);
 
 	const string& getMimeType() const { return mimeType; }
-
 	virtual const string& getStatus() const { return statusLine; }
-
+	int getStatusCode() const { return statusCode; }
 	virtual int64_t getSize() const { return size; }
-
 	virtual int64_t getDone() const { return done; }
-
 	virtual double getSpeed() const { return speed; }
-
 	GETSET(string, url, Url);
 
 private:
-	enum RequestType { TYPE_GET, TYPE_POST };
-	enum ConnectionStates { CONN_UNKNOWN, CONN_OK, CONN_FAILED, CONN_MOVED, CONN_CHUNKED };
-
-	string userAgent;
-	string method;
-	string file;
-	string server;
-	string port;
-
-	string requestBody;
-
-	string mimeType;
-	string statusLine;
-	int64_t size;
-	int64_t done;
-	double speed;
-
-	// counters to compute a best-effort speed
-	int64_t lastPos;
-	uint64_t lastTick;
-
-	ConnectionStates connState;
-	RequestType connType;
-
-	BufferedSocket* socket;
-
-	void prepareRequest(RequestType type);
-	void abortRequest(bool disconnect);
-
-	void updateSpeed();
-
-	// BufferedSocketListener
-	void on(Connected) noexcept;
-	void on(Line, const string&) noexcept;
-	void on(Data, uint8_t*, size_t) noexcept;
-	void on(ModeChange) noexcept;
-	void on(Failed, const string&) noexcept;
+	string userAgent, mimeType, statusLine;
+	std::atomic<int> statusCode { 0 };
+	std::atomic<int64_t> size { -1 }, done { 0 };
+	std::atomic<double> speed { 0 };
+	std::atomic<bool> stopped { false };
+	std::thread worker;
+	void start(string body, bool post);
+	void perform(string source, const Options& options, const DataCallback& sink, string body, bool post, bool reportRedirects);
 };
-
 } // namespace dcpp
-
-#endif // !defined(HTTP_CONNECTION_H)
+#endif

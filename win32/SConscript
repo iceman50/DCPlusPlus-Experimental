@@ -31,7 +31,6 @@ if dev.is_win32():
             "wtsapi32",
             "dwmapi",
             "psapi",
-            "winhttp",
             "crypt32",
         ]
     )

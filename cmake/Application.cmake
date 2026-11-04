@@ -40,7 +40,7 @@ target_link_libraries(dwt PUBLIC dcpp_options comctl32 comdlg32 gdi32 ole32 olea
 target_include_directories(dwt PUBLIC "${DCPP_ROOT}/dwt/include")
 
 add_library(gui_options INTERFACE)
-target_link_libraries(gui_options INTERFACE dcpp dwt windowscodecs psapi winhttp crypt32)
+target_link_libraries(gui_options INTERFACE dcpp dwt windowscodecs psapi crypt32)
 target_include_directories(gui_options INTERFACE "${DCPP_ROOT}/win32")
 # Force the generated help-resource header first: its guard suppresses the source
 # copy, including any stale SCons cshelp.h. This also works in a clean checkout.

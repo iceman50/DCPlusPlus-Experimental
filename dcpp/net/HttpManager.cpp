@@ -194,14 +194,25 @@ void HttpManager::on(HttpConnectionListener::Data, HttpConnection* c, const uint
 			return;
 		stream = conn->stream;
 	}
-	stream->write(data, len);
+	try {
+		if(stream->write(data, len) != len)
+			throw Exception("Incomplete HTTP output write");
+	} catch(const Exception& e) {
+		c->abort();
+		on(HttpConnectionListener::Failed(), c, e.getError());
+		return;
+	} catch(...) {
+		c->abort();
+		on(HttpConnectionListener::Failed(), c, "HTTP output write failed");
+		return;
+	}
 	fire(HttpManagerListener::Updated(), c, data, len);
 }
 
 void HttpManager::on(HttpConnectionListener::Failed, HttpConnection* c, const string& str) noexcept {
 	if(!beginCompletion(c))
 		return;
-	resetStream(c);
+	try { resetStream(c); } catch(...) { /* Preserve the original transfer failure. */ }
 
 	OutputStream* stream;
 	HttpManager::CallBack callback;
@@ -213,7 +224,6 @@ void HttpManager::on(HttpConnectionListener::Failed, HttpConnection* c, const st
 		callback = conn->callback;
 		connFlags = conn->getFlags();
 	}
-	stream->flush();
 	fire(HttpManagerListener::Failed(), c, str);
 	if(callback)
 		callback(c, stream, connFlags | HttpManager::CONN_FAILED);
@@ -221,6 +231,22 @@ void HttpManager::on(HttpConnectionListener::Failed, HttpConnection* c, const st
 }
 
 void HttpManager::on(HttpConnectionListener::Complete, HttpConnection* c) noexcept {
+	try {
+		OutputStream* stream;
+		{
+			Lock l(cs);
+			auto conn = findConn(c);
+			if(!conn || conn->terminal) return;
+			stream = conn->stream;
+		}
+		stream->flush();
+	} catch(const Exception& e) {
+		on(HttpConnectionListener::Failed(), c, e.getError());
+		return;
+	} catch(...) {
+		on(HttpConnectionListener::Failed(), c, "HTTP output flush failed");
+		return;
+	}
 	if(!beginCompletion(c))
 		return;
 	OutputStream* stream;
@@ -233,7 +259,6 @@ void HttpManager::on(HttpConnectionListener::Complete, HttpConnection* c) noexce
 		callback = conn->callback;
 		connFlags = conn->getFlags();
 	}
-	stream->flush();
 	fire(HttpManagerListener::Complete(), c, stream);
 	if(callback)
 		callback(c, stream, connFlags | HttpManager::CONN_COMPLETE);

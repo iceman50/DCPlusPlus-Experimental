@@ -25,6 +25,11 @@
 #include <dcpp/settings/SettingsManager.h>
 
 #include <openssl/err.h>
+#ifdef _WIN32
+#define CERT_CHAIN_PARA_HAS_EXTRA_FIELDS
+#include <wincrypt.h>
+#undef X509_NAME
+#endif
 
 namespace dcpp {
 
@@ -51,7 +56,8 @@ SSLSocket::SSLSocket(CryptoManager::SSLContext context, bool allowUntrusted, con
 }
 
 SSLSocket::SSLSocket(CryptoManager::SSLContext context, const string& hostName_) : Socket(TYPE_TCP), ctx(NULL), ssl(NULL), verifyData(nullptr), hostName(hostName_) {
-	ctx = CryptoManager::getInstance()->getSSLContext(context);
+	http = context == CryptoManager::SSL_HTTP;
+	ctx = http ? CryptoManager::getHttpContext() : CryptoManager::getInstance()->getSSLContext(context);
 }
 
 void SSLSocket::connect(const string& aIp, const string& aPort) {
@@ -69,7 +75,11 @@ bool SSLSocket::waitConnected(uint32_t millis) {
 		if(!ssl)
 			checkSSL(-1);
 
-		if(!verifyData) {
+		if(http) {
+			SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+			if(hostName.empty() || SSL_set1_host(ssl, hostName.c_str()) != 1)
+				throw SSLSocketException("Could not configure HTTPS certificate identity verification");
+		} else if(!verifyData) {
 			SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
 		} else SSL_set_ex_data(ssl, CryptoManager::idxVerifyData, verifyData.get());
 
@@ -99,6 +109,42 @@ bool SSLSocket::waitConnected(uint32_t millis) {
 			return false;
 		}
 	}
+}
+
+void SSLSocket::verifyHttpRevocation() {
+#ifdef _WIN32
+	if(!http || !ssl || !SSL_is_init_finished(ssl))
+		throw SSLSocketException("HTTPS revocation check requires an authenticated TLS connection");
+	// OpenSSL has already checked trust, purpose, validity and hostname. Use
+	// crypt32 for the revocation lookup formerly requested by plugin downloads.
+	// Restrict retrieval time so offline CRL/OCSP responders cannot stall shutdown.
+	auto store = CertOpenStore(CERT_STORE_PROV_MEMORY, 0, 0, 0, nullptr);
+	if(!store) throw SSLSocketException("Could not create HTTPS revocation store");
+	PCCERT_CONTEXT leaf = nullptr;
+	PCCERT_CHAIN_CONTEXT chain = nullptr;
+	auto peers = SSL_get_peer_cert_chain(ssl);
+	bool valid = peers && sk_X509_num(peers) > 0;
+	for(int i = 0; valid && i < sk_X509_num(peers); ++i) {
+		unsigned char* encoded = nullptr;
+		const auto length = i2d_X509(sk_X509_value(peers, i), &encoded);
+		valid = length > 0 && CertAddEncodedCertificateToStore(store, X509_ASN_ENCODING, encoded,
+			static_cast<DWORD>(length), CERT_STORE_ADD_ALWAYS, i == 0 ? &leaf : nullptr);
+		OPENSSL_free(encoded);
+	}
+	CERT_CHAIN_PARA parameters {};
+	parameters.cbSize = sizeof(parameters);
+	parameters.dwUrlRetrievalTimeout = 5000;
+	valid = valid && CertGetCertificateChain(nullptr, leaf, nullptr, store, &parameters,
+		CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT | CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT, nullptr, &chain);
+	if(valid) valid = !(chain->TrustStatus.dwErrorStatus &
+		(CERT_TRUST_IS_REVOKED | CERT_TRUST_REVOCATION_STATUS_UNKNOWN | CERT_TRUST_IS_OFFLINE_REVOCATION));
+	if(chain) CertFreeCertificateChain(chain);
+	if(leaf) CertFreeCertificateContext(leaf);
+	CertCloseStore(store, 0);
+	if(!valid) throw SSLSocketException("HTTPS certificate revocation check failed");
+#else
+	throw SSLSocketException("HTTPS certificate revocation checking is unavailable on this platform");
+#endif
 }
 
 uint16_t SSLSocket::accept(const Socket& listeningSocket) {
@@ -162,7 +208,12 @@ int SSLSocket::read(void* aBuffer, int aBufLen) {
 	if(!ssl) {
 		return -1;
 	}
-	int len = checkSSL(SSL_read(ssl, aBuffer, aBufLen));
+	const int result = SSL_read(ssl, aBuffer, aBufLen);
+	// Only an authenticated TLS close_notify terminates a close-delimited HTTP
+	// body successfully. A bare TCP EOF must still fail as a truncated TLS stream.
+	if(http && result == 0 && SSL_get_error(ssl, result) == SSL_ERROR_ZERO_RETURN)
+		return 0;
+	int len = checkSSL(result);
 
 	if(len > 0) {
 		stats.totalDown += len;

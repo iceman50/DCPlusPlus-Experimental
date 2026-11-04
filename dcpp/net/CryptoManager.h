@@ -42,7 +42,8 @@ public:
 
 	enum SSLContext {
 		SSL_CLIENT,
-		SSL_SERVER
+		SSL_SERVER,
+		SSL_HTTP
 	};
 
 	string makeKey(const string& aLock);
@@ -56,6 +57,7 @@ public:
 	bool decryptSUDP(const uint8_t* aKey, const uint8_t* aData, size_t aDataLen, string& result_);
 
 	SSL_CTX* getSSLContext(SSLContext wanted);
+	static SSL_CTX* getHttpContext();
 
 	void loadCertificates() noexcept;
 	void generateCertificate();

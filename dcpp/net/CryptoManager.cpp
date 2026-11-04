@@ -30,6 +30,10 @@
 #include <openssl/rsa.h>
 
 #include <bzlib.h>
+#ifdef _WIN32
+#include <wincrypt.h>
+#undef X509_NAME
+#endif
 
 namespace dcpp {
 
@@ -332,10 +336,41 @@ void CryptoManager::loadKeyprint(const string& file) noexcept {
 	}
 }
 
+SSL_CTX* CryptoManager::getHttpContext() {
+	// Separate from hub/peer certificates, pins and permissive callbacks. Cache
+	// the immutable trust store across requests, without sending our client cert.
+	static ssl::SSL_CTX context = [] {
+		ssl::SSL_CTX result(SSL_CTX_new(TLS_client_method()));
+		if(!result || !SSL_CTX_set_min_proto_version(result, TLS1_2_VERSION))
+			throw CryptoException("Could not initialize HTTPS TLS context");
+		SSL_CTX_set_verify(result, SSL_VERIFY_PEER, nullptr);
+		SSL_CTX_set_default_verify_paths(result);
+#ifdef _WIN32
+		auto roots = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, 0,
+			CERT_SYSTEM_STORE_CURRENT_USER | CERT_STORE_OPEN_EXISTING_FLAG | CERT_STORE_READONLY_FLAG, L"ROOT");
+		if(!roots) throw CryptoException("Could not open system HTTPS trust store (Windows error " + std::to_string(GetLastError()) + ")");
+		PCCERT_CONTEXT cert = nullptr;
+		while((cert = CertEnumCertificatesInStore(roots, cert))) {
+			const unsigned char* encoded = cert->pbCertEncoded;
+			auto x509 = d2i_X509(nullptr, &encoded, cert->cbCertEncoded);
+			if(x509) {
+				X509_STORE_add_cert(SSL_CTX_get_cert_store(result), x509);
+				X509_free(x509);
+			}
+		}
+		CertCloseStore(roots, 0);
+#endif
+		ERR_clear_error();
+		return result;
+	}();
+	return context;
+}
+
 SSL_CTX* CryptoManager::getSSLContext(SSLContext wanted) {
 	switch(wanted) {
 		case SSL_CLIENT: return clientContext;
 		case SSL_SERVER: return serverContext;
+		case SSL_HTTP: return getHttpContext();
 		default: return NULL;
 	}
 }

@@ -154,3 +154,29 @@ TEST_F(HttpManagerTest, LateTransportEventsCannotChangeCompletedOutput) {
 	EXPECT_EQ(1, completed);
 	EXPECT_EQ(0, failed);
 }
+
+TEST_F(HttpManagerTest, OutputFailuresProduceOneFailureInsteadOfTerminating) {
+	class BrokenStream : public OutputStream {
+	public:
+		bool failWrite = true;
+		size_t write(const void*, size_t size) override {
+			if(failWrite) throw Exception("disk full");
+			return size;
+		}
+		size_t flush() override { throw Exception("flush failed"); }
+	} stream;
+	for(bool failWrite : { true, false }) {
+		stream.failWrite = failWrite;
+		auto connection = std::make_shared<TestTransport>();
+		int callbacks = 0;
+		HttpManager::getInstance()->download(connection, "https://example.test/output", &stream,
+			[&](const HttpConnection*, OutputStream*, Flags::MaskType flags) {
+				EXPECT_TRUE(flags & HttpManager::CONN_FAILED);
+				++callbacks;
+			});
+		connection->finish();
+		EXPECT_EQ(1, callbacks);
+	}
+	EXPECT_EQ(2, failed);
+	EXPECT_EQ(0, completed);
+}

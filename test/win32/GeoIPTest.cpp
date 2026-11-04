@@ -278,6 +278,9 @@ void verifyTransferIcons(dwt::Window* window, dwt::Application& app, const std::
 
 int dwtMain(dwt::Application& app) {
 	try {
+		WSADATA sockets {};
+		check(WSAStartup(MAKEWORD(2, 2), &sockets) == 0, "Cannot initialize HTTP test sockets");
+		struct SocketCleanup { ~SocketCleanup() { WSACleanup(); } } socketCleanup;
 		wchar_t cwd[32768];
 		check(GetCurrentDirectoryW(std::size(cwd), cwd) != 0, "Cannot find test workspace");
 		const auto directory = Text::fromT(cwd) + "\\build\\geolite2\\ui\\";

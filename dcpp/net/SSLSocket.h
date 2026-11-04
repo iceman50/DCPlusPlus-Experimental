@@ -49,7 +49,7 @@ class SSLSocket : public Socket
 {
 public:
 	SSLSocket(CryptoManager::SSLContext context, bool allowUntrusted, const string& expKP, const string& hostName_);
-	/** Creates an SSL socket without any verification */
+	/** HTTP uses system trust and hostname verification; other contexts are unverified. */
 	SSLSocket(CryptoManager::SSLContext context, const string& hostName_);
 
 	virtual ~SSLSocket() { verifyData.reset(); }
@@ -73,6 +73,8 @@ public:
 
 	virtual bool waitConnected(uint32_t millis);
 	virtual bool waitAccepted(uint32_t millis);
+	/** Additional Windows revocation check for HTTPS callers requiring it. */
+	void verifyHttpRevocation();
 
 #ifdef _DEBUG
 	/** True once the underlying TCP connection has completed and TLS setup has begun. */
@@ -90,6 +92,7 @@ private:
 	int checkSSL(int ret);
 	bool waitWant(int ret, uint32_t millis);
 	string hostName;
+	bool http = false;
 };
 
 } // namespace dcpp
