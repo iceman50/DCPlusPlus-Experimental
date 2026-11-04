@@ -54,6 +54,25 @@ void PrivateChatManager::setAcceptConnectionF(AcceptConnectionF f) {
 	acceptConnectionF = std::move(f);
 }
 
+void PrivateChatManager::setOutboxRecipients(const vector<HintedUser>& users) {
+	Lock l(cs);
+	outboxRecipients = users;
+}
+
+bool PrivateChatManager::outboxDirectMessage(const HintedUser& user, const string& text, bool thirdPerson, bool probeOnly) {
+	Lock l(cs);
+	if(shuttingDown || user.hint.empty()) return false;
+	for(const auto& known: knownCCPMs) {
+		auto uc = known.first;
+		if(known.second.user == user.user && hubHintsEqual(user.hint, uc->getHubUrl()) &&
+			uc->getState() == UserConnection::STATE_CMD && uc->isSecure())
+		{
+			return probeOnly || uc->pm(text, thirdPerson);
+		}
+	}
+	return false;
+}
+
 UserConnection* PrivateChatManager::getPMConn(const UserPtr& user, const string& expectedToken)
 {
 	Lock l(cs);
@@ -164,7 +183,10 @@ void PrivateChatManager::on(ConnectionManagerListener::Connected, ConnectionQueu
 
 		knownCCPMs.insert_or_assign(uc, KnownPMConnection { cqi->getUser().user, cqi->getToken() });
 		frameOpen = acceptConnectionF && acceptConnectionF(cqi->getUser());
-		if(!SETTING(POPUP_PMS) && !frameOpen) {
+		const bool wantedByOutbox = any_of(outboxRecipients.begin(), outboxRecipients.end(), [cqi](const HintedUser& user) {
+			return user.user == cqi->getUser().user && hubHintsEqual(user.hint, cqi->getUser().hint);
+		});
+		if(!SETTING(POPUP_PMS) && !frameOpen && !wantedByOutbox) {
 			uc->disconnect(true);
 			return;
 		}

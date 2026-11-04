@@ -36,6 +36,7 @@
 #include <dcpp/connectivity/MappingManager.h>
 #include <dcpp/plugins/PluginApiImpl.h>
 #include <dcpp/chat/PrivateChatManager.h>
+#include <dcpp/chat/MessageOutboxManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/app/ResourceManager.h>
 #include <dcpp/search/SearchManager.h>
@@ -77,6 +78,7 @@ void startup() {
 	ClientManager::newInstance();
 	ConnectionManager::newInstance();
 	PrivateChatManager::newInstance();
+	MessageOutboxManager::newInstance();
 	DownloadManager::newInstance();
 	UploadManager::newInstance();
 	ThrottleManager::newInstance();
@@ -166,9 +168,11 @@ void load(function<void (const string&)> stepF, function<void (float)> progressF
 		GeoManager::getInstance()->init();
 		completeStage();
 	}
+	MessageOutboxManager::getInstance()->start();
 }
 
 void shutdown() {
+	MessageOutboxManager::deleteInstance();
 	DirectTransferManager::getInstance()->shutdown();
 	PluginManager::getInstance()->unloadPlugins();
 	TimerManager::getInstance()->shutdown();

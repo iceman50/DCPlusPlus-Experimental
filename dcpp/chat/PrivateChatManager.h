@@ -49,6 +49,9 @@ public:
 	// for parking.
 	bool returnPMConn(const UserPtr& user, const string& token, UserConnection* uc);
 	void releasePMConn(const UserPtr& user, const string& token, bool disconnect);
+	// The manager pins the connection against Removed for the entire send.
+	bool outboxDirectMessage(const HintedUser& user, const string& text, bool thirdPerson, bool probeOnly);
+	void setOutboxRecipients(const vector<HintedUser>& users);
 
 private:
 	friend class Singleton<PrivateChatManager>;
@@ -71,6 +74,7 @@ private:
 	CriticalSection cs;
 	AcceptConnectionF acceptConnectionF;
 	bool shuttingDown = false;
+	vector<HintedUser> outboxRecipients;
 
 	// ConnectionManagerListener
 	void on(ConnectionManagerListener::Connected, ConnectionQueueItem* cqi, UserConnection* uc) noexcept;

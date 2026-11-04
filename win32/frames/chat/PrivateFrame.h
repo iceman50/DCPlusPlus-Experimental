@@ -90,9 +90,9 @@ public:
 	static void parseWindowParams(TabViewPtr parent, const WindowParams& params);
 	static bool isFavorite(const WindowParams& params);
 
-	/** Send a message using the active route. Returns false only when an explicit
-	 * RTF0 message cannot be sent without degrading it to plain markup. */
-	bool sendMessage(const tstring& msg, bool thirdPerson = false, bool explicitRichText = false);
+	/** Returns true after sending, or durably queuing an eligible typed message.
+	 * Automatic messages and explicit RTF0 messages are never queued. */
+	bool sendMessage(const tstring& msg, bool thirdPerson = false, bool explicitRichText = false, bool allowQueue = false);
 
 private:
 	enum {
@@ -112,6 +112,8 @@ private:
 	string connToken;
 	std::atomic<uint64_t> connRevision;
 	uint64_t connEstablishedTick;
+	std::atomic_bool outboxRequireDirect { false };
+	bool queueMessage(const string& text, bool thirdPerson, bool direct);
 	bool acceptCCPMConnections;
 	bool localTyping;
 	bool remoteTyping;

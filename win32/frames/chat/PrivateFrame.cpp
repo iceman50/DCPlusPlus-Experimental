@@ -45,6 +45,8 @@
 #include <dcpp/logging/LogManager.h>
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/chat/PrivateChatManager.h>
+#include <dcpp/chat/MessageOutboxManager.h>
+#include <win32/dialogs/MessageOutboxDlg.h>
 #include <dcpp/chat/RichText.h>
 #include <dcpp/system/TimerManager.h>
 #include <dcpp/user/User.h>
@@ -465,6 +467,7 @@ lastMessageTime(time(NULL))
 		if(activeConn) {
 			connToken = activeConn->getToken();
 			connEstablishedTick = GET_TICK();
+			outboxRequireDirect = true;
 			++connRevision;
 		}
 	}
@@ -681,6 +684,7 @@ void PrivateFrame::updateRichTextAvailability() {
 }
 
 void PrivateFrame::startCC(bool silent) {
+	if(!silent) outboxRequireDirect = true;
 	if(!silent) {
 		// An explicit request closes the circuit and starts a fresh retry budget.
 		allowAutoCCPM = true;
@@ -743,6 +747,7 @@ void PrivateFrame::startCC(bool silent) {
 }
 
 void PrivateFrame::closeCC(bool silent) {
+	if(!silent) outboxRequireDirect = false;
 	bool found = false;
 	{
 		Lock lifetimeLock(connLifetimeMutex);
@@ -811,6 +816,7 @@ void PrivateFrame::pauseAutoCCPMReconnect() {
 }
 
 void PrivateFrame::changeHub(const string& hubHint) {
+	outboxRequireDirect = false;
 	{
 		// Keep the close request and hint change atomic with respect to a
 		// connection event for the old hub.
@@ -864,6 +870,7 @@ void PrivateFrame::adoptPMConnection(const string& connectionToken) {
 		conn.store(activeConn);
 		connToken = connectionToken;
 		connEstablishedTick = GET_TICK();
+		outboxRequireDirect = true;
 		revision = ++connRevision;
 		adopted = true;
 	}
@@ -997,7 +1004,7 @@ void PrivateFrame::enterImpl(const tstring& s) {
 
 		} else if(ChatCommands::checkCommand(cmd, param, message, status, thirdPerson)) {
 			if(!message.empty()) {
-				if(!sendMessage(message, thirdPerson)) {
+				if(!sendMessage(message, thirdPerson, false, true)) {
 					addStatus(T_("The message could not be sent because the active route changed."));
 					resetText = false;
 				}
@@ -1021,6 +1028,8 @@ void PrivateFrame::enterImpl(const tstring& s) {
 				this->message->showPopup(T_("User offline"), T_("The message cannot be delivered because the user is offline."), TTI_ERROR);
 				resetText = false;
 			}
+		} else if(Util::stricmp(cmd.c_str(), _T("outbox")) == 0) {
+			MessageOutboxDlg(this).run();
 		} else if(Util::stricmp(cmd.c_str(), _T("grant")) == 0) {
 			handleGrantSlot();
 			addStatus(T_("Slot granted"));
@@ -1048,7 +1057,7 @@ void PrivateFrame::enterImpl(const tstring& s) {
 			{
 				addChat(T_("*** Keyboard commands:") + _T("\r\n") +
 						ChatCommands::commands +
-						_T(", /direct, /encrypted, /rtf <message>, /getlist, /grant, /close, /favorite, /ignore, /unignore, /log <system, downloads, uploads>, /lastmessage")
+						_T(", /direct, /encrypted, /outbox, /rtf <message>, /getlist, /grant, /close, /favorite, /ignore, /unignore, /log <system, downloads, uploads>, /lastmessage")
 						);
 			}
 			else
@@ -1087,14 +1096,14 @@ void PrivateFrame::enterImpl(const tstring& s) {
 	}
 
 	if(send) {
-		if(online || ccReady()) {
-			if(!sendMessage(s)) {
+		if(online || ccReady() || MessageOutboxManager::getInstance()->isEnabled()) {
+			if(!sendMessage(s, false, false, true)) {
 				message->showPopup(T_("Message not sent"),
-					T_("The message could not be delivered because the active route changed."), TTI_ERROR);
+					T_("The message could not be sent or queued. It is still in the input box."), TTI_ERROR);
 				resetText = false;
 			}
 		} else {
-			message->showPopup(T_("User offline"), T_("The message cannot be delivered because the user is offline."), TTI_ERROR);
+			message->showPopup(T_("User offline"), T_("Enable offline messages in View > Message outbox to save this message for later."), TTI_ERROR);
 			resetText = false;
 		}
 	}
@@ -1103,10 +1112,37 @@ void PrivateFrame::enterImpl(const tstring& s) {
 	}
 }
 
-bool PrivateFrame::sendMessage(const tstring& msg, bool thirdPerson, bool explicitRichText) {
+bool PrivateFrame::queueMessage(const string& text, bool thirdPerson, bool direct) {
+	try {
+		auto id = MessageOutboxManager::getInstance()->enqueue(replyTo.getUser(), text, thirdPerson, direct);
+		addStatus(T_("Message queued locally (#") + Text::toT(Util::toString(id)) +
+			(direct ? T_("). Waiting for a direct encrypted channel; manage it in View > Message outbox.") :
+			T_("). Waiting for the original hub route; manage it in View > Message outbox.")));
+		return true;
+	} catch(const std::exception& e) {
+		addStatus(T_("Message was not queued: ") + Text::toT(e.what()));
+		return false;
+	}
+}
+
+bool PrivateFrame::sendMessage(const tstring& msg, bool thirdPerson, bool explicitRichText, bool allowQueue) {
 	auto msg8 = Text::fromT(msg);
 	if(explicitRichText && !SETTING(ENABLE_RICH_TEXT)) {
 		return false;
+	}
+	auto outbox = MessageOutboxManager::getInstance();
+	const bool canQueue = allowQueue && !explicitRichText && outbox->isEnabled();
+	const bool direct = !replyTo.getUser().user->isNMDC() && (outboxRequireDirect.load() || ccReady() || SETTING(ALWAYS_CCPM));
+	if(canQueue) {
+		try {
+			// Preserve ordering if there are already messages awaiting this route.
+			if((!online && !ccReady()) || (direct && !ccReady()) ||
+				outbox->getStore().hasPending(replyTo.getUser().user->getCID().toBase32(), replyTo.getUser().hint))
+				return queueMessage(msg8, thirdPerson, direct);
+		} catch(const std::exception& e) {
+			addStatus(T_("Outbox unavailable: ") + Text::toT(e.what()));
+			return false;
+		}
 	}
 
 	{
@@ -1124,6 +1160,9 @@ bool PrivateFrame::sendMessage(const tstring& msg, bool thirdPerson, bool explic
 		}
 	}
 
+	// The direct channel can disappear between the first check and the send.
+	// Queued direct messages must never fall back to a hub in that race.
+	if(canQueue && direct) return queueMessage(msg8, thirdPerson, true);
 	if(explicitRichText && !ClientManager::getInstance()->supportsRichText(replyTo.getUser())) {
 		return false;
 	}
@@ -1131,8 +1170,9 @@ bool PrivateFrame::sendMessage(const tstring& msg, bool thirdPerson, bool explic
 		auto checked = msg8;
 		if(!RichText::prepareOutgoingMessage(checked, true, replyTo.getUser().hint)) return false;
 	}
-	return ClientManager::getInstance()->privateMessage(replyTo.getUser(), msg8, thirdPerson,
+	const auto sent = ClientManager::getInstance()->privateMessage(replyTo.getUser(), msg8, thirdPerson,
 		replyTo.getUser().user->isNMDC(), explicitRichText);
+	return sent || (canQueue && queueMessage(msg8, thirdPerson, direct));
 }
 
 PrivateFrame::UserInfoList PrivateFrame::selectedUsersImpl() {
@@ -1140,6 +1180,7 @@ PrivateFrame::UserInfoList PrivateFrame::selectedUsersImpl() {
 }
 
 void PrivateFrame::tabMenuImpl(dwt::Menu* menu) {
+	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); });
 	appendUserItems(getParent(), menu, false, false);
 	prepareMenu(menu, UserCommand::CONTEXT_USER, replyTo.getUser().hint);
 	menu->appendSeparator();
@@ -1171,6 +1212,8 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 
 void PrivateFrame::handleChannelMenu() {
 	auto menu = addChild(ControlSeeds::menu);
+	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); });
+	menu->appendSeparator();
 	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
 		menu->appendItem(T_("Private Send..."), [this] { UiServices::mainWindow->openPrivateSend(replyTo.getUser()); });
 		menu->appendSeparator();
@@ -1263,6 +1306,7 @@ void PrivateFrame::on(ConnectionManagerListener::Connected, ConnectionQueueItem*
 					conn.store(uc);
 					connToken = token;
 					connEstablishedTick = GET_TICK();
+					outboxRequireDirect = true;
 					revision = ++connRevision;
 				}
 			}

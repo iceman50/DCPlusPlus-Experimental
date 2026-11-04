@@ -174,7 +174,7 @@ const string SettingsManager::settingTags[] =
 	"EnableSUDP", "BroadDetection", "BroadDetection6", "HashDbVerifyStartup", "HashDbCompactOnRebuild",
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
 	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind", "PFTRequireVerification",
-	"ThemedDialogBorders",
+	"ThemedDialogBorders", "EnableMessageOutbox",
 	"SENTRY",
 	// Int64
 	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize", "GeoIPLastSuccess", "GeoIPLastAttempt",

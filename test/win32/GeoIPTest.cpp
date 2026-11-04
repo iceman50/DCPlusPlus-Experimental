@@ -14,7 +14,9 @@
 #include <win32/settings/advanced/ExperimentalPage.h>
 #include <win32/frames/transfers/private/PrivateSendDlg.h>
 #include <win32/frames/chat/PrivateFrame.h>
+#include <win32/dialogs/MessageOutboxDlg.h>
 #include <dcpp/chat/PrivateChatManager.h>
+#include <dcpp/chat/MessageOutboxManager.h>
 #include <dcpp/app/WindowManager.h>
 #include <dwt/widgets/TabView.h>
 #include <dwt/widgets/Button.h>
@@ -189,10 +191,45 @@ void verifyPrivateSendPM(dwt::Window* window, dwt::Application& app) {
 	const auto params = frame->getWindowParams();
 	check(File::getSize(params.at("LogPath").content) == -1, "Private offer leaked into the ordinary PM log");
 	check(PrivateFrame::privateSendNotice(tabs, first, L"Second private file"), "Existing PM rejected another offer at the window limit");
+	auto outbox = MessageOutboxManager::getInstance();
+	check(!frame->sendMessage(L"offline", false, false, true), "Offline messages should be opt-in");
+	outbox->setEnabled(true);
+	check(!frame->sendMessage(L"automatic reply"), "Automatic messages must not enter the outbox");
+	check(frame->sendMessage(L"saved offline message", false, false, true), "Offline composer message was not queued");
+	check(outbox->getStore().list().size() == 1, "Composer queued the wrong number of messages");
+	check(outbox->getStore().list()[0].hub == first.hint, "Composer did not preserve the original hub");
+	SettingsManager::getInstance()->set(SettingsManager::ALWAYS_CCPM, true);
+	check(frame->sendMessage(L"encrypted offline message", false, false, true), "Encrypted offline message was not queued");
+	check(outbox->getStore().list()[1].direct, "Encrypted offline message lost its route requirement");
+	SettingsManager::getInstance()->set(SettingsManager::ALWAYS_CCPM, false);
+	outbox->setEnabled(false);
 	PrivateFrame::closeAll(false);
 	for(unsigned i = 0; i < 200; ++i)
 		app.dispatch();
 	check(!PrivateFrame::isOpen(first.user), "Private offer PM did not close cleanly");
+	check(outbox->getStore().list().size() == 2, "Closing a PM lost its pending messages");
+	{
+		// Create the real dialog without showing it or touching the user's desktop.
+		MessageOutboxDlg dialog(window);
+		dialog.create(dwt::ModalDialog::Seed(dwt::Point(850, 480)));
+		struct Controls { HWND list = nullptr, cancel = nullptr; } controls;
+		EnumChildWindows(dialog.handle(), [](HWND child, LPARAM data) -> BOOL {
+			auto& controls = *reinterpret_cast<Controls*>(data);
+			wchar_t text[128] {};
+			GetWindowTextW(child, text, std::size(text));
+			if(dwt::hwnd_cast<dwt::Table*>(child)) controls.list = child;
+			if(std::wstring(text) == L"Cancel / remove") controls.cancel = child;
+			return TRUE;
+		}, reinterpret_cast<LPARAM>(&controls));
+		check(controls.list != nullptr, "Outbox dialog table was not found");
+		check(ListView_GetItemCount(controls.list) == 2, "Outbox dialog did not show queued messages");
+		ListView_SetItemState(controls.list, 0, LVIS_SELECTED, LVIS_SELECTED);
+		check(controls.cancel && IsWindowEnabled(controls.cancel), "Outbox cancellation control was unavailable");
+		SendMessage(controls.cancel, BM_CLICK, 0, 0);
+		check(outbox->getStore().list().size() == 1 && ListView_GetItemCount(controls.list) == 1,
+			"Outbox cancellation did not update durable state and the visible list");
+		DestroyWindow(dialog.handle());
+	}
 	check(PrivateFrame::privateSendNotice(tabs, second, notice), "Deferred private offer could not open after a PM closed");
 	PrivateFrame::closeAll(false);
 	for(unsigned i = 0; i < 200; ++i)
@@ -300,6 +337,8 @@ int dwtMain(dwt::Application& app) {
 		ConnectionManager::newInstance();
 		DirectTransferManager::newInstance();
 		PrivateChatManager::newInstance();
+		MessageOutboxManager::newInstance();
+		MessageOutboxManager::getInstance()->getStore().open(":memory:");
 		WindowManager::newInstance();
 		UploadManager::newInstance();
 		DownloadManager::newInstance();
@@ -568,6 +607,7 @@ int dwtMain(dwt::Application& app) {
 		GeoManager::deleteInstance();
 		WindowManager::deleteInstance();
 		PrivateChatManager::deleteInstance();
+		MessageOutboxManager::deleteInstance();
 		DirectTransferManager::deleteInstance();
 		ConnectionManager::deleteInstance();
 		CryptoManager::deleteInstance();
