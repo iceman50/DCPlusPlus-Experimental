@@ -20,6 +20,7 @@
 #include <win32/frames/chat/PrivateFrame.h>
 #undef private
 #include <dcpp/plugins/PluginManager.h>
+#include <win32/frames/chat/ChatCommands.h>
 #include <win32/dialogs/MessageOutboxDlg.h>
 #include <dcpp/chat/PrivateChatManager.h>
 #include <dcpp/chat/MessageOutboxManager.h>
@@ -467,6 +468,20 @@ int dwtMain(dwt::Application& app) {
 		FavoriteManager::newInstance();
 		GeoManager::newInstance();
 		IconManager::initialize();
+		for(const auto& input : { L"/stats", L"/stats preview", L"/stats invalid" }) {
+			tstring command(input), param, message, status;
+			bool thirdPerson = false;
+			check(ChatCommands::checkCommand(command, param, message, status, thirdPerson), "Stats command was not handled");
+			if(tstring(input) == L"/stats") {
+				check(status.empty() && message.find(L" cores / ") != tstring::npos && message.find(L" threads") != tstring::npos,
+					"Stats does not distinguish physical cores and threads");
+				check(message.find(L"[RAM]") != tstring::npos && message.find(L"[GPU]") != tstring::npos &&
+					message.find(L"[MEM]") != tstring::npos, "Stats omits memory or GPU information");
+				File(directory + "system-stats.txt", File::WRITE, File::CREATE | File::TRUNCATE).write(Text::fromT(message));
+			} else {
+				check(message.empty() && !status.empty(), "Stats preview/invalid arguments sent a chat message");
+			}
+		}
 		SettingsManager::getInstance()->set(SettingsManager::ICON_PACK, IconManager::EMBEDDED_PACK);
 		check(GeoIPUpdate::validHostedUrl("https://github.com/example/data/releases/latest/download/GeoLite2-Country.mmdb"),
 			"GitHub release URL was rejected");

@@ -32,6 +32,7 @@
 #include <win32/frames/search/SearchFrame.h>
 #include <win32/frames/tools/ACFrame.h>
 #include <win32/app/MainWindow.h>
+#include <win32/services/SystemStats.h>
 
 #include <cstdlib>
 
@@ -65,6 +66,7 @@ const TCHAR
 #define MSGS 19
 
 static const map<tstring, tstring> cmdMap = {
+	{_T("/stats [preview]"), T_("Sends decorated client and computer statistics to this chat. Use /stats preview to display them locally without sending.")},
 	{_T("/refresh"),								  T_("Manually refreshes DC++'s share list by going through the shared directories and adding new folders and files. DC++ automatically refreshes once an hour by default, and also refreshes after the list of shared directories is changed.")},
 	{_T("/me"),										  T_("Speak as a third person.")},
 	{_T("/slots #"),								  T_("Sets the current number of upload slots to the number you specify. If this is less than the current number of slots, no uploads are cancelled.")},
@@ -102,6 +104,7 @@ tstring getDescriptiveCommands() {
 
 tstring
 	commands =
+		_T("/stats [preview], ")
 		_T("/refresh, /me <msg>, /slots #, /dslots #, /search <string>, /clear [lines to keep], /dc++, /away <msg>, /back, /d <searchstring>, /g <searchstring>, /imdb <imdbquery>, /rebuild, /log [type], /help [brief], /u <url>, /f <string>, /download [#], /upload [#], /close, /a[bout][:]c[onfig]");
 
 bool checkCommand(tstring& cmd, tstring& param, tstring& message, tstring& status, bool& thirdPerson) {
@@ -113,7 +116,11 @@ bool checkCommand(tstring& cmd, tstring& param, tstring& message, tstring& statu
 		cmd = cmd.substr(1);
 	}
 
-	if(Util::stricmp(cmd.c_str(), _T("log")) == 0) {
+	if(Util::stricmp(cmd.c_str(), _T("stats")) == 0) {
+		if(param.empty()) message = Text::toT(SystemStats::report());
+		else if(Util::stricmp(param.c_str(), _T("preview")) == 0) status = Text::toT(SystemStats::report());
+		else status = T_("Usage: /stats (send to this chat) or /stats preview (show locally)");
+	} else if(Util::stricmp(cmd.c_str(), _T("log")) == 0) {
 		if(Util::stricmp(param.c_str(), _T("system")) == 0) {
 			ShellActions::openFile(Text::toT(Util::validateFileName(LogManager::getInstance()->getPath(LogManager::SYSTEM))));
 		} else if(Util::stricmp(param.c_str(), _T("downloads")) == 0) {
