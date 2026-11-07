@@ -79,6 +79,10 @@ void UserConnection::on(BufferedSocketListener::Line, const string& aLine) noexc
 		return;
 	}
 
+	if(aLine[0] == '$' && (isSet(FLAG_PM) || isSet(FLAG_PRIVATE_TRANSFER))) {
+		disconnect(true);
+		return;
+	}
 	if(aLine[0] == '$')
 		setFlag(FLAG_NMDC);
 
@@ -362,7 +366,7 @@ void UserConnection::sendRaw(const string& raw) {
 }
 
 void UserConnection::handle(AdcCommand::MSG t, const AdcCommand& c) {
-	if (state != UserConnection::STATE_CMD) {
+	if(state != UserConnection::STATE_CMD || !isSet(FLAG_PM)) {
 		disconnect(true);
 		return;
 	}
@@ -403,6 +407,7 @@ void UserConnection::handlePM(const AdcCommand& c, bool echo) noexcept {
 	auto peer = cm->findOnlineUserHint(user->getCID(), hubUrl);
 	auto me = cm->findOnlineUserHint(cm->getMe()->getCID(), hubUrl);
 	// null pointers allowed here as the conn may be going on without hubs.
+	const auto mentionNick = me ? me->getIdentity().getNick() : SETTING(NICK);
 
 	if(echo) {
 		std::swap(peer, me);
@@ -414,9 +419,16 @@ void UserConnection::handlePM(const AdcCommand& c, bool echo) noexcept {
 	if(PluginManager::getInstance()->runHook(HOOK_CHAT_PM_IN, peer, message))
 		return;
 
+	const auto sender = echo ? cm->getMe() : user;
+	Identity offlineSender(sender, 0);
+	if(!peer) {
+		offlineSender.setNick(echo ? mentionNick : cm->getNick(getHintedUser()));
+		if(echo) offlineSender.setSelf();
+	}
 	string tmp;
-	fire(UserConnectionListener::PrivateMessage(), this, ChatMessage(message, peer, me, peer,
-		c.hasFlag("ME", 1), c.getParam("TS", 1, tmp) ? Util::toInt64(tmp) : 0, richText));
+	fire(UserConnectionListener::PrivateMessage(), this, ChatMessage(message, peer ? peer->getIdentity() : offlineSender,
+		echo ? user : cm->getMe(), sender, c.hasFlag("ME", 1),
+		c.getParam("TS", 1, tmp) ? Util::toInt64(tmp) : 0, richText, mentionNick, peer));
 }
 
 void UserConnection::on(Connected) noexcept {

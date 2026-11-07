@@ -77,6 +77,9 @@ public:
 
 	/** An empty peer returns the entire private queue for application notifications. */
 	std::vector<View> snapshot(const HintedUser& peer = HintedUser());
+	/** Dismiss terminal entries for this contact without deleting files or
+	 * interrupting receipt acknowledgements and background cleanup. */
+	size_t clearFinished(const HintedUser& peer);
 
 	/** Returns the actual TLS peer fingerprint for independent comparison. */
 	std::string peerFingerprint(const HintedUser& peer);

@@ -28,6 +28,7 @@ private:
 	ButtonPtr send;
 	ButtonPtr primary;
 	ButtonPtr secondary;
+	ButtonPtr clear;
 	ButtonPtr detailsButton;
 	bool detailsVisible;
 	bool refreshing;

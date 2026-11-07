@@ -36,9 +36,14 @@ namespace dcpp {
 ChatMessage::ChatMessage(const string& text, OnlineUser* from,
 	const OnlineUser* to, const OnlineUser* replyTo,
 	bool thirdPerson, time_t messageTimestamp, bool richText) :
-from(from->getUser()),
-to(to ? to->getUser() : nullptr),
-replyTo(replyTo ? replyTo->getUser() : nullptr),
+ChatMessage(text, from->getIdentity(), to ? to->getUser() : nullptr, replyTo ? replyTo->getUser() : nullptr,
+	thirdPerson, messageTimestamp, richText, from->getClient().getMyNick(), from) { }
+
+ChatMessage::ChatMessage(const string& text, const Identity& sender, const UserPtr& toUser, const UserPtr& replyUser,
+	bool thirdPerson, time_t messageTimestamp, bool richText, const string& mentionNick, OnlineUser* from) :
+from(sender.getUser()),
+to(toUser),
+replyTo(replyUser),
 timestamp(time(0)),
 thirdPerson(thirdPerson),
 messageTimestamp(messageTimestamp)
@@ -63,7 +68,7 @@ messageTimestamp(messageTimestamp)
 
 	// Self-authored messages use distinct semantic spans so presentation layers can color the
 	// timestamp, nickname and body independently without changing logs or plugin-facing text.
-	const bool ownMessage = from->getIdentity().isSelf();
+	const bool ownMessage = sender.isSelf();
 
 	htmlMessage += "<span id=\"message\" style=\"white-space: pre-wrap;\">";
 
@@ -81,13 +86,13 @@ messageTimestamp(messageTimestamp)
 		htmlMessage += addSpan(ownMessage ? "ownMessageTimestamp" : "messageTimestamp", tmp, Util::emptyString) + " ";
 	}
 
-	nick = from->getIdentity().getNick();
+	nick = sender.getNick();
 	tmp = nick;
 	// let's *not* obey the spec here and add a space after the star. :P
 	tmp = thirdPerson ? "* " + tmp + " " : "<" + tmp + ">";
 	message += tmp + " ";
 
-	auto style = from->getIdentity().getStyle();
+	auto style = sender.getStyle();
 	string styleAttr;
 	if(!style.font.empty()) { styleAttr += "font: " + Util::cssFont(style.font) + ";dc-font: " + style.font + ";"; }
 	if(style.textColor != -1 && !ownMessage) { styleAttr += "color: #" + Util::cssColor(style.textColor) + ";"; }
@@ -131,7 +136,7 @@ messageTimestamp(messageTimestamp)
 
 	/* format the message; this will involve adding custom tags. use the Tagger class to that end. */
 	Tagger tags(move(tmp));
-	format(tags, xmlTmp, from->getClient().getMyNick());
+	format(tags, xmlTmp, mentionNick);
 
 	// let plugins play with the tag list
 	PluginManager::getInstance()->onChatTags(tags, from);

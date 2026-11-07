@@ -22,6 +22,8 @@
 #include <dcpp/system/File.h>
 #include <dcpp/net/SSLSocket.h>
 #include <dcpp/plugins/PluginManager.h>
+#include <dcpp/chat/PrivateChatManager.h>
+#include <dcpp/chat/ChatMessage.h>
 // TLS, SUP/INF, the manager and storage are real. Only the token registration
 // normally done by hub rendezvous is injected; no external hub is contacted.
 
@@ -102,6 +104,16 @@ protected:
 		std::unique_ptr<SSLSocket> remote;
 		std::atomic<unsigned> processed { 0 };
 		std::atomic<bool> failed { false };
+		std::atomic<unsigned> messages { 0 };
+		UserPtr messageFrom, messageTo, messageReplyTo;
+		std::string messageText, handshakeReply;
+		void on(UserConnectionListener::PrivateMessage, UserConnection*, const ChatMessage& message) noexcept override {
+			messageFrom = message.from;
+			messageTo = message.to;
+			messageReplyTo = message.replyTo;
+			messageText = message.message;
+			++messages;
+		}
 		std::function<void()> beforeData;
 		void on(UserConnectionListener::Data, UserConnection*, const uint8_t*, size_t) noexcept override {
 			if(beforeData) {
@@ -155,6 +167,7 @@ protected:
 		settings->set(SettingsManager::ENABLE_PRIVATE_SEND, true);
 		settings->set(SettingsManager::PFT_REQUIRE_VERIFICATION, GetParam().second);
 		settings->set(SettingsManager::ENABLE_CCPM, true);
+		settings->set(SettingsManager::POPUP_PMS, true);
 		settings->set(SettingsManager::ALLOW_UNTRUSTED_CLIENTS, true);
 		settings->set(SettingsManager::TLS_CERTIFICATE_FILE, (base / "local.crt").u8string());
 		settings->set(SettingsManager::TLS_PRIVATE_KEY_FILE, (base / "local.key").u8string());
@@ -170,6 +183,7 @@ protected:
 		ASSERT_EQ(1, SSL_CTX_use_certificate_file(context, (base / "peer.crt").string().c_str(), SSL_FILETYPE_PEM));
 		ASSERT_EQ(1, SSL_CTX_use_PrivateKey_file(context, (base / "peer.key").string().c_str(), SSL_FILETYPE_PEM));
 		DirectTransferManager::newInstance();
+		PrivateChatManager::newInstance();
 		manager = DirectTransferManager::getInstance();
 		uint8_t cid[CID::SIZE] {};
 		cid[0] = 123;
@@ -198,6 +212,7 @@ protected:
 		EXPECT_EQ(0u, privateHookLeaks.load());
 		if(manager)
 			DirectTransferManager::deleteInstance();
+		PrivateChatManager::deleteInstance();
 		PluginManager::deleteInstance();
 		ConnectionManager::deleteInstance();
 		ThrottleManager::deleteInstance();
@@ -217,7 +232,8 @@ protected:
 		EXPECT_FALSE(ec) << ec.message();
 	}
 
-	Endpoint& connect(bool privateData = false, const std::string& attempt = "") {
+	Endpoint& connect(bool privateData = false, const std::string& attempt = "",
+		const std::string& role = " PM1", bool accepted = true) {
 		auto e = std::make_unique<Endpoint>();
 		e->local = ConnectionManager::getInstance()->getConnection(false, true);
 		e->local->setState(UserConnection::STATE_SUPNICK);
@@ -248,7 +264,7 @@ protected:
 		if(support.compare(0, 5, "CSUP ") != 0)
 			throw std::runtime_error("missing SUP");
 
-		const auto token = privateData ? attempt : pft::randomHex(16);
+		const auto token = attempt.empty() ? pft::randomHex(16) : attempt;
 		{
 			auto cm = ConnectionManager::getInstance();
 			Lock lock(cm->cs);
@@ -257,10 +273,13 @@ protected:
 					peer.user->getCID(), privateData ? CONNECTION_TYPE_PRIVATE : CONNECTION_TYPE_PM, peer.hint });
 		}
 
-		write(connected, "CINF ID" + peer.user->getCID().toBase32() + " TO" + token + (privateData ? " PF1\n" : " PM1\n"));
+		write(connected, "CINF ID" + peer.user->getCID().toBase32() + " TO" + token + (privateData ? " PF1" : role) + "\n");
 		const auto identity = read(connected);
+		connected.handshakeReply = identity;
+		if(!accepted) return connected;
 		if(identity.compare(0, 5, "CINF ") != 0 || identity.find(privateData ? " PF1" : " PM1") == std::string::npos)
 			throw std::runtime_error("missing private INF role");
+		barrier(*connected.local);
 
 		return connected;
 	}
@@ -410,6 +429,104 @@ protected:
 };
 }
 
+TEST_P(PrivateTransferTest, ccpm_requires_explicit_unique_pm_role) {
+	for(const auto& role : { "", " PM0", " PM2", " PM1 PM1" }) {
+		auto& endpoint = connect(false, "", role, false);
+		EXPECT_EQ(0U, endpoint.handshakeReply.find("CSTA 2"));
+		waitDisconnected(endpoint);
+		EXPECT_EQ(nullptr, PrivateChatManager::getInstance()->getPMConn(peer.user));
+	}
+}
+
+TEST_P(PrivateTransferTest, ccpm_duplicate_replacement_survives_stale_release) {
+	auto& old = connect(false, "200");
+	trust(old);
+	auto id = manager->offer(peer, source);
+	waitState(id, DirectTransferManager::State::Offered);
+	read(old);
+	const auto oldToken = old.local->getToken();
+	auto& current = connect(false, "100");
+	waitDisconnected(old);
+	auto chat = PrivateChatManager::getInstance();
+	chat->releasePMConn(peer.user, oldToken, true);
+	EXPECT_EQ(current.local, chat->getPMConn(peer.user, current.local->getToken()));
+	EXPECT_FALSE(current.failed.load());
+	EXPECT_TRUE(chat->returnPMConn(peer.user, current.local->getToken(), current.local));
+	EXPECT_TRUE(chat->outboxDirectMessage(peer, "", false, true));
+	EXPECT_EQ(DirectTransferManager::State::Offered, state(id).state);
+	manager->cancel(id);
+	EXPECT_EQ(pft::Op::Cancel, pft::Record::decode(read(current)).op);
+}
+
+TEST_P(PrivateTransferTest, ccpm_returning_a_superseded_owned_channel_does_not_close_its_replacement) {
+	auto& old = connect(false, "200");
+	auto chat = PrivateChatManager::getInstance();
+	ASSERT_EQ(old.local, chat->getPMConn(peer.user));
+	struct ReturnOld : ConnectionManagerListener {
+		UserConnection* old;
+		UserPtr user;
+		string token;
+		bool returned = true;
+		void on(ConnectionManagerListener::Connected, ConnectionQueueItem* cqi, UserConnection*) noexcept override {
+			if(cqi->getType() == CONNECTION_TYPE_PM)
+				returned = PrivateChatManager::getInstance()->returnPMConn(user, token, old);
+		}
+	} callback;
+	callback.old = old.local;
+	callback.user = peer.user;
+	callback.token = old.local->getToken();
+	auto cm = ConnectionManager::getInstance();
+	cm->addListener(&callback);
+	auto& current = connect(false, "100");
+	cm->removeListener(&callback);
+	EXPECT_FALSE(callback.returned);
+	waitDisconnected(old);
+	EXPECT_EQ(current.local, chat->getPMConn(peer.user));
+	EXPECT_FALSE(current.failed.load());
+}
+
+TEST_P(PrivateTransferTest, ccpm_messages_and_local_echo_survive_missing_hub_identities) {
+	auto& control = connect();
+	write(control, "CMSG hello\n");
+	const auto deadline = pft::now() + 10000;
+	while(control.messages.load() == 0 && pft::now() < deadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	ASSERT_EQ(1U, control.messages.load());
+	EXPECT_EQ(peer.user, control.messageFrom);
+	EXPECT_EQ(ClientManager::getInstance()->getMe(), control.messageTo);
+	EXPECT_EQ(peer.user, control.messageReplyTo);
+	EXPECT_NE(std::string::npos, control.messageText.find("hello"));
+	EXPECT_TRUE(control.local->pm("reply", false));
+	EXPECT_EQ("CMSG reply", read(control));
+	EXPECT_EQ(2U, control.messages.load());
+	EXPECT_EQ(ClientManager::getInstance()->getMe(), control.messageFrom);
+	EXPECT_EQ(peer.user, control.messageTo);
+	EXPECT_EQ(ClientManager::getInstance()->getMe(), control.messageReplyTo);
+	EXPECT_FALSE(control.failed.load());
+}
+
+TEST_P(PrivateTransferTest, ccpm_timeout_applies_to_handshakes_but_not_established_chat) {
+	auto& established = connect();
+	established.local->setLastActivity(0);
+	auto cm = ConnectionManager::getInstance();
+	cm->on(TimerManagerListener::Minute(), GET_TICK() + 181000);
+	barrier(*established.local);
+	EXPECT_FALSE(established.failed.load());
+	// Exercise the stalled PM handshake state with a real TLS socket.
+	established.local->setState(UserConnection::STATE_INF);
+	cm->on(TimerManagerListener::Minute(), GET_TICK() + 181000);
+	waitDisconnected(established);
+}
+
+TEST_P(PrivateTransferTest, ccpm_refuses_public_file_commands_and_protocol_switches) {
+	for(const auto& line : { "CGET file files.xml.bz2 0 -1\n", "CGFI file files.xml.bz2\n",
+		"CSND file files.xml.bz2 0 10\n", "$MyNick intruder\n" }) {
+		auto& endpoint = connect();
+		write(endpoint, line);
+		waitDisconnected(endpoint);
+	}
+}
+
 TEST_P(PrivateTransferTest, sender_requires_approval_and_transfers_over_dedicated_tls) {
 	auto& control = connect();
 	if(SETTING(PFT_REQUIRE_VERIFICATION)) {
@@ -428,6 +545,7 @@ TEST_P(PrivateTransferTest, sender_requires_approval_and_transfers_over_dedicate
 	EXPECT_NO_THROW(manager->checkSend(peer));
 	const auto id = manager->offer(peer, source);
 	const auto preparing = manager->snapshot(peer);
+	EXPECT_EQ(0u, manager->clearFinished(peer));
 	ASSERT_EQ(1u, preparing.size());
 	EXPECT_EQ(id, preparing.front().id);
 	EXPECT_EQ(Util::getFileName(source), preparing.front().name);
@@ -452,8 +570,12 @@ TEST_P(PrivateTransferTest, sender_requires_approval_and_transfers_over_dedicate
 	write(control, receipt.encode());
 	EXPECT_EQ(pft::Op::Ack, pft::Record::decode(read(control)).op);
 	waitState(id, DirectTransferManager::State::Completed);
+	EXPECT_EQ(1u, manager->clearFinished(peer));
+	EXPECT_TRUE(manager->snapshot(peer).empty());
+	// Dismissing the row must not lose the ACK for a retried receipt.
 	write(control, receipt.encode());
 	EXPECT_EQ(pft::Op::Ack, pft::Record::decode(read(control)).op);
+	EXPECT_TRUE(manager->snapshot().empty());
 	EXPECT_EQ("private transfer integration bytes", File(source, File::READ, File::OPEN).read());
 }
 
@@ -500,6 +622,37 @@ TEST_P(PrivateTransferTest, receiver_requires_consent_and_publishes_only_verifie
 	EXPECT_EQ(target, state(m.id).savedPath);
 	EXPECT_EQ(body, File(state(m.id).savedPath, File::READ, File::OPEN).read());
 	EXPECT_TRUE(pft::isPrivatePath(state(m.id).savedPath));
+	EXPECT_EQ(1u, manager->clearFinished(peer));
+	EXPECT_TRUE(manager->snapshot(peer).empty());
+	EXPECT_EQ(body, File(target, File::READ, File::OPEN).read());
+}
+
+TEST_P(PrivateTransferTest, clear_finished_is_contact_scoped_and_keeps_pending_offers) {
+	auto& control = connect();
+	trust(control);
+	const auto declined = incoming("declined file");
+	const auto cancelled = incoming("cancelled file");
+	const auto pending = incoming("pending file");
+	for(const auto& offer : { declined, cancelled, pending }) {
+		write(control, offer.record().encode());
+		waitState(offer.id, DirectTransferManager::State::Offered);
+	}
+	manager->decline(declined.id);
+	EXPECT_EQ(pft::Op::Decline, pft::Record::decode(read(control)).op);
+	manager->cancel(cancelled.id);
+	EXPECT_EQ(pft::Op::Cancel, pft::Record::decode(read(control)).op);
+	const HintedUser unrelated(UserPtr(new User(CID::generate())), peer.hint);
+	EXPECT_EQ(0u, manager->clearFinished(unrelated));
+	EXPECT_THROW(manager->clearFinished(HintedUser()), Exception);
+	ASSERT_EQ(3u, manager->snapshot(peer).size());
+	EXPECT_EQ(2u, manager->clearFinished(peer));
+	const auto remaining = manager->snapshot(peer);
+	ASSERT_EQ(1u, remaining.size());
+	EXPECT_EQ(pending.id, remaining.front().id);
+	EXPECT_EQ(DirectTransferManager::State::Offered, remaining.front().state);
+	EXPECT_EQ(0u, manager->clearFinished(peer));
+	tick();
+	ASSERT_EQ(1u, manager->snapshot(peer).size());
 }
 
 TEST_P(PrivateTransferTest, disable_and_contact_revocation_cancel_pending_offers) {
@@ -654,6 +807,7 @@ TEST_P(PrivateTransferTest, resumed_receiver_uses_new_attempt_and_verified_prefi
 	EXPECT_DOUBLE_EQ(50.0, state(m.id).percent);
 	EXPECT_GT(state(m.id).bytesPerSecond, 0.0);
 	manager->pause(m.id);
+	EXPECT_EQ(0u, manager->clearFinished(peer));
 	EXPECT_DOUBLE_EQ(50.0, state(m.id).percent);
 	EXPECT_DOUBLE_EQ(0.0, state(m.id).bytesPerSecond);
 	EXPECT_EQ(pft::Op::Pause, pft::Record::decode(read(control)).op);

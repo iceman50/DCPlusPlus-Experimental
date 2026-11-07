@@ -41,6 +41,11 @@ struct ChatMessage {
 	ChatMessage(const string& text, OnlineUser* from,
 		const OnlineUser* to = nullptr, const OnlineUser* replyTo = nullptr,
 		bool thirdPerson = false, time_t messageTimestamp = 0, bool richText = false);
+	// A direct channel may outlive its hub identities. Preserve the known users
+	// and format with a cached/fallback identity without inventing an OnlineUser.
+	ChatMessage(const string& text, const Identity& sender, const UserPtr& to, const UserPtr& replyTo,
+		bool thirdPerson, time_t messageTimestamp, bool richText, const string& mentionNick,
+		OnlineUser* onlineSender = nullptr);
 
 	/** Plain text message. */
 	string message;

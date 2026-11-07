@@ -311,22 +311,19 @@ void PrivateFrame::handlePMI(const HintedUser& user, const string& connectionTok
 		revision = frame->connRevision.load();
 	}
 
-	PMInfo type;
+	if(!frame->isCurrentConnection(connectionToken, revision)) return;
 	string value;
 	if(cmd.hasFlag("SN", 0)) {
-		type = PM_INFO_SEEN;
-	} else if(cmd.getParam("TP", 0, value) && (value == "0" || value == "1")) {
-		type = value == "1" ? PM_INFO_TYPING_ON : PM_INFO_TYPING_OFF;
-	} else if(cmd.getParam("AC", 0, value) && value == "0") {
-		type = PM_INFO_NO_AUTOCONNECT;
-	} else if(cmd.hasFlag("QU", 0)) {
-		type = PM_INFO_QUIT;
-	} else {
-		return;
+		frame->updatePMInfo(PM_INFO_SEEN);
 	}
-
-	if(frame->isCurrentConnection(connectionToken, revision)) {
-		frame->updatePMInfo(type);
+	if(cmd.getParam("TP", 0, value) && (value == "0" || value == "1")) {
+		frame->updatePMInfo(value == "1" ? PM_INFO_TYPING_ON : PM_INFO_TYPING_OFF);
+	}
+	if(cmd.getParam("AC", 0, value) && value == "0") {
+		frame->updatePMInfo(PM_INFO_NO_AUTOCONNECT);
+	}
+	if(cmd.hasFlag("QU", 0)) {
+		frame->updatePMInfo(PM_INFO_QUIT);
 	}
 }
 
@@ -423,6 +420,11 @@ lastMessageTime(time(NULL))
 	initStatus();
 
 	status->onDblClicked(STATUS_STATUS, [this] { openLog(); });
+	status->onClicked(STATUS_PRIVATE_SEND, [this] { handlePrivateSend(); });
+	status->setToolTip(STATUS_PRIVATE_SEND, T_("Private Send - click to send or review files"));
+	// Capability registration and contact verification can change independently
+	// of the PM frame's connection notifications.
+	setTimer([this] { updatePrivateSendAvailability(); return true; }, 1000, TIMER_PRIVATE_SEND);
 
 	{
 		auto f = [this] { handleChannelMenu(); };
@@ -510,6 +512,7 @@ void PrivateFrame::addStatus(const tstring& text) {
 }
 
 bool PrivateFrame::preClosing() {
+	setTimer(nullptr, 0, TIMER_PRIVATE_SEND);
 	updateTypingState(false);
 	cancelAutoCCPMReconnect();
 	{
@@ -681,11 +684,43 @@ void PrivateFrame::updateRichTextAvailability() {
 		available = ClientManager::getInstance()->supportsRichText(replyTo.getUser());
 	}
 	setChatAvailability(available, temporarySharing, routeHubUrl);
+	updatePrivateSendAvailability();
+}
+
+void PrivateFrame::updatePrivateSendAvailability() {
+	bool ready = false;
+	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available() && ccReady()) {
+		try {
+			DirectTransferManager::getInstance()->checkSend(replyTo.getUser());
+			ready = true;
+		} catch(const Exception&) {
+		}
+	}
+	if(ready != privateSendReady) {
+		privateSendReady = ready;
+		status->setIcon(STATUS_PRIVATE_SEND, ready ? IconManager::statusIcon(IDI_FILE) : nullptr, true);
+	}
+}
+
+void PrivateFrame::handlePrivateSend() {
+	// Recheck on click in case the channel or contact approval just changed.
+	updatePrivateSendAvailability();
+	if(privateSendReady && UiServices::mainWindow)
+		UiServices::mainWindow->openPrivateSend(replyTo.getUser());
 }
 
 void PrivateFrame::startCC(bool silent) {
+	if(!SETTING(ENABLE_CCPM)) {
+		cancelAutoCCPMReconnect();
+		if(!silent) addStatus(T_("Direct encrypted channels are disabled in settings"));
+		return;
+	}
 	if(!silent) outboxRequireDirect = true;
 	if(!silent) {
+		{
+			Lock l(mutex);
+			acceptCCPMConnections = true;
+		}
 		// An explicit request closes the circuit and starts a fresh retry budget.
 		allowAutoCCPM = true;
 		autoCCPMAttempts = 0;
@@ -748,16 +783,18 @@ void PrivateFrame::startCC(bool silent) {
 
 void PrivateFrame::closeCC(bool silent) {
 	if(!silent) outboxRequireDirect = false;
+	allowAutoCCPM = false;
+	nextAutoCCPMAttempt = 0;
+	cancelAutoCCPMReconnect();
 	bool found = false;
 	{
 		Lock lifetimeLock(connLifetimeMutex);
 		UserConnection* activeConn;
 		{
 			Lock l(mutex);
+			acceptCCPMConnections = false;
 			activeConn = conn.load();
-			if(activeConn && activeConn->getState() == UserConnection::STATE_CMD) {
-				allowAutoCCPM = false;
-			} else {
+			if(activeConn && activeConn->getState() != UserConnection::STATE_CMD) {
 				activeConn = nullptr;
 			}
 		}
@@ -786,7 +823,7 @@ void PrivateFrame::cancelAutoCCPMReconnect() {
 }
 
 void PrivateFrame::scheduleAutoCCPMReconnect() {
-	if(!online || !allowAutoCCPM || !SETTING(ALWAYS_CCPM) || ccReady()) {
+	if(!online || !allowAutoCCPM || !SETTING(ENABLE_CCPM) || !SETTING(ALWAYS_CCPM) || ccReady()) {
 		cancelAutoCCPMReconnect();
 		return;
 	}
@@ -825,6 +862,7 @@ void PrivateFrame::changeHub(const string& hubHint) {
 		{
 			Lock l(mutex);
 			replyTo.getUser().hint = hubHint;
+			acceptCCPMConnections = true;
 		}
 	}
 	updateOnlineStatus(true);
@@ -1222,13 +1260,12 @@ void PrivateFrame::handleChannelMenu() {
 	menu->setTitle(T_("Communication channel"));
 
 	auto hubs = ClientManager::getInstance()->getHubs(replyTo.getUser());
+	const auto cc = ccReady();
 
 	if(hubs.empty()) {
 		menu->appendItem(T_("(User offline)"), nullptr, nullptr, false);
 
 	} else {
-		auto cc = ccReady();
-
 		for(auto& hub: hubs) {
 			auto url = hub.first;
 			auto current = !cc && hubHintsEqual(url, replyTo.getUser().hint);
@@ -1239,14 +1276,17 @@ void PrivateFrame::handleChannelMenu() {
 			}
 		}
 
-		if(SETTING(ENABLE_CCPM)) {
-			menu->appendSeparator();
-
-			if(cc) {
-				menu->appendItem(T_("Disconnect the direct encrypted channel"), [this] { closeCC(); });
-			} else {
-				menu->appendItem(T_("Start a direct encrypted channel"), [this] { startCC(); }, IconManager::menuIcon(IDI_SECURE));
-			}
+	}
+	// A direct channel remains usable (and must remain disconnectable) when
+	// its hub is offline, or when CCPM has subsequently been disabled.
+	if(cc || (SETTING(ENABLE_CCPM) && !hubs.empty())) {
+		menu->appendSeparator();
+		if(cc) {
+			menu->appendItem(T_("Disconnect the direct encrypted channel"), [this] { closeCC(); });
+		} else {
+			menu->appendItem(T_("Start a direct encrypted channel"), [this] { startCC(); }, IconManager::menuIcon(IDI_SECURE));
+			if(allowAutoCCPM && nextAutoCCPMAttempt > GET_TICK())
+				menu->appendItem(T_("Cancel direct channel connection"), [this] { closeCC(); });
 		}
 	}
 
@@ -1390,7 +1430,8 @@ void PrivateFrame::on(ConnectionManagerListener::Removed, ConnectionQueueItem* c
 		return;
 	}
 
-	callAsync([this, revision, establishedTick] {
+	const auto error = Text::toT(cqi->getLastError());
+	callAsync([this, revision, establishedTick, error] {
 		if(isDisconnectedConnection(revision)) {
 			const auto now = GET_TICK();
 			if(establishedTick != 0 && now - establishedTick >= getCCPMStableConnectionTime()) {
@@ -1399,7 +1440,8 @@ void PrivateFrame::on(ConnectionManagerListener::Removed, ConnectionQueueItem* c
 			nextAutoCCPMAttempt = now + getCCPMReconnectDelay(autoCCPMAttempts);
 			updateTypingState(false);
 			remoteTyping = false;
-			addStatus(T_("The direct encrypted channel has been disconnected"));
+			addStatus(error.empty() ? T_("The direct encrypted channel has been disconnected") :
+				str(TF_("The direct encrypted channel has been disconnected: %1%") % error));
 			updateOnlineStatus(true);
 		}
 	});

@@ -13,7 +13,10 @@
 #include <win32/settings/appearance/AppearancePage.h>
 #include <win32/settings/advanced/ExperimentalPage.h>
 #include <win32/frames/transfers/private/PrivateSendDlg.h>
+#define private public
+#include <dcpp/connection/UserConnection.h>
 #include <win32/frames/chat/PrivateFrame.h>
+#undef private
 #include <win32/dialogs/MessageOutboxDlg.h>
 #include <dcpp/chat/PrivateChatManager.h>
 #include <dcpp/chat/MessageOutboxManager.h>
@@ -200,6 +203,57 @@ void verifyPrivateSendPM(dwt::Window* window, dwt::Application& app) {
 	}, reinterpret_cast<LPARAM>(&found));
 	check(found, "Private offer text was lost, interpreted as markup, or hidden by STATUS_IN_CHAT");
 	const auto frame = static_cast<PrivateFrame*>(tabs->getChildren().front());
+	{
+		auto settings = SettingsManager::getInstance();
+		const auto enabled = SETTING(ENABLE_CCPM), automatic = SETTING(ALWAYS_CCPM);
+		settings->set(SettingsManager::ENABLE_CCPM, true);
+		settings->set(SettingsManager::ALWAYS_CCPM, true);
+		frame->online = true;
+		frame->nextAutoCCPMAttempt = GET_TICK() + 60000;
+		frame->scheduleAutoCCPMReconnect();
+		check(frame->autoCCPMReconnectScheduled, "CCPM retry timer was not scheduled");
+		frame->closeCC();
+		check(!frame->autoCCPMReconnectScheduled && !frame->allowAutoCCPM && !frame->acceptCCPMConnections,
+			"Disconnect did not cancel pending CCPM attempts");
+		frame->startCC(true);
+		check(!frame->autoCCPMReconnectScheduled, "Cancelled CCPM attempt restarted itself");
+		settings->set(SettingsManager::ENABLE_CCPM, false);
+		frame->startCC();
+		check(!frame->acceptCCPMConnections, "Disabled CCPM accepted an explicit connection attempt");
+		settings->set(SettingsManager::ENABLE_CCPM, true);
+		frame->startCC();
+		check(frame->acceptCCPMConnections, "Explicit retry did not reopen CCPM admission");
+		frame->online = false;
+		UserConnection channel(false);
+		frame->conn.store(&channel);
+		frame->connToken = "test-ccpm";
+		PrivateFrame::handlePMI(first, "test-ccpm", AdcCommand("CPMI SN1 TP1 AC0 QU1"));
+		check(!frame->allowAutoCCPM && !frame->remoteTyping, "Combined PMI lost auto-connect or quit flags");
+		ConnectionQueueItem removed(first, CONNECTION_TYPE_PM, "test-ccpm");
+		removed.setLastError("TLS test reason");
+		frame->on(ConnectionManagerListener::Removed(), &removed);
+		for(unsigned i = 0; i < 20; ++i) app.dispatch();
+		check(frame->lastStatus.find(L"TLS test reason") != tstring::npos, "CCPM disconnect reason was lost");
+		frame->outboxRequireDirect = false;
+		frame->allowAutoCCPM = true;
+		settings->set(SettingsManager::ENABLE_CCPM, enabled);
+		settings->set(SettingsManager::ALWAYS_CCPM, automatic);
+	}
+	HWND pmStatus = nullptr;
+	EnumChildWindows(frame->handle(), [](HWND child, LPARAM value) -> BOOL {
+		if(dwt::hwnd_cast<dwt::StatusBar*>(child)) {
+			*reinterpret_cast<HWND*>(value) = child;
+			return FALSE;
+		}
+		return TRUE;
+	}, reinterpret_cast<LPARAM>(&pmStatus));
+	check(pmStatus != nullptr, "PM status bar is missing");
+	check(SendMessage(pmStatus, SB_GETPARTS, 0, 0) == PrivateFrame::STATUS_LAST, "PM private-send status part is missing");
+	check(SendMessage(pmStatus, SB_GETICON, PrivateFrame::STATUS_PRIVATE_SEND, 0) == 0,
+		"Unavailable private send exposes an icon");
+	RECT privatePart {};
+	SendMessage(pmStatus, SB_GETRECT, PrivateFrame::STATUS_PRIVATE_SEND, reinterpret_cast<LPARAM>(&privatePart));
+	check(privatePart.right <= privatePart.left, "Unavailable private send reserves status-bar space");
 	const auto params = frame->getWindowParams();
 	check(File::getSize(params.at("LogPath").content) == -1, "Private offer leaked into the ordinary PM log");
 	check(PrivateFrame::privateSendNotice(tabs, first, L"Second private file"), "Existing PM rejected another offer at the window limit");
@@ -455,6 +509,9 @@ int dwtMain(dwt::Application& app) {
 				return TRUE;
 			}, reinterpret_cast<LPARAM>(&visibleReadiness));
 			check(visibleReadiness, "Empty Private Send queue does not explain why sending is unavailable");
+			const auto clear = findCaption(privateDialog.handle(), L"C&lear list");
+			check(clear && IsWindowVisible(clear), "Private Send clear-list button is missing");
+			check(!IsWindowEnabled(clear), "Empty private-send list enables clearing");
 			bool testingNotice = false;
 			EnumChildWindows(privateDialog.handle(), [](HWND child, LPARAM value) -> BOOL {
 				wchar_t text[512] {};

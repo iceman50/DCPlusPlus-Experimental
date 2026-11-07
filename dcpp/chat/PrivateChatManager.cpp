@@ -65,7 +65,8 @@ bool PrivateChatManager::outboxDirectMessage(const HintedUser& user, const strin
 	for(const auto& known: knownCCPMs) {
 		auto uc = known.first;
 		if(known.second.user == user.user && hubHintsEqual(user.hint, uc->getHubUrl()) &&
-			uc->getState() == UserConnection::STATE_CMD && uc->isSecure())
+			uc->getState() == UserConnection::STATE_CMD && uc->isSecure() &&
+			ConnectionManager::getInstance()->isPMConnectionActive(user.user, known.second.token))
 		{
 			return probeOnly || uc->pm(text, thirdPerson);
 		}
@@ -121,7 +122,8 @@ bool PrivateChatManager::returnPMConn(const UserPtr& user, const string& token, 
 		return false;
 	}
 
-	if(shuttingDown || uc->getState() != UserConnection::STATE_CMD || !uc->isSecure()) {
+	if(shuttingDown || uc->getState() != UserConnection::STATE_CMD || !uc->isSecure() ||
+		!ConnectionManager::getInstance()->isPMConnectionActive(user, token)) {
 		uc->disconnect(true);
 		return false;
 	}

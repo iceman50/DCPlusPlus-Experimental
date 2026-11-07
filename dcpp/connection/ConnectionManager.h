@@ -54,8 +54,10 @@ public:
 	ConnectionQueueItem(const HintedUser& user, ConnectionType type, const string& token = Util::emptyString);
 
 	GETSET(string, token, Token);
-	// Peer-supplied ADC token, retained only for duplicate upload detection.
+	// Peer-supplied ADC token, retained for duplicate connection detection.
 	GETSET(string, protocolToken, ProtocolToken);
+	GETSET(string, pmRank, PMRank);
+	GETSET(string, lastError, LastError);
 	GETSET(uint64_t, lastAttempt, LastAttempt);
 	GETSET(int, errors, Errors); // Number of connection errors, or -1 after a protocol error
 	GETSET(State, state, State);
@@ -177,6 +179,8 @@ private:
 	friend class Server;
 
 	mutable CriticalSection cs;
+	// Serialize CCPM admission and its notifications without holding cs across listeners.
+	CriticalSection pmAdmissionCS;
 
 	/** All ConnectionQueueItems */
 	vector<ConnectionQueueItem> cqis[CONNECTION_TYPE_LAST],

@@ -132,6 +132,14 @@ public:
 		return *onlineUsers.back();
 	}
 
+	UserConnection* pmPeer(const UserPtr& user, const string& token, bool incoming = false) {
+		auto uc = peer(user, token, false, false);
+		uc->unsetFlag(UserConnection::FLAG_DOWNLOAD);
+		uc->setFlag(UserConnection::FLAG_PM);
+		if(incoming) uc->setFlag(UserConnection::FLAG_INCOMING);
+		return uc;
+	}
+
 	void queueFile(const UserPtr& user, const string& hub) {
 		// Queue while offline so the test can control connection creation and time.
 		QueueManager::getInstance()->add(configPath + "file-" + user->getCID().toBase32(),
@@ -310,6 +318,72 @@ TEST_F(ConnectionManagerTest, nmdc_transfers_to_multiple_users_have_independent_
 	for(size_t i = 1; i < manager->downloads.size(); ++i) {
 		EXPECT_EQ(ConnectionQueueItem::ACTIVE, manager->downloads[i].getState());
 	}
+}
+
+TEST_F(ConnectionManagerTest, ccpm_crossing_connections_converge_regardless_of_arrival_order) {
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_CCPM, true);
+	auto alice = user(1), bob = user(2);
+	// Opposite endpoints observe opposite handshake completion orders.
+	auto aFirst = pmPeer(alice, "200", true);
+	auto bFirst = pmPeer(bob, "100", true);
+	manager->addNewConnection(aFirst, CONNECTION_TYPE_PM);
+	manager->addNewConnection(bFirst, CONNECTION_TYPE_PM);
+	auto aSecond = pmPeer(alice, "100");
+	auto bSecond = pmPeer(bob, "200");
+	manager->addNewConnection(aSecond, CONNECTION_TYPE_PM);
+	manager->addNewConnection(bSecond, CONNECTION_TYPE_PM);
+	EXPECT_TRUE(aSecond->isSet(UserConnection::FLAG_ASSOCIATED));
+	EXPECT_FALSE(bSecond->isSet(UserConnection::FLAG_ASSOCIATED));
+	EXPECT_EQ(3, connected);
+	// A superseded channel's late failure must not remove the winner.
+	aFirst->fire(UserConnectionListener::Failed(), aFirst, string("Duplicate channel closed"));
+	EXPECT_TRUE(manager->isPMConnectionActive(alice, aSecond->getToken()));
+	EXPECT_TRUE(manager->isPMConnectionActive(bob, bFirst->getToken()));
+}
+
+TEST_F(ConnectionManagerTest, ccpm_duplicate_token_is_not_admitted_twice) {
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_CCPM, true);
+	auto alice = user(1);
+	auto first = pmPeer(alice, "100");
+	auto duplicate = pmPeer(alice, "100");
+	manager->addNewConnection(first, CONNECTION_TYPE_PM);
+	manager->addNewConnection(duplicate, CONNECTION_TYPE_PM);
+	EXPECT_EQ(1, connected);
+	EXPECT_FALSE(duplicate->isSet(UserConnection::FLAG_ASSOCIATED));
+}
+
+TEST_F(ConnectionManagerTest, ccpm_equal_tokens_use_the_tcp_initiator_as_tiebreaker) {
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_CCPM, true);
+	auto alice = user(1);
+	const bool preferIncoming = alice->getCID().toBase32() < ClientManager::getInstance()->getMyCID().toBase32();
+	auto first = pmPeer(alice, "100", !preferIncoming);
+	auto preferred = pmPeer(alice, "100", preferIncoming);
+	manager->addNewConnection(first, CONNECTION_TYPE_PM);
+	manager->addNewConnection(preferred, CONNECTION_TYPE_PM);
+	EXPECT_EQ(2, connected);
+	EXPECT_TRUE(manager->isPMConnectionActive(alice, preferred->getToken()));
+	EXPECT_FALSE(manager->isPMConnectionActive(alice, first->getToken()));
+}
+
+TEST_F(ConnectionManagerTest, ccpm_other_hub_cannot_supersede_the_selected_route) {
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_CCPM, true);
+	auto alice = user(1);
+	auto first = pmPeer(alice, "200");
+	auto otherHub = pmPeer(alice, "100");
+	otherHub->setHubUrl("adcs://other.example");
+	manager->addNewConnection(first, CONNECTION_TYPE_PM);
+	manager->addNewConnection(otherHub, CONNECTION_TYPE_PM);
+	EXPECT_EQ(1, connected);
+	EXPECT_TRUE(manager->isPMConnectionActive(alice, first->getToken()));
+	EXPECT_FALSE(otherHub->isSet(UserConnection::FLAG_ASSOCIATED));
+}
+
+TEST_F(ConnectionManagerTest, adc_handshake_rejects_an_unexpected_peer_identity) {
+	auto uc = pmPeer(user(1), "100");
+	uc->setState(UserConnection::STATE_INF);
+	manager->on(AdcCommand::INF(), uc,
+		AdcCommand(AdcCommand::CMD_INF).addParam("ID", user(2)->getCID().toBase32()).addParam("PM", "1"));
+	EXPECT_EQ(0U, manager->userConnections.size());
 }
 
 TEST_F(ConnectionManagerTest, adc_upload_tokens_are_scoped_to_the_peer) {

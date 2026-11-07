@@ -587,7 +587,9 @@ void ConnectionManager::on(TimerManagerListener::Minute, uint64_t aTick) noexcep
 	{
 		Lock l(cs);
 		for(auto& conn: userConnections) {
-			if(!conn->isSet(UserConnection::FLAG_PM) && (conn->getLastActivity() + 180*1000) < aTick) {
+			const bool establishedPM = conn->isSet(UserConnection::FLAG_PM) &&
+				conn->isSet(UserConnection::FLAG_ASSOCIATED) && conn->getState() == UserConnection::STATE_CMD;
+			if(!establishedPM && (conn->getLastActivity() + 180*1000) < aTick) {
 				conn->disconnect(true);
 			}
 		}
@@ -1064,6 +1066,8 @@ void ConnectionManager::addDownloadConnection(UserConnection* uc) {
 }
 
 void ConnectionManager::addNewConnection(UserConnection* uc, ConnectionType type) {
+	Lock admissionLock(pmAdmissionCS, std::defer_lock);
+	if(type == CONNECTION_TYPE_PM) admissionLock.lock();
 	bool addConn = false;
 	unique_ptr<ConnectionQueueItem> added;
 	unique_ptr<ConnectionQueueItem> connected;
@@ -1071,6 +1075,12 @@ void ConnectionManager::addNewConnection(UserConnection* uc, ConnectionType type
 		Lock l(cs);
 
 		auto& container = cqis[type];
+		// First-arrival wins can select opposite sockets at the two endpoints,
+		// causing both to close. Rank by shared wire identity instead. The TCP
+		// initiator's CID breaks ties when both initiators chose the same token.
+		const auto pmRank = type == CONNECTION_TYPE_PM ? uc->getToken() + ":" +
+			(uc->isSet(UserConnection::FLAG_INCOMING) ? uc->getUser()->getCID() :
+			 ClientManager::getInstance()->getMyCID()).toBase32() : Util::emptyString;
 		const bool multiple = type == CONNECTION_TYPE_UPLOAD && uc->isMCN();
 		auto i = multiple ? find_if(container.begin(), container.end(), [&](const ConnectionQueueItem& cqi) {
 			return cqi.getUser() == uc->getUser() && cqi.getProtocolToken() == uc->getToken();
@@ -1078,7 +1088,18 @@ void ConnectionManager::addNewConnection(UserConnection* uc, ConnectionType type
 		const auto userConnections = multiple ? std::count_if(container.begin(), container.end(), [&](const ConnectionQueueItem& cqi) {
 			return cqi.getUser() == uc->getUser();
 		}) : 0;
-		if(i == container.end() && (!multiple || userConnections < std::max(1, SETTING(MAX_MCN_UPLOADS)) + 1)) {
+		const bool preferredPM = type == CONNECTION_TYPE_PM && std::none_of(container.begin(), container.end(),
+			[&](const ConnectionQueueItem& cqi) {
+				return cqi.getUser() == uc->getUser() &&
+					(!hubHintsEqual(cqi.getUser().hint, uc->getHubUrl()) || cqi.getPMRank() <= pmRank);
+			});
+		if((i == container.end() || preferredPM) && (!multiple || userConnections < std::max(1, SETTING(MAX_MCN_UPLOADS)) + 1)) {
+			if(type == CONNECTION_TYPE_PM) {
+				// Retain superseded queue entries until their own Failed event,
+				// but stop exposing them to handoff/outbox callers immediately.
+				for(auto& old : container)
+					if(old.getUser() == uc->getUser()) old.setState(ConnectionQueueItem::WAITING);
+			}
 			const bool syncQueueToken = type == CONNECTION_TYPE_UPLOAD || type == CONNECTION_TYPE_PM || type == CONNECTION_TYPE_PRIVATE;
 			const auto queueToken = (type == CONNECTION_TYPE_PM || type == CONNECTION_TYPE_PRIVATE)
 				? "CCPM-" + std::to_string(++nextPMConnectionId)
@@ -1086,6 +1107,7 @@ void ConnectionManager::addNewConnection(UserConnection* uc, ConnectionType type
 			auto& cqi = getCQI(uc->getHintedUser(), type,
 				queueToken);
 			cqi.setProtocolToken(uc->getToken());
+			cqi.setPMRank(pmRank);
 			uc->setProtocolToken(uc->getToken());
 			added.reset(new ConnectionQueueItem(cqi));
 			if(syncQueueToken) {
@@ -1144,10 +1166,12 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 	// user from queue by waiting long enough for aSource->getUser() to function.
 	if(SETTING(REQUIRE_TLS) && !aSource->isSet(UserConnection::FLAG_NMDC) && !aSource->isSecure()) {
 		auto user = aSource->getUser();
+		const bool download = user && !aSource->isSet(UserConnection::FLAG_PM) &&
+			!aSource->isSet(UserConnection::FLAG_PRIVATE_TRANSFER) && checkDownload(aSource);
 		putConnection(aSource);
 		// Incoming connections haven't supplied their CID yet. Only outgoing
 		// download connections have a source that should be removed here.
-		if(user) {
+		if(download) {
 			QueueManager::getInstance()->removeSource(user, QueueItem::Source::FLAG_UNENCRYPTED);
 		}
 		return;
@@ -1174,6 +1198,12 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 			putConnection(aSource);
 			return;
 		}
+	}
+	if(cid != aSource->getUser()->getCID().toBase32()) {
+		aSource->send(AdcCommand(AdcCommand::SEV_FATAL, AdcCommand::ERROR_INF_FIELD,
+			"INF ID: unexpected peer").addParam("FB", "ID"));
+		putConnection(aSource);
+		return;
 	}
 
 	if(aSource->isMCN()) {
@@ -1203,7 +1233,19 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 		type = tokCheck.second;
 	}
 
-	const bool pmRequested = type == CONNECTION_TYPE_PM || aSource->isSet(UserConnection::FLAG_PM) || cmd.hasFlag("PM", 0);
+	string pmRole;
+	const bool hasPMRole = cmd.getParam("PM", 0, pmRole);
+	const bool pmRequested = type == CONNECTION_TYPE_PM || aSource->isSet(UserConnection::FLAG_PM) || hasPMRole;
+	if(pmRequested) {
+		const auto roleCount = std::count_if(cmd.getParameters().begin(), cmd.getParameters().end(),
+			[](const string& p) { return p.compare(0, 2, "PM") == 0; });
+		if(!hasPMRole || pmRole != "1" || roleCount != 1 || !SETTING(ENABLE_CCPM)) {
+			aSource->send(AdcCommand(AdcCommand::SEV_FATAL, AdcCommand::ERROR_INF_FIELD,
+				"INF PM: CCPM requires PM1 and local support").addParam("FB", "PM"));
+			putConnection(aSource);
+			return;
+		}
+	}
 	string privateRole;
 	const bool hasPrivateRole = cmd.getParam("PF", 0, privateRole);
 	const bool privateRequested =
@@ -1211,7 +1253,7 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 	if(privateRequested) {
 		const auto roleCount = std::count_if(
 			cmd.getParameters().begin(), cmd.getParameters().end(), [](const string& p) { return p.compare(0, 2, "PF") == 0; });
-		if(pmRequested || (hasPrivateRole && (privateRole != "1" || roleCount != 1)) || cid != aSource->getUser()->getCID().toBase32() ||
+		if(pmRequested || (hasPrivateRole && (privateRole != "1" || roleCount != 1)) ||
 			!SETTING(ENABLE_PRIVATE_SEND) || !aSource->isPrivateTransferSecure() || !aSource->isSet(UserConnection::FLAG_SUPPORTS_PFT1)) {
 			putConnection(aSource);
 			return;
@@ -1225,7 +1267,8 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 	// Private Send checks its independently approved fingerprint in its own
 	// manager. A private failure must never remove ordinary download sources.
 	if(!checkKeyprint(aSource)) {
-		QueueManager::getInstance()->removeSource(aSource->getUser(), QueueItem::Source::FLAG_UNTRUSTED);
+		if(!pmRequested)
+			QueueManager::getInstance()->removeSource(aSource->getUser(), QueueItem::Source::FLAG_UNTRUSTED);
 		putConnection(aSource);
 		return;
 	}
@@ -1328,6 +1371,12 @@ bool ConnectionManager::wasRemovedDownload(const string& token, const CID& cid) 
 }
 
 void ConnectionManager::failed(UserConnection* aSource, const string& aError, bool protocolError) {
+	Lock admissionLock(pmAdmissionCS, std::defer_lock);
+	if(aSource->isSet(UserConnection::FLAG_PM)) admissionLock.lock();
+	if(aSource->isSet(UserConnection::FLAG_PM) && !aSource->isSet(UserConnection::FLAG_ASSOCIATED) && aSource->getUser()) {
+		LogManager::getInstance()->message(str(F_("Direct encrypted channel to %1% failed: %2%") %
+			ClientManager::getInstance()->getNick(aSource->getHintedUser()) % aError), LogMessage::SEV_WARNING, _("Messages"));
+	}
 	unique_ptr<ConnectionQueueItem> failedEvent;
 	unique_ptr<ConnectionQueueItem> removedEvent;
 	{
@@ -1360,6 +1409,7 @@ void ConnectionManager::failed(UserConnection* aSource, const string& aError, bo
 					dcassert(i != container.end());
 					if(i != container.end()) {
 						removedEvent.reset(new ConnectionQueueItem(*i));
+						removedEvent->setLastError(aError);
 						putCQI(*i);
 					}
 				}

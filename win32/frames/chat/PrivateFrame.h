@@ -57,6 +57,7 @@ class PrivateFrame :
 public:
 	enum Status {
 		STATUS_STATUS,
+		STATUS_PRIVATE_SEND,
 		STATUS_CHANNEL,
 		STATUS_LAST
 	};
@@ -97,7 +98,8 @@ public:
 private:
 	enum {
 		TIMER_CPMI_TYPING = 1,
-		TIMER_CCPM_RECONNECT
+		TIMER_CCPM_RECONNECT,
+		TIMER_PRIVATE_SEND
 	};
 
 	UserInfoBase replyTo;
@@ -122,6 +124,7 @@ private:
 	uint64_t nextAutoCCPMAttempt;
 	unsigned autoCCPMAttempts;
 	bool autoCCPMReconnectScheduled;
+	bool privateSendReady = false;
 	tstring lastStatus;
 
 	time_t lastMessageTime;
@@ -152,6 +155,8 @@ private:
 	void updateOnlineStatus(bool newChannel = false);
 	void updateChannel();
 	void updateRichTextAvailability();
+	void updatePrivateSendAvailability();
+	void handlePrivateSend();
 	void startCC(bool silent = false);
 	void closeCC(bool silent = false);
 	void cancelAutoCCPMReconnect();

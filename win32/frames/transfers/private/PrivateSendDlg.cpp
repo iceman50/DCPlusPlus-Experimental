@@ -22,6 +22,7 @@
 #include <dwt/widgets/LoadDialog.h>
 #include <dwt/widgets/MessageBox.h>
 #include <dwt/widgets/SaveDialog.h>
+#include <dwt/widgets/ToolTip.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
@@ -49,6 +50,7 @@ PrivateSendDlg::PrivateSendDlg(dwt::Widget* parent, const HintedUser& user, cons
 	send(0),
 	primary(0),
 	secondary(0),
+	clear(0),
 	detailsButton(0),
 	detailsVisible(false),
 	refreshing(false),
@@ -146,13 +148,18 @@ bool PrivateSendDlg::init() {
 	}
 
 	{
-		auto actions = grid->addChild(Grid::Seed(1, 4));
+		auto actions = grid->addChild(Grid::Seed(1, 5));
 		actions->column(2).mode = GridInfo::FILL;
 		primary = actions->addChild(Button::Seed(T_("&Accept...")));
 		primary->onClicked([this] { act([this] { primaryAction(); }); });
 		secondary = actions->addChild(Button::Seed(T_("&Decline")));
 		secondary->onClicked([this] { act([this] { secondaryAction(); }); });
 		actions->addChild(Label::Seed());
+		clear = actions->addChild(Button::Seed(T_("C&lear list")));
+		auto clearTip = addChild(dwt::ToolTip::Seed());
+		clearTip->setText(clear, T_("Remove finished transfers from this list. Active and paused transfers and saved files are kept."));
+		onDestroy([clearTip] { clearTip->close(); });
+		clear->onClicked([this] { act([this] { DirectTransferManager::getInstance()->clearFinished(peer); }); });
 		actions->addChild(Button::Seed(T_("Close")))->onClicked([this] { endDialog(IDOK); });
 	}
 
@@ -182,6 +189,7 @@ void PrivateSendDlg::updateActions() {
 	const auto pause = row && (row->state == State::Connecting || row->state == State::Sending || row->state == State::Receiving);
 	const auto resume = row && row->canResume;
 	const auto active = row && row->state < State::Completed;
+	clear->setEnabled(std::any_of(rows.begin(), rows.end(), [](const auto& item) { return item.state >= State::Completed; }));
 
 	const auto primaryText = offered ? T_("&Accept...") : resume ? T_("&Resume") : T_("&Pause");
 	const auto secondaryText = offered ? T_("&Decline") : T_("&Cancel transfer");

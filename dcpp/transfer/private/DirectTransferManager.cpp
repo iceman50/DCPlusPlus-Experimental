@@ -93,6 +93,7 @@ struct DirectTransferManager::Session {
 
 	State state = State::Preparing;
 	bool incoming = false;
+	bool dismissed = false;
 	bool awaitingGrant = false;
 	uint64_t deadline = 0;
 	uint64_t hardStop = 0;
@@ -252,7 +253,7 @@ std::vector<DirectTransferManager::View> DirectTransferManager::snapshot(const H
 	for(const auto& entry : sessions) {
 		const auto& session = *entry.second;
 
-		if(peer.user && session.peer.user != peer.user)
+		if(session.dismissed || (peer.user && session.peer.user != peer.user))
 			continue;
 
 		const auto stop = session.state == State::Paused ? session.resumeBy : session.hardStop ? session.hardStop : session.deadline;
@@ -291,6 +292,22 @@ std::vector<DirectTransferManager::View> DirectTransferManager::snapshot(const H
 	}
 
 	return result;
+}
+
+size_t DirectTransferManager::clearFinished(const HintedUser& peer) {
+	std::lock_guard<std::mutex> lock(mutex);
+	need(peer.user != nullptr);
+	size_t cleared = 0;
+	for(auto& entry : sessions) {
+		auto& session = *entry.second;
+		if(session.peer.user == peer.user && isTerminal(session.state) && !session.dismissed) {
+			// Keep the protocol session until normal expiry: a saved file can still
+			// need a receipt retry, and cancelled hashing jobs must be harvested.
+			session.dismissed = true;
+			++cleared;
+		}
+	}
+	return cleared;
 }
 
 string DirectTransferManager::peerFingerprint(const HintedUser& peer) {
@@ -490,7 +507,8 @@ DirectTransferManager::Connection& DirectTransferManager::control(const HintedUs
 		auto& connection = *entry.second;
 		if(!connection.data && connection.peer.user == peer.user && hubHintsEqual(connection.peer.hint, peer.hint) &&
 			connection.userConnection->getState() == UserConnection::STATE_CMD &&
-			connection.userConnection->isPrivateTransferSecure() && connection.userConnection->isSet(UserConnection::FLAG_SUPPORTS_PFT1)) {
+			connection.userConnection->isPrivateTransferSecure() && connection.userConnection->isSet(UserConnection::FLAG_SUPPORTS_PFT1) &&
+			ConnectionManager::getInstance()->isPMConnectionActive(peer.user, connection.token)) {
 			if(requirePin && !contactAllowed(peer.user->getCID().toBase32(), connection.pin))
 				throw pft::ProtocolException("Contact is not verified. Use Verify contact... to confirm their CID and SHA-256 through an independent channel.");
 
@@ -1095,9 +1113,21 @@ void DirectTransferManager::on(ConnectionManagerListener::Removed, ConnectionQue
 					suspend(session);
 			}
 
-			if(!removed->data)
+			// A crossing CCPM attempt may replace the control socket. Preserve
+			// transfers only when the elected replacement has the same identity,
+			// route and certificate and still satisfies Private Send admission.
+			const bool replacement = !removed->data && std::any_of(connections.begin(), connections.end(), [&](const auto& entry) {
+				const auto& other = *entry.second;
+				return !other.data && other.peer.user == removed->peer.user &&
+					hubHintsEqual(other.peer.hint, removed->peer.hint) && other.pin == removed->pin &&
+					other.userConnection->getState() == UserConnection::STATE_CMD &&
+					other.userConnection->isPrivateTransferSecure() && other.userConnection->isSet(UserConnection::FLAG_SUPPORTS_PFT1) &&
+					ConnectionManager::getInstance()->isPMConnectionActive(other.peer.user, other.token);
+			});
+			if(!removed->data && !replacement)
 				for(auto& entry : sessions)
-					if(entry.second->peer.user == removed->peer.user && !isTerminal(entry.second->state)) {
+					if(entry.second->peer.user == removed->peer.user && hubHintsEqual(entry.second->peer.hint, removed->peer.hint) &&
+						!isTerminal(entry.second->state)) {
 						if(entry.second->hardStop)
 							suspend(*entry.second);
 						else
