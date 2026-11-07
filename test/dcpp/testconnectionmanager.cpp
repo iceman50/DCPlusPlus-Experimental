@@ -341,6 +341,41 @@ TEST_F(ConnectionManagerTest, ccpm_crossing_connections_converge_regardless_of_a
 	EXPECT_TRUE(manager->isPMConnectionActive(bob, bFirst->getToken()));
 }
 
+TEST_F(ConnectionManagerTest, ccpm_hub_rendezvous_expires_once_after_thirty_seconds) {
+	auto alice = ClientManager::getInstance()->getUser(user(91)->getCID());
+	auto& presence = online(alice, "adcs://one.example");
+	manager->addToken("pending-pm", presence, CONNECTION_TYPE_PM);
+	manager->addToken("pending-download", presence, CONNECTION_TYPE_DOWNLOAD);
+	manager->addToken("pending-private-file", presence, CONNECTION_TYPE_PRIVATE);
+	const auto started = manager->findToken("pending-pm", alice->getCID())->second.created;
+	manager->on(TimerManagerListener::Second(), started + ConnectionManager::PM_CONNECT_TIMEOUT - 1);
+	EXPECT_TRUE(failures.empty());
+	EXPECT_EQ(3U, manager->tokens.size());
+	manager->on(TimerManagerListener::Second(), started + ConnectionManager::PM_CONNECT_TIMEOUT);
+	ASSERT_EQ(1U, failures.size());
+	EXPECT_NE(string::npos, failures.front().find("timed out"));
+	EXPECT_EQ(2U, manager->tokens.size());
+	manager->on(TimerManagerListener::Second(), started + ConnectionManager::PM_CONNECT_TIMEOUT + 1000);
+	EXPECT_EQ(1U, failures.size());
+}
+
+TEST_F(ConnectionManagerTest, cancelling_ccpm_preserves_other_peers_hubs_and_transfer_tokens) {
+	auto alice = user(91), bob = user(92);
+	auto& a = online(alice, "adcs://one.example");
+	auto& b = online(bob, "adcs://one.example");
+	manager->addToken("shared", a, CONNECTION_TYPE_PM);
+	manager->addToken("shared", b, CONNECTION_TYPE_PM);
+	manager->addToken("download", a, CONNECTION_TYPE_DOWNLOAD);
+	manager->cancelPMConnect(HintedUser(alice, "adcs://other.example"), "shared");
+	EXPECT_EQ(3U, manager->tokens.size());
+	manager->cancelPMConnect(HintedUser(alice, a.getClient().getHubUrl()), "shared");
+	EXPECT_EQ(2U, manager->tokens.size());
+	EXPECT_EQ(manager->tokens.end(), manager->findToken("shared", alice->getCID()));
+	EXPECT_NE(manager->tokens.end(), manager->findToken("shared", bob->getCID()));
+	manager->cancelPMConnect(HintedUser(alice, a.getClient().getHubUrl()), "download");
+	EXPECT_EQ(2U, manager->tokens.size());
+}
+
 TEST_F(ConnectionManagerTest, ccpm_duplicate_token_is_not_admitted_twice) {
 	SettingsManager::getInstance()->set(SettingsManager::ENABLE_CCPM, true);
 	auto alice = user(1);

@@ -8,6 +8,8 @@
 
 #include <dcpp/protocol/AdcCommand.h>
 #include <dcpp/hub/ClientManager.h>
+#include <dcpp/hub/Client.h>
+#include <dcpp/text/Encoder.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/net/CryptoManager.h>
 #include <dcpp/settings/SettingsManager.h>
@@ -339,6 +341,37 @@ void DirectTransferManager::approvePeer(const HintedUser& peer, const string& pi
 	savePins(approvedPins);
 }
 
+void DirectTransferManager::approvePeerFromHub(const HintedUser& peer) {
+	string keyprint;
+	{
+		auto lock = ClientManager::getInstance()->lock();
+		auto online = ClientManager::getInstance()->findOnlineUserHint(peer);
+		if(peer.hint.empty() || !online || !online->getClient().isConnected() || !online->getClient().isSecure())
+			throw pft::ProtocolException("This contact must be online on this secure hub to add them using the hub's identity.");
+		keyprint = online->getIdentity().get("KP");
+	}
+	if(keyprint.compare(0, 7, "SHA256/") != 0 || !pft::isBase32(keyprint.substr(7), 32))
+		throw pft::ProtocolException("This hub has not supplied the contact's certificate fingerprint. Use Compare fingerprint... under Details.");
+	uint8_t bytes[32];
+	Encoder::fromBase32(keyprint.c_str() + 7, bytes, sizeof(bytes));
+	const auto pin = pft::hex(bytes, sizeof(bytes));
+	if(!pft::equalSecret(peerFingerprint(peer), pin))
+		throw pft::ProtocolException("The contact's certificate does not match the identity advertised by this hub. The contact was not added.");
+	// Recheck the live certificate under the transfer lock before persisting.
+	approvePeer(peer, pin);
+}
+
+bool DirectTransferManager::isPeerApproved(const HintedUser& peer) {
+	std::lock_guard<std::mutex> lock(mutex);
+	try {
+		const auto& connection = control(peer, false);
+		const auto i = approvedPins.find(peer.user->getCID().toBase32());
+		return i != approvedPins.end() && pft::equalSecret(i->second, connection.pin);
+	} catch(const Exception&) {
+		return false;
+	}
+}
+
 void DirectTransferManager::forgetPeer(const HintedUser& peer) {
 	std::lock_guard<std::mutex> lock(mutex);
 
@@ -510,7 +543,7 @@ DirectTransferManager::Connection& DirectTransferManager::control(const HintedUs
 			connection.userConnection->isPrivateTransferSecure() && connection.userConnection->isSet(UserConnection::FLAG_SUPPORTS_PFT1) &&
 			ConnectionManager::getInstance()->isPMConnectionActive(peer.user, connection.token)) {
 			if(requirePin && !contactAllowed(peer.user->getCID().toBase32(), connection.pin))
-				throw pft::ProtocolException("Contact is not verified. Use Verify contact... to confirm their CID and SHA-256 through an independent channel.");
+				throw pft::ProtocolException("Choose Add contact to verify using this secure hub, or Compare fingerprint... under Details.");
 
 			return connection;
 		}

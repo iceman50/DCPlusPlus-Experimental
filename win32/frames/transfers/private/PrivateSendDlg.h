@@ -26,6 +26,7 @@ private:
 	GridPtr details;
 	LabelPtr statistics;
 	ButtonPtr send;
+	ButtonPtr addContact = nullptr;
 	ButtonPtr primary;
 	ButtonPtr secondary;
 	ButtonPtr clear;

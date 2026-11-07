@@ -99,7 +99,8 @@ private:
 	enum {
 		TIMER_CPMI_TYPING = 1,
 		TIMER_CCPM_RECONNECT,
-		TIMER_PRIVATE_SEND
+		TIMER_PRIVATE_SEND,
+		TIMER_CCPM_CONNECT
 	};
 
 	UserInfoBase replyTo;
@@ -124,6 +125,7 @@ private:
 	uint64_t nextAutoCCPMAttempt;
 	unsigned autoCCPMAttempts;
 	bool autoCCPMReconnectScheduled;
+	string ccpmAttemptToken;
 	bool privateSendReady = false;
 	tstring lastStatus;
 
@@ -158,6 +160,8 @@ private:
 	void updatePrivateSendAvailability();
 	void handlePrivateSend();
 	void startCC(bool silent = false);
+	void cancelCCPMAttempt();
+	void failCCPMAttempt(const string& token, const tstring& reason);
 	void closeCC(bool silent = false);
 	void cancelAutoCCPMReconnect();
 	void scheduleAutoCCPMReconnect();
@@ -190,6 +194,7 @@ private:
 	// ConnectionManagerListener
 	virtual void on(ConnectionManagerListener::Connected, ConnectionQueueItem* cqi, UserConnection* uc) noexcept;
 	virtual void on(ConnectionManagerListener::Removed, ConnectionQueueItem* cqi) noexcept;
+	virtual void on(ConnectionManagerListener::Failed, ConnectionQueueItem* cqi, const string& error) noexcept;
 };
 
 #endif // !defined(PRIVATE_FRAME_H)

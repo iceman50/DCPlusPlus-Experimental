@@ -253,6 +253,7 @@ public:
 	void setState(States value) noexcept { state.store(value, std::memory_order_relaxed); }
 	uint64_t getLastActivity() const noexcept { return lastActivity.load(std::memory_order_relaxed); }
 	void setLastActivity(uint64_t value) noexcept { lastActivity.store(value, std::memory_order_relaxed); }
+	GETSET(uint64_t, connectTick, ConnectTick);
 	GETSET(double, speed, Speed);
 	GETSET(int, maxRemoteConnections, MaxRemoteConnections);
 
@@ -273,7 +274,7 @@ private:
 	};
 
 	// We only want ConnectionManager to create this...
-	UserConnection(bool secure_) noexcept : encoding(Text::systemCharset), speed(0), maxRemoteConnections(0),
+	UserConnection(bool secure_) noexcept : encoding(Text::systemCharset), connectTick(0), speed(0), maxRemoteConnections(0),
 		lastActivity(0), state(STATE_UNCONNECTED), chunkSize(0), socket(0), secure(secure_), download(NULL) {
 	}
 

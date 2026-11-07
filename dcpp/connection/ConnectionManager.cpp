@@ -100,6 +100,20 @@ ConnectionManager::TokenMap::iterator ConnectionManager::findToken(const string&
 	return i == range.second ? tokens.end() : i;
 }
 
+void ConnectionManager::cancelPMConnect(const HintedUser& user, const string& token) {
+	if(!user.user || token.empty()) return;
+	Lock l(cs);
+	auto i = findToken(token, user.user->getCID());
+	if(i != tokens.end() && i->second.type == CONNECTION_TYPE_PM && hubHintMatches(user.hint, i->second.hubUrl))
+		tokens.erase(i);
+	for(auto connection: userConnections) {
+		if(connection->isSet(UserConnection::FLAG_PM) && !connection->isSet(UserConnection::FLAG_ASSOCIATED) &&
+			connection->getUser() == user.user && connection->getToken() == token &&
+			hubHintMatches(user.hint, connection->getHubUrl()))
+			connection->disconnect(true);
+	}
+}
+
 void ConnectionManager::eraseToken(const string& token, const CID& cid) {
 	auto i = findToken(token, cid);
 	if(i != tokens.end()) {
@@ -353,6 +367,7 @@ bool ConnectionManager::isPMConnectionActive(const UserPtr& user, const string& 
 
 UserConnection* ConnectionManager::getConnection(bool aNmdc, bool secure) noexcept {
 	UserConnection* uc = new UserConnection(secure);
+	uc->setConnectTick(GET_TICK());
 	uc->addListener(this);
 	{
 		Lock l(cs);
@@ -388,6 +403,30 @@ StringList ConnectionManager::getDownloadRoutes(const HintedUser& user, MCNDownl
 }
 
 void ConnectionManager::on(TimerManagerListener::Second, uint64_t aTick) noexcept {
+	vector<pair<string, TokenInfo>> expiredPM;
+	{
+		Lock l(cs);
+		// A socket may have consumed its hub token already. Keep a separate,
+		// absolute handshake deadline so partial traffic cannot extend it.
+		for(auto connection: userConnections) {
+			if(connection->isSet(UserConnection::FLAG_PM) && !connection->isSet(UserConnection::FLAG_ASSOCIATED) &&
+				aTick >= connection->getConnectTick() + PM_CONNECT_TIMEOUT)
+				connection->disconnect(true);
+		}
+		for(auto i = tokens.begin(); i != tokens.end();) {
+			if(i->second.type == CONNECTION_TYPE_PM && aTick >= i->second.created + PM_CONNECT_TIMEOUT) {
+				expiredPM.emplace_back(i->first, i->second);
+				i = tokens.erase(i);
+			} else ++i;
+		}
+	}
+	for(const auto& attempt: expiredPM) {
+		auto user = ClientManager::getInstance()->findUser(attempt.second.cid);
+		if(user) {
+			ConnectionQueueItem item(HintedUser(user, attempt.second.hubUrl), CONNECTION_TYPE_PM, attempt.first);
+			fire(ConnectionManagerListener::Failed(), &item, _("Direct encrypted channel connection timed out"));
+		}
+	}
 	UserList passiveUsers;
 	StringList removed;
 	vector<ConnectionQueueItem> snapshot;
@@ -1376,6 +1415,8 @@ void ConnectionManager::failed(UserConnection* aSource, const string& aError, bo
 	if(aSource->isSet(UserConnection::FLAG_PM) && !aSource->isSet(UserConnection::FLAG_ASSOCIATED) && aSource->getUser()) {
 		LogManager::getInstance()->message(str(F_("Direct encrypted channel to %1% failed: %2%") %
 			ClientManager::getInstance()->getNick(aSource->getHintedUser()) % aError), LogMessage::SEV_WARNING, _("Messages"));
+		ConnectionQueueItem item(aSource->getHintedUser(), CONNECTION_TYPE_PM, aSource->getToken());
+		fire(ConnectionManagerListener::Failed(), &item, aError);
 	}
 	unique_ptr<ConnectionQueueItem> failedEvent;
 	unique_ptr<ConnectionQueueItem> removedEvent;

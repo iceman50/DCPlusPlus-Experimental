@@ -246,7 +246,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		cur->column(0).mode = GridInfo::FILL;
 		auto enabled = cur->addChild(CheckBox::Seed(T_("Enable Private Send (requires TLS 1.2+)")));
 		items.emplace_back(enabled, SettingsManager::ENABLE_PRIVATE_SEND, PropPage::T_BOOL);
-		auto verification = cur->addChild(CheckBox::Seed(T_("Require manual contact verification (off for testing)")));
+		auto verification = cur->addChild(CheckBox::Seed(T_("Require contact verification (off for testing)")));
 		items.emplace_back(verification, SettingsManager::PFT_REQUIRE_VERIFICATION, PropPage::T_BOOL);
 		addIntItem(cur, T_("Offer expires after"), SettingsManager::PFT_OFFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"), 1, 1440);
 		addIntItem(cur, T_("Accepted transfer expires after"), SettingsManager::PFT_TRANSFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"),

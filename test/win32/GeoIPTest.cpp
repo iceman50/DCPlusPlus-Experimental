@@ -14,9 +14,12 @@
 #include <win32/settings/advanced/ExperimentalPage.h>
 #include <win32/frames/transfers/private/PrivateSendDlg.h>
 #define private public
+#include <dcpp/hub/NmdcHub.h>
+#include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/UserConnection.h>
 #include <win32/frames/chat/PrivateFrame.h>
 #undef private
+#include <dcpp/plugins/PluginManager.h>
 #include <win32/dialogs/MessageOutboxDlg.h>
 #include <dcpp/chat/PrivateChatManager.h>
 #include <dcpp/chat/MessageOutboxManager.h>
@@ -204,6 +207,49 @@ void verifyPrivateSendPM(dwt::Window* window, dwt::Application& app) {
 	check(found, "Private offer text was lost, interpreted as markup, or hidden by STATUS_IN_CHAT");
 	const auto frame = static_cast<PrivateFrame*>(tabs->getChildren().front());
 	{
+		// A hub accepts online messages but deliberately never completes CCPM.
+		class SilentHub : public NmdcHub {
+		public:
+			explicit SilentHub(const string& url) : NmdcHub(url) { }
+			string attempt, message;
+			void connect(const OnlineUser&, const string& token, ConnectionType) override { attempt = token; }
+			bool privateMessage(const OnlineUser&, const string& text, bool, bool, bool) override { message = text; return true; }
+		} hub(first.hint);
+		OnlineUser presence(first.user, hub, 1);
+		presence.getIdentity().set("SU", "CCPM");
+		first.user->setFlag(User::TLS);
+		auto cm = ClientManager::getInstance();
+		cm->onlineUsers.emplace(first.user->getCID(), &presence);
+		auto settings = SettingsManager::getInstance();
+		const auto enabled = SETTING(ENABLE_CCPM), automatic = SETTING(ALWAYS_CCPM);
+		settings->set(SettingsManager::ENABLE_CCPM, true);
+		settings->set(SettingsManager::ALWAYS_CCPM, true);
+		MessageOutboxManager::getInstance()->setEnabled(true);
+		frame->online = true;
+		frame->startCC();
+		check(!hub.attempt.empty() && frame->ccpmAttemptToken == hub.attempt, "Silent hub did not leave a tracked CCPM attempt");
+		check(frame->sendMessage(L"online while connecting", false, false, true), "Online message failed during CCPM setup");
+		check(hub.message == "online while connecting", "Online message did not reach the original hub during CCPM setup");
+		frame->outboxRequireDirect = true;
+		check(frame->sendMessage(L"online while reconnecting", false, false, true) && hub.message == "online while reconnecting",
+			"Remembered CCPM route prevented online hub delivery during reconnection");
+		frame->outboxRequireDirect = false;
+		check(MessageOutboxManager::getInstance()->getStore().list().empty(), "Online message was incorrectly queued");
+		settings->set(SettingsManager::ALWAYS_CCPM, false);
+		frame->failCCPMAttempt("stale-attempt", L"stale failure");
+		check(frame->ccpmAttemptToken == hub.attempt, "Stale failure cancelled the current CCPM attempt");
+		frame->failCCPMAttempt(hub.attempt, L"Connection timed out after 30 seconds");
+		check(frame->ccpmAttemptToken.empty() && !frame->autoCCPMReconnectScheduled && !frame->acceptCCPMConnections,
+			"Manual CCPM timeout left a pending attempt or scheduled a retry");
+		check(frame->lastStatus.find(L"timed out") != tstring::npos, "CCPM timeout was not reported");
+		cm->onlineUsers.erase(first.user->getCID());
+		frame->online = false;
+		frame->nextAutoCCPMAttempt = 0;
+		MessageOutboxManager::getInstance()->setEnabled(false);
+		settings->set(SettingsManager::ENABLE_CCPM, enabled);
+		settings->set(SettingsManager::ALWAYS_CCPM, automatic);
+	}
+	{
 		auto settings = SettingsManager::getInstance();
 		const auto enabled = SETTING(ENABLE_CCPM), automatic = SETTING(ALWAYS_CCPM);
 		settings->set(SettingsManager::ENABLE_CCPM, true);
@@ -254,6 +300,12 @@ void verifyPrivateSendPM(dwt::Window* window, dwt::Application& app) {
 	RECT privatePart {};
 	SendMessage(pmStatus, SB_GETRECT, PrivateFrame::STATUS_PRIVATE_SEND, reinterpret_cast<LPARAM>(&privatePart));
 	check(privatePart.right <= privatePart.left, "Unavailable private send reserves status-bar space");
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_PRIVATE_SEND, true);
+	frame->updatePrivateSendAvailability();
+	check(SendMessage(pmStatus, SB_GETICON, PrivateFrame::STATUS_PRIVATE_SEND, 0) != 0,
+		"Private Send shortcut is hidden before the channel/contact is ready");
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_PRIVATE_SEND, false);
+	frame->updatePrivateSendAvailability();
 	const auto params = frame->getWindowParams();
 	check(File::getSize(params.at("LogPath").content) == -1, "Private offer leaked into the ordinary PM log");
 	check(PrivateFrame::privateSendNotice(tabs, first, L"Second private file"), "Existing PM rejected another offer at the window limit");
@@ -399,6 +451,7 @@ int dwtMain(dwt::Application& app) {
 		HashManager::newInstance();
 		SearchManager::newInstance();
 		ClientManager::newInstance();
+		PluginManager::newInstance();
 		CryptoManager::newInstance();
 		ConnectionManager::newInstance();
 		DirectTransferManager::newInstance();
@@ -510,6 +563,8 @@ int dwtMain(dwt::Application& app) {
 			}, reinterpret_cast<LPARAM>(&visibleReadiness));
 			check(visibleReadiness, "Empty Private Send queue does not explain why sending is unavailable");
 			const auto clear = findCaption(privateDialog.handle(), L"C&lear list");
+			const auto addContact = findCaption(privateDialog.handle(), L"&Add contact");
+			check(addContact && IsWindowVisible(addContact), "Add contact is hidden behind Details");
 			check(clear && IsWindowVisible(clear), "Private Send clear-list button is missing");
 			check(!IsWindowEnabled(clear), "Empty private-send list enables clearing");
 			bool testingNotice = false;
@@ -731,6 +786,7 @@ int dwtMain(dwt::Application& app) {
 		UploadManager::deleteInstance();
 		DownloadManager::deleteInstance();
 		ClientManager::deleteInstance();
+		PluginManager::deleteInstance();
 		SearchManager::deleteInstance();
 		HashManager::getInstance()->shutdown();
 		HashManager::deleteInstance();

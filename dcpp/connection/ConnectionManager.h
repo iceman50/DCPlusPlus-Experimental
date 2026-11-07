@@ -124,6 +124,8 @@ class ConnectionManager :
 public:
 	string makeToken() const;
 	void addToken(const string& token, const OnlineUser& user, ConnectionType type);
+	static constexpr uint64_t PM_CONNECT_TIMEOUT = 30 * 1000;
+	void cancelPMConnect(const HintedUser& user, const string& token);
 
 	void nmdcExpect(const string& aNick, const string& aMyNick, const string& aHubUrl) {
 		expectedConnections.add(aNick, aMyNick, aHubUrl);
@@ -196,6 +198,7 @@ private:
 		CID cid;
 		ConnectionType type;
 		string hubUrl;
+		uint64_t created = GET_TICK();
 	};
 	using TokenMap = std::unordered_multimap<string, TokenInfo>;
 	TokenMap tokens;

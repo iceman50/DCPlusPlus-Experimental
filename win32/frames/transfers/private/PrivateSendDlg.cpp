@@ -81,14 +81,16 @@ bool PrivateSendDlg::init() {
 	grid = addChild(Grid::Seed(7, 1));
 	grid->column(0).mode = GridInfo::FILL;
 	grid->addChild(Label::Seed(SETTING(PFT_REQUIRE_VERIFICATION) ?
-		T_("Verify this contact before sending or accepting files. Contact settings are under Details.") :
+		T_("Add this contact to verify their certificate using this secure hub and remember it for future transfers.") :
 		T_("Testing mode: contact verification is disabled.\nConnections are encrypted; contact identity is not verified.")));
 
 	{
-		auto controls = grid->addChild(Grid::Seed(1, 3));
-		controls->column(1).mode = GridInfo::FILL;
+		auto controls = grid->addChild(Grid::Seed(1, 4));
+		controls->column(2).mode = GridInfo::FILL;
 		send = controls->addChild(Button::Seed(T_("&Send file...")));
 		send->onClicked([this] { act([this] { sendFile(); }); });
+		addContact = controls->addChild(Button::Seed(T_("&Add contact")));
+		addContact->onClicked([this] { act([this] { DirectTransferManager::getInstance()->approvePeerFromHub(peer); }); });
 		controls->addChild(Label::Seed());
 		detailsButton = controls->addChild(Button::Seed(T_("&Details >>")));
 		detailsButton->onClicked([this] { toggleDetails(); });
@@ -131,7 +133,7 @@ bool PrivateSendDlg::init() {
 		fingerprint->setText(Text::toT("Your SHA-256: " + DirectTransferManager::getInstance()->ownFingerprint()));
 
 		auto contact = details->addChild(Grid::Seed(1, 2));
-		contact->addChild(Button::Seed(T_("&Verify contact...")))->onClicked([this] {
+		contact->addChild(Button::Seed(T_("&Compare fingerprint...")))->onClicked([this] {
 			act([this] { verifyContact(); });
 		});
 		contact->addChild(Button::Seed(T_("&Forget contact...")))->onClicked([this] {
@@ -289,6 +291,13 @@ bool PrivateSendDlg::refresh() {
 		message = Text::toT(e.getError());
 	}
 	send->setEnabled(ready);
+	const bool approved = DirectTransferManager::getInstance()->isPeerApproved(peer);
+	const auto contactText = approved ? T_("Contact added") : T_("&Add contact");
+	if(addContact->getText() != contactText) {
+		addContact->setText(contactText);
+		relayout();
+	}
+	addContact->setEnabled(!approved && SETTING(ENABLE_PRIVATE_SEND));
 	if(!actionError.empty())
 		message = actionError;
 	if(readiness->getText() != message)

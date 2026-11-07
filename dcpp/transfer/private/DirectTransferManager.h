@@ -88,6 +88,9 @@ public:
 	/** Checks the current channel and contact approval before choosing a file. */
 	void checkSend(const HintedUser& peer);
 	void approvePeer(const HintedUser& peer, const std::string& independentlyVerifiedPin);
+	/** Match the live peer certificate to the identity advertised by this ADCS hub. */
+	void approvePeerFromHub(const HintedUser& peer);
+	bool isPeerApproved(const HintedUser& peer);
 	void forgetPeer(const HintedUser& peer);
 
 	std::string offer(const HintedUser& peer, const std::string& localPath);

@@ -8,10 +8,15 @@
 #include <future>
 #include <thread>
 #define private public
+#include <dcpp/hub/NmdcHub.h>
+#include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/UserConnection.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/net/SSLSocket.h>
 #undef private
+#include <dcpp/favorites/FavoriteManager.h>
+#include <dcpp/net/HttpManager.h>
+#include <dcpp/text/Encoder.h>
 #include <dcpp/transfer/private/DirectTransferManager.h>
 #include <dcpp/net/CryptoManager.h>
 #include <dcpp/transfer/DownloadManager.h>
@@ -183,6 +188,8 @@ protected:
 		ASSERT_EQ(1, SSL_CTX_use_certificate_file(context, (base / "peer.crt").string().c_str(), SSL_FILETYPE_PEM));
 		ASSERT_EQ(1, SSL_CTX_use_PrivateKey_file(context, (base / "peer.key").string().c_str(), SSL_FILETYPE_PEM));
 		DirectTransferManager::newInstance();
+		HttpManager::newInstance();
+		FavoriteManager::newInstance();
 		PrivateChatManager::newInstance();
 		manager = DirectTransferManager::getInstance();
 		uint8_t cid[CID::SIZE] {};
@@ -219,6 +226,10 @@ protected:
 		UploadManager::deleteInstance();
 		DownloadManager::deleteInstance();
 		CryptoManager::deleteInstance();
+		FavoriteManager::getInstance()->shutdown();
+		FavoriteManager::deleteInstance();
+		HttpManager::getInstance()->shutdown();
+		HttpManager::deleteInstance();
 		ClientManager::deleteInstance();
 		TimerManager::getInstance()->shutdown();
 		TimerManager::deleteInstance();
@@ -233,7 +244,7 @@ protected:
 	}
 
 	Endpoint& connect(bool privateData = false, const std::string& attempt = "",
-		const std::string& role = " PM1", bool accepted = true) {
+		const std::string& role = " PM1", bool accepted = true, bool stallBeforeIdentity = false) {
 		auto e = std::make_unique<Endpoint>();
 		e->local = ConnectionManager::getInstance()->getConnection(false, true);
 		e->local->setState(UserConnection::STATE_SUPNICK);
@@ -263,6 +274,7 @@ protected:
 		const auto support = read(connected);
 		if(support.compare(0, 5, "CSUP ") != 0)
 			throw std::runtime_error("missing SUP");
+		if(stallBeforeIdentity) return connected;
 
 		const auto token = attempt.empty() ? pft::randomHex(16) : attempt;
 		{
@@ -534,7 +546,7 @@ TEST_P(PrivateTransferTest, sender_requires_approval_and_transfers_over_dedicate
 			manager->checkSend(peer);
 			FAIL() << "Unverified contact passed the send preflight";
 		} catch(const Exception& e) {
-			EXPECT_NE(std::string::npos, e.getError().find("Verify contact"));
+			EXPECT_NE(std::string::npos, e.getError().find("Add contact"));
 		}
 		EXPECT_THROW(manager->offer(peer, source), Exception);
 	} else {
@@ -653,6 +665,59 @@ TEST_P(PrivateTransferTest, clear_finished_is_contact_scoped_and_keeps_pending_o
 	EXPECT_EQ(0u, manager->clearFinished(peer));
 	tick();
 	ASSERT_EQ(1u, manager->snapshot(peer).size());
+}
+
+TEST_P(PrivateTransferTest, adding_contact_requires_matching_identity_on_the_original_secure_hub) {
+	auto& channel = connect();
+	EXPECT_THROW(manager->approvePeerFromHub(peer), Exception);
+	// Borrow the real encrypted transport solely to model a connected secure
+	// hub. No external hub or network identity lookup is used in this test.
+	class IdentityHub : public NmdcHub {
+	public:
+		IdentityHub(const string& url, BufferedSocket* transport) : NmdcHub(url) { sock = transport; state = STATE_NORMAL; }
+		~IdentityHub() { sock = nullptr; }
+	} hub(peer.hint, channel.local->socket);
+	OnlineUser presence(peer.user, hub, 1);
+	auto cm = ClientManager::getInstance();
+	{
+		auto lock = cm->lock();
+		cm->onlineUsers.emplace(peer.user->getCID(), &presence);
+	}
+	EXPECT_THROW(manager->approvePeerFromHub(peer), Exception);
+	presence.getIdentity().set("KP", "SHA256/" + string(52, 'A'));
+	EXPECT_THROW(manager->approvePeerFromHub(peer), Exception);
+	EXPECT_FALSE(manager->isPeerApproved(peer));
+	const auto keyprint = channel.local->getKeyprint();
+	presence.getIdentity().set("KP", "SHA256/" + Encoder::toBase32(keyprint.data(), keyprint.size()));
+	EXPECT_THROW(manager->approvePeerFromHub(HintedUser(peer.user, "adcs://other.invalid")), Exception);
+	EXPECT_NO_THROW(manager->approvePeerFromHub(peer));
+	EXPECT_TRUE(manager->isPeerApproved(peer));
+	EXPECT_NO_THROW(manager->checkSend(peer));
+	manager->forgetPeer(peer);
+	EXPECT_FALSE(manager->isPeerApproved(peer));
+	{
+		auto lock = cm->lock();
+		cm->onlineUsers.erase(peer.user->getCID());
+	}
+}
+
+TEST_P(PrivateTransferTest, ccpm_handshake_deadline_is_absolute_and_preserves_established_channels) {
+	auto& established = connect();
+	auto& pending = connect(false, "", " PM1", true, true);
+	pending.local->setFlag(UserConnection::FLAG_PM);
+	pending.local->setUser(peer.user);
+	pending.local->setHubUrl(peer.hint);
+	pending.local->setToken("stalled-handshake");
+	const auto deadline = pending.local->getConnectTick() + ConnectionManager::PM_CONNECT_TIMEOUT;
+	// Recent handshake traffic must not extend the absolute deadline.
+	pending.local->setLastActivity(deadline);
+	ConnectionManager::getInstance()->on(TimerManagerListener::Second(), deadline - 1);
+	barrier(*pending.local);
+	EXPECT_FALSE(pending.failed.load());
+	ConnectionManager::getInstance()->on(TimerManagerListener::Second(), deadline);
+	waitDisconnected(pending);
+	EXPECT_FALSE(established.failed.load());
+	EXPECT_TRUE(ConnectionManager::getInstance()->isPMConnectionActive(peer.user, established.local->getToken()));
 }
 
 TEST_P(PrivateTransferTest, disable_and_contact_revocation_cancel_pending_offers) {

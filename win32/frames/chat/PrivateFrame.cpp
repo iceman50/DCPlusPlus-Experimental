@@ -512,6 +512,7 @@ void PrivateFrame::addStatus(const tstring& text) {
 }
 
 bool PrivateFrame::preClosing() {
+	cancelCCPMAttempt();
 	setTimer(nullptr, 0, TIMER_PRIVATE_SEND);
 	updateTypingState(false);
 	cancelAutoCCPMReconnect();
@@ -633,6 +634,7 @@ void PrivateFrame::updateOnlineStatus(bool newChannel) {
 			addStatus(online ? T_("User went online") : T_("User went offline"));
 		}
 		if(!online) {
+			cancelCCPMAttempt();
 			cancelAutoCCPMReconnect();
 			nextAutoCCPMAttempt = 0;
 			autoCCPMAttempts = 0;
@@ -688,14 +690,9 @@ void PrivateFrame::updateRichTextAvailability() {
 }
 
 void PrivateFrame::updatePrivateSendAvailability() {
-	bool ready = false;
-	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available() && ccReady()) {
-		try {
-			DirectTransferManager::getInstance()->checkSend(replyTo.getUser());
-			ready = true;
-		} catch(const Exception&) {
-		}
-	}
+	// The dialog also sets up contact approval, so it must be accessible before
+	// a peer is approved or a direct channel is connected.
+	const bool ready = SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available();
 	if(ready != privateSendReady) {
 		privateSendReady = ready;
 		status->setIcon(STATUS_PRIVATE_SEND, ready ? IconManager::statusIcon(IDI_FILE) : nullptr, true);
@@ -705,17 +702,23 @@ void PrivateFrame::updatePrivateSendAvailability() {
 void PrivateFrame::handlePrivateSend() {
 	// Recheck on click in case the channel or contact approval just changed.
 	updatePrivateSendAvailability();
-	if(privateSendReady && UiServices::mainWindow)
+	if(privateSendReady && UiServices::mainWindow) {
+		if(online && !ccReady() && ccpmAttemptToken.empty()) startCC();
 		UiServices::mainWindow->openPrivateSend(replyTo.getUser());
+	}
 }
 
 void PrivateFrame::startCC(bool silent) {
 	if(!SETTING(ENABLE_CCPM)) {
+		cancelCCPMAttempt();
 		cancelAutoCCPMReconnect();
 		if(!silent) addStatus(T_("Direct encrypted channels are disabled in settings"));
 		return;
 	}
-	if(!silent) outboxRequireDirect = true;
+	if(!ccpmAttemptToken.empty()) {
+		if(!silent) addStatus(T_("A direct encrypted channel connection is already in progress"));
+		return;
+	}
 	if(!silent) {
 		{
 			Lock l(mutex);
@@ -772,16 +775,49 @@ void PrivateFrame::startCC(bool silent) {
 	if(silent) {
 		++autoCCPMAttempts;
 	}
-	nextAutoCCPMAttempt = now + getCCPMReconnectDelay(autoCCPMAttempts);
-	ClientManager::getInstance()->connect(replyTo.getUser(), ConnectionManager::getInstance()->makeToken(), CONNECTION_TYPE_PM);
-	if(allowAutoCCPM && SETTING(ALWAYS_CCPM)) {
-		// Also acts as an attempt timeout when a failed CTM/RCM handshake never
-		// produces a ConnectionManager event.
-		scheduleAutoCCPMReconnect();
+	{
+		Lock l(mutex);
+		acceptCCPMConnections = true;
 	}
+	cancelAutoCCPMReconnect();
+	ccpmAttemptToken = ConnectionManager::getInstance()->makeToken();
+	const auto token = ccpmAttemptToken;
+	setTimer([this, token] {
+		callAsync([this, token] { failCCPMAttempt(token, T_("Connection timed out after 30 seconds")); });
+		return false;
+	}, static_cast<unsigned>(ConnectionManager::PM_CONNECT_TIMEOUT), TIMER_CCPM_CONNECT);
+	ClientManager::getInstance()->connect(replyTo.getUser(), token, CONNECTION_TYPE_PM);
+}
+
+void PrivateFrame::cancelCCPMAttempt() {
+	setTimer(nullptr, 0, TIMER_CCPM_CONNECT);
+	const auto token = std::exchange(ccpmAttemptToken, string());
+	if(!token.empty()) ConnectionManager::getInstance()->cancelPMConnect(replyTo.getUser(), token);
+}
+
+void PrivateFrame::failCCPMAttempt(const string& token, const tstring& reason) {
+	if(token != ccpmAttemptToken || token.empty()) return;
+	cancelCCPMAttempt();
+	{
+		Lock lifetimeLock(connLifetimeMutex);
+		Lock l(mutex);
+		auto activeConn = conn.load();
+		if(activeConn && activeConn->getState() == UserConnection::STATE_CMD && activeConn->isSecure()) return;
+		acceptCCPMConnections = false;
+	}
+	addStatus(str(TF_("Cannot establish the direct encrypted channel: %1%") % reason));
+	nextAutoCCPMAttempt = GET_TICK() + getCCPMReconnectDelay(autoCCPMAttempts);
+	scheduleAutoCCPMReconnect();
+}
+
+void PrivateFrame::on(ConnectionManagerListener::Failed, ConnectionQueueItem* cqi, const string& error) noexcept {
+	if(cqi->getType() != CONNECTION_TYPE_PM || !matchesCurrentHub(cqi->getUser(), replyTo.getUser())) return;
+	const auto token = cqi->getToken();
+	callAsync([this, token, error] { failCCPMAttempt(token, Text::toT(error)); });
 }
 
 void PrivateFrame::closeCC(bool silent) {
+	cancelCCPMAttempt();
 	if(!silent) outboxRequireDirect = false;
 	allowAutoCCPM = false;
 	nextAutoCCPMAttempt = 0;
@@ -823,7 +859,7 @@ void PrivateFrame::cancelAutoCCPMReconnect() {
 }
 
 void PrivateFrame::scheduleAutoCCPMReconnect() {
-	if(!online || !allowAutoCCPM || !SETTING(ENABLE_CCPM) || !SETTING(ALWAYS_CCPM) || ccReady()) {
+	if(!online || !allowAutoCCPM || !SETTING(ENABLE_CCPM) || !SETTING(ALWAYS_CCPM) || ccReady() || !ccpmAttemptToken.empty()) {
 		cancelAutoCCPMReconnect();
 		return;
 	}
@@ -916,6 +952,7 @@ void PrivateFrame::adoptPMConnection(const string& connectionToken) {
 	if(adopted) {
 		callAsync([this, connectionToken, revision] {
 			if(isCurrentConnection(connectionToken, revision)) {
+				cancelCCPMAttempt();
 				cancelAutoCCPMReconnect();
 				nextAutoCCPMAttempt = 0;
 				localTyping = false;
@@ -1170,7 +1207,10 @@ bool PrivateFrame::sendMessage(const tstring& msg, bool thirdPerson, bool explic
 	}
 	auto outbox = MessageOutboxManager::getInstance();
 	const bool canQueue = allowQueue && !explicitRichText && outbox->isEnabled();
-	const bool direct = !replyTo.getUser().user->isNMDC() && (outboxRequireDirect.load() || ccReady() || SETTING(ALWAYS_CCPM));
+	// Automatically attempting CCPM is a preference, not an instruction to
+	// queue an otherwise deliverable online message until a handshake succeeds.
+	const bool direct = !replyTo.getUser().user->isNMDC() &&
+		(ccReady() || (!online && (outboxRequireDirect.load() || SETTING(ALWAYS_CCPM))));
 	if(canQueue) {
 		try {
 			// Preserve ordering if there are already messages awaiting this route.
@@ -1234,7 +1274,7 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 
 	auto menu = chat->getMenu(searchText);
 	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
-		menu->appendItem(T_("Private Send..."), [this] { UiServices::mainWindow->openPrivateSend(replyTo.getUser()); });
+		menu->appendItem(T_("Private Send..."), [this] { handlePrivateSend(); }, IconManager::menuIcon(IDI_FILE));
 		menu->appendSeparator();
 	}
 
@@ -1253,7 +1293,7 @@ void PrivateFrame::handleChannelMenu() {
 	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); });
 	menu->appendSeparator();
 	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
-		menu->appendItem(T_("Private Send..."), [this] { UiServices::mainWindow->openPrivateSend(replyTo.getUser()); });
+		menu->appendItem(T_("Private Send..."), [this] { handlePrivateSend(); }, IconManager::menuIcon(IDI_FILE));
 		menu->appendSeparator();
 	}
 
@@ -1285,7 +1325,7 @@ void PrivateFrame::handleChannelMenu() {
 			menu->appendItem(T_("Disconnect the direct encrypted channel"), [this] { closeCC(); });
 		} else {
 			menu->appendItem(T_("Start a direct encrypted channel"), [this] { startCC(); }, IconManager::menuIcon(IDI_SECURE));
-			if(allowAutoCCPM && nextAutoCCPMAttempt > GET_TICK())
+			if(!ccpmAttemptToken.empty() || (allowAutoCCPM && nextAutoCCPMAttempt > GET_TICK()))
 				menu->appendItem(T_("Cancel direct channel connection"), [this] { closeCC(); });
 		}
 	}
@@ -1387,6 +1427,7 @@ void PrivateFrame::on(ConnectionManagerListener::Connected, ConnectionQueueItem*
 			}
 		}
 		if(current) {
+			cancelCCPMAttempt();
 			cancelAutoCCPMReconnect();
 			nextAutoCCPMAttempt = 0;
 			localTyping = false;

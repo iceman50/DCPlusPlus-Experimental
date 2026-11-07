@@ -120,12 +120,12 @@ restarting DC++.</p>
 file list, or public magnet. Both clients must support the same experimental draft, use an ADCS hub and a fresh
 TLS 1.2+ direct chat (TLS 1.2 requires ECDHE and authenticated encryption). Manual contact verification is temporarily off by default for testing. After enabling,
 reconnect an existing direct chat to negotiate support. Open <b>Private Send...</b> from the chat menu,
-or click the file icon in the PM status bar when the connection and any required contact verification are ready.</p>
+or click the file icon in the PM status bar. This shortcut is also available before the connection or contact verification is ready.</p>
 <p><b>Clear list</b> dismisses finished, cancelled, declined, expired and failed transfers for this contact.
 Active and paused transfers stay in the list, and saved files are kept.</p>
 <dl style="margin-left: 40px;">
-  <dt>Require manual contact verification (off for testing)</dt>
-  <dd>Default: off. Leave unchecked on both clients to test without exchanging CIDs and fingerprints. Connections remain encrypted, but contact identity is not independently verified. Turning this on requires both contacts to use Verify contact and cancels transfers without an approved matching fingerprint. Testing does not save contacts as verified.</dd>
+  <dt>Require contact verification (off for testing)</dt>
+  <dd>Default: off. When enabled, each person chooses <b>Add contact</b> to verify the actual peer certificate against the identity advertised by the current secure hub and remember it. Alternatively, use <b>Details &gt; Compare fingerprint...</b> to compare a CID and fingerprint received independently. Turning verification on cancels transfers without an approved matching fingerprint. Testing mode skips contact approval; it does not automatically save contacts as verified.</dd>
   <dt>Offer expires after</dt>
   <dd>Lifetime of a new outgoing offer before acceptance. Default: 15 minutes. Range: 1–1440 minutes.</dd>
   <dt>Accepted transfer expires after</dt>
