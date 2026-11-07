@@ -64,7 +64,7 @@ public:
 
 	/** Classify hub status frames that could impersonate local client output. */
 	static StatusFrameType classifyStatusFrame(const string& line) noexcept;
-	/** Remove a forged local-status prefix and make the remaining text single-line safe. */
+	/** Preserve normal hub banner layout; render forged local-status text single-line safe. */
 	static string sanitizeStatusMessage(const string& line);
 
 	void emulateCommand(const string& cmd) { onLine(cmd); }

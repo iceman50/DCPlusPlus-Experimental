@@ -80,7 +80,7 @@ bool hasEmbeddedNmdcCommand(const string& line, size_t start) noexcept {
 	return false;
 }
 
-string escapeStatusData(const string& data) {
+string escapeStatusData(const string& data, bool preserveLayout) {
 	static const char hex[] = "0123456789ABCDEF";
 	const auto validUtf8 = Text::validateUtf8(data);
 	const auto length = std::min(data.size(), size_t { 4096 });
@@ -91,9 +91,9 @@ string escapeStatusData(const string& data) {
 		const auto c = static_cast<uint8_t>(data[i]);
 		switch(c) {
 		case '\\': escaped += "\\\\"; break;
-		case '\r': escaped += "\\r"; break;
-		case '\n': escaped += "\\n"; break;
-		case '\t': escaped += "\\t"; break;
+		case '\r': escaped += preserveLayout ? "\r" : "\\r"; break;
+		case '\n': escaped += preserveLayout ? "\n" : "\\n"; break;
+		case '\t': escaped += preserveLayout ? "\t" : "\\t"; break;
 		default:
 			if(c < 0x20 || c == 0x7f || (!validUtf8 && c >= 0x80)) {
 				escaped += "\\x";
@@ -263,8 +263,23 @@ NmdcHub::StatusFrameType NmdcHub::classifyStatusFrame(const string& line) noexce
 
 string NmdcHub::sanitizeStatusMessage(const string& line) {
 	size_t contentStart = 0;
-	const auto start = findStarredStatusPrefix(line, contentStart) ? contentStart : 0;
-	return escapeStatusData(line.substr(start));
+	const auto starred = findStarredStatusPrefix(line, contentStart);
+	auto display = escapeStatusData(line.substr(starred ? contentStart : 0), !starred);
+	if(!starred) {
+		// Keep banners readable, but mark continuation lines that could look
+		// like a separate local status or chat message as quoted hub output.
+		size_t pos = 0;
+		while((pos = display.find_first_of("\r\n", pos)) != string::npos) {
+			++pos;
+			const auto start = display.find_first_not_of(" \t", pos);
+			if(start != string::npos && (display[start] == '[' || display[start] == '<' ||
+				display.compare(start, 3, "***") == 0))
+			{
+				display.insert(start, "- ");
+			}
+		}
+	}
+	return display;
 }
 
 void NmdcHub::onLine(const string& aLine, int statusFlags) noexcept {
