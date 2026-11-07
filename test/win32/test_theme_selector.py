@@ -270,8 +270,16 @@ def main():
                 if not restart:
                     assert user.GetWindowLongPtrW(window, -16) & 0xC00000 == 0xC00000, "Light startup lost its native caption"
                 check_settings_menu(window, process)
+                def theme_index(title):
+                    value = c.create_unicode_buffer(title)
+                    index = user.SendMessageW(combo, 0x158, -1, c.addressof(value))  # CB_FINDSTRINGEXACT
+                    assert index >= 0, f"Missing {title} test theme"
+                    return index
+
+                # Installed themes are sorted by name; additions can move every index.
+                final_index = theme_index("Paper")
                 if restart:
-                    assert user.SendMessageW(combo, 0x147, 0, 0) == 8, "Saved theme was not recognized after restart"
+                    assert user.SendMessageW(combo, 0x147, 0, 0) == final_index, "Saved theme was not recognized after restart"
                     if args.snapshot:
                         time.sleep(1)
                         snapshot(parent, args.snapshot.with_name("startup-" + args.snapshot.name), combo,
@@ -284,11 +292,14 @@ def main():
                         if not args.maximized:
                             user.SetWindowPos(window, None, 30, 30, 1800, 700, 0x10)
                         time.sleep(0.5)
-                    ultraviolet = c.create_unicode_buffer("Ultraviolet")
-                    ultraviolet_index = user.SendMessageW(combo, 0x158, -1, c.addressof(ultraviolet))  # CB_FINDSTRINGEXACT
-                    assert ultraviolet_index >= 0, "Missing Ultraviolet test theme"
-                    for index, expected in ((1, 0x271811), (2, 0x181818), (0, None), (4, None),
-                                            (ultraviolet_index, 0x1B0A0B), (8, 0x221507)):
+                    installed = []
+                    acid_index = theme_index("Acid Lime")
+                    for stem in ("ultraviolet", "cyber-blue", "arctic-day", "sage", "sandstone", "lavender", "paper"):
+                        theme = ET.parse(ROOT / "Themes" / (stem + ".xml")).getroot()
+                        color = theme.find("Palette").get("Background").lstrip("#")
+                        expected = int.from_bytes(bytes.fromhex(color), "little")
+                        installed.append((theme_index(theme.get("Name")), expected))
+                    for index, expected in [(1, 0x271811), (2, 0x181818), (0, None), (acid_index, None)] + installed:
                         previous = settings().findtext("ThemeBackgroundColor")
                         user.SendMessageW(combo, 0x14F, 1, 0)  # CB_SHOWDROPDOWN
                         user.SendMessageW(combo, 0x14E, index, 0)  # CB_SETCURSEL
@@ -302,17 +313,17 @@ def main():
                             return color == str(expected) if expected is not None else color != previous
 
                         wait_for(applied, process)
-                        assert user.GetWindowLongPtrW(window, -16) & 0xC00000 == 0, "Dark preset retained a native caption"
+                        assert user.GetWindowLongPtrW(window, -16) & 0xC00000 == 0, "Custom preset retained a native caption"
                         assert user.SendMessageW(combo, 0x147, 0, 0) == index, "Applying a theme lost the combo selection"
-                        if args.snapshot and index in (1, 4, ultraviolet_index, 8):
+                        if args.snapshot and index in [1, acid_index] + [item[0] for item in installed]:
                             time.sleep(1)
-                            path = args.snapshot if index == 8 else args.snapshot.with_name("first-" + args.snapshot.name)
+                            path = args.snapshot if index == final_index else args.snapshot.with_name("first-" + args.snapshot.name)
                             snapshot(parent, path, combo, int(settings().findtext("ThemeBackgroundColor")))
                             snapshot(window, args.snapshot.with_name(f"frame-{index}-" + args.snapshot.name), combo,
                                      int(settings().findtext("ThemeBackgroundColor")), frame=True)
                     user.SendMessageW(combo, 0x14F, 1, 0)
                     user.SendMessageW(combo, 0x100, 0x1B, 0)  # Cancel with Escape.
-                    assert user.SendMessageW(combo, 0x147, 0, 0) == 8, "Cancelling the dropdown changed the theme"
+                    assert user.SendMessageW(combo, 0x147, 0, 0) == final_index, "Cancelling the dropdown changed the theme"
                     # Removing the selector from layout must not remove a phantom
                     # extra row below it. Only compare a shared row: on narrow
                     # windows the selector may legitimately wrap to a second row.

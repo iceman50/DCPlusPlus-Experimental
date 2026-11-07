@@ -6,38 +6,38 @@
   <Colors>
     <Color Setting="TextColor" Value="#FFFFFF" />
     <Color Setting="BackgroundColor" Value="#1F1F1F" />
-    <Color Setting="UploadTextColor" Value="#FFFFFF" />
-    <Color Setting="UploadBgColor" Value="#476460" />
-    <Color Setting="DownloadTextColor" Value="#FFFFFF" />
-    <Color Setting="DownloadBgColor" Value="#3E5870" />
-    <Color Setting="LinkColor" Value="#70B5F5" />
+    <Color Setting="UploadTextColor" Value="#F1FFF8" />
+    <Color Setting="UploadBgColor" Value="#1C7952" />
+    <Color Setting="DownloadTextColor" Value="#F5F8FF" />
+    <Color Setting="DownloadBgColor" Value="#2D6ABF" />
+    <Color Setting="LinkColor" Value="#7DDFED" />
     <Color Setting="LinkBgColor" Value="#1F1F1F" />
     <Color Setting="LogColor" Value="#B0AEBC" />
     <Color Setting="LogBgColor" Value="#1F1F1F" />
     <Color Setting="SystemLogVerboseColor" Value="#ADADAD" />
-    <Color Setting="SystemLogInfoColor" Value="#70B5F5" />
+    <Color Setting="SystemLogInfoColor" Value="#7DDFED" />
     <Color Setting="SystemLogWarningColor" Value="#F1CB8A" />
     <Color Setting="SystemLogErrorColor" Value="#F29BA9" />
-    <Color Setting="SystemLogAreaColor" Value="#B9B1E8" />
+    <Color Setting="SystemLogAreaColor" Value="#CCAFE9" />
     <Color Setting="ChatTimestampColor" Value="#ADADAD" />
     <Color Setting="ChatTimestampBgColor" Value="#1F1F1F" />
     <Color Setting="ChatNickColor" Value="#A8D1FF" />
     <Color Setting="ChatNickBgColor" Value="#1F1F1F" />
     <Color Setting="ChatTextColor" Value="#FFFFFF" />
     <Color Setting="ChatTextBgColor" Value="#1F1F1F" />
-    <Color Setting="ChatSystemColor" Value="#B9B1E8" />
+    <Color Setting="ChatSystemColor" Value="#CCAFE9" />
     <Color Setting="ChatSystemBgColor" Value="#1F1F1F" />
-    <Color Setting="ChatOwnTimestampColor" Value="#A6B5B3" />
+    <Color Setting="ChatOwnTimestampColor" Value="#A0BAAF" />
     <Color Setting="ChatOwnTimestampBgColor" Value="#1F1F1F" />
-    <Color Setting="ChatOwnNickColor" Value="#88D4C9" />
+    <Color Setting="ChatOwnNickColor" Value="#78E0B4" />
     <Color Setting="ChatOwnNickBgColor" Value="#1F1F1F" />
-    <Color Setting="ChatOwnTextColor" Value="#EDF9F7" />
+    <Color Setting="ChatOwnTextColor" Value="#D0F4E5" />
     <Color Setting="ChatOwnTextBgColor" Value="#1F1F1F" />
-    <Color Setting="ChatMentionColor" Value="#A8D1FF" />
-    <Color Setting="ChatMentionBgColor" Value="#3D4650" />
+    <Color Setting="ChatMentionColor" Value="#FFDA87" />
+    <Color Setting="ChatMentionBgColor" Value="#433D30" />
   </Colors>
   <UserStyles>
-    <Style Name="Favorite users (added by DC++)" TextColor="#88D4C9" BgColor="#1F1F1F" />
+    <Style Name="Favorite users (added by DC++)" TextColor="#78E0B4" BgColor="#1F1F1F" />
     <Style Name="Operators (added by DC++)" TextColor="#A8D1FF" BgColor="#1F1F1F" />
   </UserStyles>
 </DCPlusPlusTheme>

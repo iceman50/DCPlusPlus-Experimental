@@ -122,13 +122,30 @@ ThemeManager::Theme::Theme(const dwt::tstring& name_, const dwt::Appearance::Pal
 		const auto& tag = tags[key];
 		colors[key] = tag.find("BgColor") != std::string::npos || key == SettingsManager::BACKGROUND_COLOR ? palette.background : palette.text;
 	}
-	for(int key : { SettingsManager::LINK_COLOR, SettingsManager::CHAT_NICK_COLOR, SettingsManager::CHAT_OWN_NICK_COLOR,
-		SettingsManager::CHAT_MENTION_COLOR, SettingsManager::SYSTEM_LOG_AREA_COLOR }) colors[key] = palette.accent;
+	// Palette-only imports and built-in presets need the same semantic separation
+	// as complete theme files. Explicit <Colors> entries still override these defaults.
+	const bool light = GetRValue(palette.background) * 299 + GetGValue(palette.background) * 587 +
+		GetBValue(palette.background) * 114 >= 128000;
+	colors[SettingsManager::UPLOAD_BG_COLOR] = RGB(36, 122, 96);
+	colors[SettingsManager::UPLOAD_TEXT_COLOR] = RGB(234, 255, 246);
+	colors[SettingsManager::DOWNLOAD_BG_COLOR] = RGB(57, 107, 178);
+	colors[SettingsManager::DOWNLOAD_TEXT_COLOR] = RGB(239, 246, 255);
+	colors[SettingsManager::LINK_COLOR] = light ? RGB(29, 83, 157) : RGB(125, 190, 255);
+	colors[SettingsManager::CHAT_NICK_COLOR] = light ? RGB(91, 49, 149) :
+		dwt::Appearance::blend(palette.accent, palette.text, 96);
+	colors[SettingsManager::CHAT_OWN_NICK_COLOR] = light ? RGB(21, 104, 77) : RGB(116, 224, 183);
+	colors[SettingsManager::CHAT_OWN_TEXT_COLOR] = light ? RGB(37, 79, 68) : RGB(194, 237, 218);
+	colors[SettingsManager::CHAT_SYSTEM_COLOR] = light ? RGB(112, 63, 135) : RGB(202, 173, 233);
+	colors[SettingsManager::CHAT_MENTION_COLOR] = light ? RGB(112, 64, 0) : RGB(255, 219, 133);
+	colors[SettingsManager::CHAT_MENTION_BG_COLOR] = light ? RGB(255, 240, 194) : RGB(69, 58, 36);
+	colors[SettingsManager::LOG_COLOR] = palette.disabledText;
+	colors[SettingsManager::SYSTEM_LOG_INFO_COLOR] = colors[SettingsManager::LINK_COLOR];
+	colors[SettingsManager::SYSTEM_LOG_AREA_COLOR] = colors[SettingsManager::CHAT_SYSTEM_COLOR];
 	colors[SettingsManager::CHAT_TIMESTAMP_COLOR] = palette.disabledText;
-	colors[SettingsManager::CHAT_OWN_TIMESTAMP_COLOR] = palette.disabledText;
+	colors[SettingsManager::CHAT_OWN_TIMESTAMP_COLOR] = light ? RGB(75, 108, 98) : RGB(146, 184, 172);
 	colors[SettingsManager::SYSTEM_LOG_VERBOSE_COLOR] = palette.disabledText;
-	colors[SettingsManager::SYSTEM_LOG_WARNING_COLOR] = RGB(220, 150, 40);
-	colors[SettingsManager::SYSTEM_LOG_ERROR_COLOR] = RGB(230, 80, 80);
+	colors[SettingsManager::SYSTEM_LOG_WARNING_COLOR] = light ? RGB(132, 79, 0) : RGB(241, 194, 105);
+	colors[SettingsManager::SYSTEM_LOG_ERROR_COLOR] = light ? RGB(178, 46, 64) : RGB(255, 144, 157);
 	const int keys[] = { SettingsManager::THEME_BACKGROUND_COLOR, SettingsManager::THEME_SURFACE_COLOR,
 		SettingsManager::THEME_TEXT_COLOR, SettingsManager::THEME_DISABLED_TEXT_COLOR, SettingsManager::THEME_BORDER_COLOR,
 		SettingsManager::THEME_ACCENT_COLOR, SettingsManager::THEME_HIGHLIGHT_TEXT_COLOR };
