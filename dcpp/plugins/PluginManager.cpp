@@ -34,6 +34,7 @@
 #include <utility>
 #include <filesystem>
 #include <cmath>
+#include <charconv>
 #include <dcpp/plugins/PluginHttp.h>
 
 #ifdef _WIN32
@@ -167,11 +168,12 @@ DcextInfo PluginManager::extract(const string& path) {
 		parse("UUID", info.uuid);
 		parse("Name", info.name);
 		version.clear(); parse("Version", version);
-		try {
-			size_t end = 0;
-			info.version = std::stod(version, &end);
-			if(end != version.size()) throw Exception("Invalid plugin version");
-		} catch(const std::exception&) { throw Exception("Invalid plugin version"); }
+		// Package versions use a decimal point regardless of the user's locale.
+		const auto end = version.data() + version.size();
+		const auto parsed = std::from_chars(version.data(), end, info.version);
+		if(parsed.ec != std::errc{} || parsed.ptr != end) {
+			throw Exception("Invalid plugin version");
+		}
 		parse("Author", info.author);
 		parse("Description", info.description);
 		parse("Website", info.website);

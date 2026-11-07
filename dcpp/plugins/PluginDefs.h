@@ -75,7 +75,7 @@ extern "C" {
 
 #define DCINTF_DCPP_UTILS			"dcpp.utils.DCUtils"		/* Utility and convenience functions */
 #define DCINTF_DCPP_UTILS_VER		1
-#define DCINTF_DCPP_UTILS2 "dcpp.utils.DCUtils2"
+#define DCINTF_DCPP_UTILS2 			"dcpp.utils.DCUtils2"
 #define DCINTF_DCPP_UTILS2_VER 2
 
 #define DCINTF_DCPP_TAGGER			"dcpp.xml.DCTagger"			/* Manipulation of an XML tagger */

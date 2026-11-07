@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <future>
 #include <chrono>
+#include <clocale>
 #include <thread>
 
 using namespace dcpp;
@@ -59,8 +60,8 @@ protected:
 		return fs::canonical("/proc/self/exe").parent_path() / "plugin-repair-fixture.so";
 #endif
 	}
-	string manifest(const string& id = fixtureId, const string& payload = "plugin.dll", const string& extra = "") {
-		return "<dcext><ApiVersion>8</ApiVersion><UUID>" + id + "</UUID><Name>Fixture</Name><Version>1</Version>"
+	string manifest(const string& id = fixtureId, const string& payload = "plugin.dll", const string& extra = "", const string& version = "1") {
+		return "<dcext><ApiVersion>8</ApiVersion><UUID>" + id + "</UUID><Name>Fixture</Name><Version>" + version + "</Version>"
 #if defined(_WIN64)
 			"<Plugin Platform=\"pe-x64\">"
 #elif defined(_WIN32)
@@ -370,6 +371,45 @@ TEST_F(PluginRepair, ArchiveInventoryRejectsDuplicatesSymlinksAndLimits) {
 	EXPECT_THROW(Archive(normal).packageEntries(10, 100, 5), Exception);
 	EXPECT_EQ(2u, Archive(normal).packageEntries(10, 100, 100).size());
 }
+
+class PluginVersionLocale : public PluginRepair, public testing::WithParamInterface<const char*> { };
+
+TEST_P(PluginVersionLocale, PackageVersionsAreIndependentOfNumericLocale) {
+	// setlocale changes process state; restore it even if an assertion fails.
+	struct RestoreLocale {
+		string previous = std::setlocale(LC_NUMERIC, nullptr);
+		~RestoreLocale() { std::setlocale(LC_NUMERIC, previous.c_str()); }
+	} restore;
+	if(!std::setlocale(LC_NUMERIC, GetParam())) {
+		GTEST_SKIP() << "Locale unavailable: " << GetParam();
+	}
+	SCOPED_TRACE(GetParam());
+	const string activeLocale = std::setlocale(LC_NUMERIC, nullptr);
+	auto pm = PluginManager::getInstance();
+	for(const auto& value: std::vector<std::pair<string, double>> {
+		{ "0.3", 0.3 }, { "0.5", 0.5 }, { "1", 1.0 }, { "1.25", 1.25 }, { "5e-1", 0.5 }
+	}) {
+		SCOPED_TRACE(value.first);
+		const auto path = zip({ { "info.xml", manifest(fixtureId, "plugin.dll", "", value.first) },
+			{ "plugin.dll", "inert marker" } });
+		EXPECT_DOUBLE_EQ(value.second, pm->extract(path).version);
+	}
+	for(const string value: { "", "0,5", "0.5junk", "0.5.1", "nan", "inf", "-inf", "0", "-0.5", "1e9999", "1e-9999" }) {
+		SCOPED_TRACE(value);
+		const auto path = zip({ { "info.xml", manifest(fixtureId, "plugin.dll", "", value) },
+			{ "plugin.dll", "inert marker" } });
+		EXPECT_THROW(pm->extract(path), Exception);
+	}
+	EXPECT_EQ(activeLocale, std::setlocale(LC_NUMERIC, nullptr));
+}
+
+INSTANTIATE_TEST_SUITE_P(NumericLocales, PluginVersionLocale, testing::Values(
+#ifdef _WIN32
+	"C", "English_United States.1252", "German_Germany.1252", "French_France.1252", "Polish_Poland.1250"
+#else
+	"C", "en_US.UTF-8", "de_DE.UTF-8", "fr_FR.UTF-8", "pl_PL.UTF-8"
+#endif
+));
 
 TEST_F(PluginRepair, PackageManifestCannotReusePriorPayloadOrEscapeInstallation) {
 	auto pm = PluginManager::getInstance();
