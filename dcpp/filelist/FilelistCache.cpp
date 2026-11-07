@@ -51,7 +51,7 @@ string sourceStamp(const string& source) {
 }
 
 int collate(void*, int an, const void* a, int bn, const void* b) {
-	return compare(string(static_cast<const char*>(a), an), string(static_cast<const char*>(b), bn));
+	return DirectoryListing::compareNames(string(static_cast<const char*>(a), an), string(static_cast<const char*>(b), bn));
 }
 }
 

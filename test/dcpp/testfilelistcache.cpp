@@ -9,6 +9,8 @@
 
 #include "testbase.h"
 #include <filesystem>
+#include <cstdlib>
+#include <clocale>
 #include <dcpp/filelist/DirectoryListing.h>
 #include <dcpp/system/File.h>
 #include <dcpp/system/FilteredFile.h>
@@ -19,6 +21,14 @@
 
 using namespace dcpp;
 namespace {
+class UserCollation {
+public:
+	UserCollation() : previous(std::setlocale(LC_COLLATE, nullptr)) { std::setlocale(LC_COLLATE, ""); }
+	~UserCollation() { std::setlocale(LC_COLLATE, previous.c_str()); }
+private:
+	string previous;
+};
+
 class FilelistCacheTest : public ::testing::Test {
 public:
 	void SetUp() override {
@@ -99,6 +109,58 @@ TEST_F(FilelistCacheTest, rejects_duplicates_across_chunk_boundaries) {
 	EXPECT_THROW(list.loadFile(path), Exception);
 }
 
+TEST_F(FilelistCacheTest, preserves_distinct_names_with_equal_locale_collation) {
+	UserCollation locale;
+#ifdef _WIN32
+	ASSERT_NE(nullptr, std::setlocale(LC_COLLATE, "English_United States.1252"));
+#endif
+	const string dotted = "Name.";
+	const string unicodeDotted = "Name\xe2\x80\xa4"; // U+2024 ONE DOT LEADER
+#ifdef _WIN32
+	ASSERT_EQ(0, compare(dotted, unicodeDotted));
+#endif
+	write("<FileListing Base=\"/\"><Directory Name=\"" + dotted + "\">" +
+		file(dotted, 3) + file(unicodeDotted, 7) + "</Directory><Directory Name=\"" +
+		unicodeDotted + "\">" + file("other", 11) + "</Directory></FileListing>");
+	for(bool cached: {false, true}) {
+		SettingsManager::getInstance()->set(SettingsManager::FILELIST_CACHE, cached);
+		for(int pass = 0; pass < 2; ++pass) {
+			DirectoryListing list(user);
+			ASSERT_NO_THROW(list.loadFile(path));
+			EXPECT_EQ(cached, list.usesCache());
+			ASSERT_EQ(2u, list.getRoot()->directories.size());
+			EXPECT_EQ(3u, list.getTotalFileCount());
+			EXPECT_EQ(21, list.getTotalSize());
+			for(auto dir: list.getRoot()->directories) {
+				dir->ensureFiles();
+				if(dir->getName() == dotted) {
+					ASSERT_EQ(2u, dir->files.size());
+					std::set<string> names;
+					for(auto entry: dir->files) names.insert(entry->getName());
+					EXPECT_EQ((std::set<string>{dotted, unicodeDotted}), names);
+				} else {
+					EXPECT_EQ(unicodeDotted, dir->getName());
+					ASSERT_EQ(1u, dir->files.size());
+					EXPECT_EQ("other", (*dir->files.begin())->getName());
+				}
+			}
+		}
+	}
+}
+
+TEST_F(FilelistCacheTest, still_rejects_identical_file_and_directory_names) {
+	for(bool cached: {false, true}) {
+		SettingsManager::getInstance()->set(SettingsManager::FILELIST_CACHE, cached);
+		for(const auto& entries: {file("same") + file("same"),
+			string("<Directory Name=\"same\"/><Directory Name=\"same\"/>")})
+		{
+			write("<FileListing Base=\"/\">" + entries + "</FileListing>");
+			DirectoryListing list(user);
+			EXPECT_THROW(list.loadFile(path), Exception);
+		}
+	}
+}
+
 TEST_F(FilelistCacheTest, opens_zstd_lists_and_preserves_source) {
 	const string xml = "<FileListing Base=\"/\">" + file("zstd", 30) + "</FileListing>";
 	{
@@ -135,4 +197,26 @@ TEST_F(FilelistCacheTest, honors_changed_xml_size_limit_on_cache_reuse) {
 	SettingsManager::getInstance()->set(SettingsManager::MAX_FILELIST_SIZE, 1);
 	DirectoryListing list(user);
 	EXPECT_THROW(list.loadFile(path), Exception);
+}
+
+// Optional integration check for downloaded lists; all generated files stay in
+// the fixture directory so the original download is never changed.
+TEST_F(FilelistCacheTest, external_download_round_trip) {
+	const auto source = std::getenv("DCPP_TEST_FILELIST");
+	if(!source) GTEST_SKIP() << "Set DCPP_TEST_FILELIST to a downloaded file list";
+	UserCollation locale;
+	const auto input = std::filesystem::u8path(source);
+	const auto copy = folder / input.filename();
+	std::filesystem::copy_file(input, copy);
+	for(int pass = 0; pass < 2; ++pass) {
+		DirectoryListing list(user);
+		ASSERT_NO_THROW(list.loadFile(copy.u8string()));
+		ASSERT_TRUE(list.usesCache());
+		std::function<void(DirectoryListing::Directory*)> check = [&](DirectoryListing::Directory* dir) {
+			dir->ensureFiles();
+			dir->releaseFiles();
+			for(auto child: dir->directories) check(child);
+		};
+		EXPECT_NO_THROW(check(list.getRoot()));
+	}
 }

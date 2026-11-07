@@ -1,0 +1,29 @@
+Subject: [PATCH] Preserve distinct file list names with equal locale collation
+
+Windows locale collation can equate different Unicode characters, such as
+U+002E FULL STOP and U+2024 ONE DOT LEADER. Using that ordering alone in the
+file and directory sets rejects valid file lists as containing duplicates.
+
+Keep locale ordering, but break ties by comparing the original UTF-8 names.
+Identical names still compare equal and retain the existing duplicate checks.
+
+Applies to the standard DC++ 0.884 source tree.
+
+diff --git a/dcpp/DirectoryListing.h b/dcpp/DirectoryListing.h
+--- a/dcpp/DirectoryListing.h
++++ b/dcpp/DirectoryListing.h
+@@ -73,7 +73,13 @@
+ 		typedef unordered_set<TTHValue> TTHSet;
+ 
+ 		template<typename T> struct Less {
+-			bool operator()(typename T::Ptr a, typename T::Ptr b) const { return compare(a->getName(), b->getName()) < 0; }
++			bool operator()(typename T::Ptr a, typename T::Ptr b) const {
++				const auto& left = a->getName();
++				const auto& right = b->getName();
++				const auto order = compare(left, right);
++				// Locale-equivalent names are not necessarily identical.
++				return order != 0 ? order < 0 : left.compare(right) < 0;
++			}
+ 		};
+ 
+ 		set<Ptr, Less<Directory>> directories;

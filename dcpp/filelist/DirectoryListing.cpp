@@ -35,6 +35,11 @@
 
 namespace dcpp {
 
+int DirectoryListing::compareNames(const string& a, const string& b) {
+	const auto order = compare(a, b);
+	return order != 0 ? order : a.compare(b);
+}
+
 DirectoryListing::DirectoryListing(const HintedUser& aUser) :
 user(aUser),
 abort(false),

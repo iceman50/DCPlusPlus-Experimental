@@ -42,6 +42,10 @@ public:
 	DirectoryListing(const DirectoryListing&) = delete;
 	DirectoryListing& operator=(const DirectoryListing&) = delete;
 
+	// Locale sorting may equate distinct Unicode names. Only identical UTF-8
+	// names identify the same file list entry.
+	static int compareNames(const string& a, const string& b);
+
 	class Directory;
 
 	class File : public FastAlloc<File> {
@@ -80,7 +84,7 @@ public:
 		typedef unordered_set<TTHValue> TTHSet;
 
 		template<typename T> struct Less {
-			bool operator()(typename T::Ptr a, typename T::Ptr b) const { return compare(a->getName(), b->getName()) < 0; }
+			bool operator()(typename T::Ptr a, typename T::Ptr b) const { return compareNames(a->getName(), b->getName()) < 0; }
 		};
 
 		set<Ptr, Less<Directory>> directories;
