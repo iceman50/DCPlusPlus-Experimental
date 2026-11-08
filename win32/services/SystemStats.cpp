@@ -177,6 +177,6 @@ std::string report() {
 		line("CLI", duration((fileTime(now) - fileTime(created)) / 10000000) + " client uptime");
 	line("SYS", duration(GetTickCount64() / 1000) + " system uptime");
 	line("NET", bytes(Socket::getTotalDown()) + " downloaded / " + bytes(Socket::getTotalUp()) + " uploaded");
-	return result + "\n |\n `---[ End of System Stats ]---";
+	return result + "\n |\n `---[ ----------------- ]---";
 }
 }
