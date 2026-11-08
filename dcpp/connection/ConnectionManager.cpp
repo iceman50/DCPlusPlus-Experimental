@@ -1278,9 +1278,13 @@ void ConnectionManager::on(AdcCommand::INF, UserConnection* aSource, const AdcCo
 	if(pmRequested) {
 		const auto roleCount = std::count_if(cmd.getParameters().begin(), cmd.getParameters().end(),
 			[](const string& p) { return p.compare(0, 2, "PM") == 0; });
-		if(!hasPMRole || pmRole != "1" || roleCount != 1 || !SETTING(ENABLE_CCPM)) {
+		// A peer answering our CTM cannot know the requested connection type
+		// until we reply with PM1. The validated, CID-bound incoming token is
+		// sufficient in that direction; explicit PM fields must still be valid.
+		const bool validRole = hasPMRole ? pmRole == "1" && roleCount == 1 : type == CONNECTION_TYPE_PM;
+		if(!validRole || !SETTING(ENABLE_CCPM)) {
 			aSource->send(AdcCommand(AdcCommand::SEV_FATAL, AdcCommand::ERROR_INF_FIELD,
-				"INF PM: CCPM requires PM1 and local support").addParam("FB", "PM"));
+				"INF PM: invalid CCPM role or local support disabled").addParam("FB", "PM"));
 			putConnection(aSource);
 			return;
 		}

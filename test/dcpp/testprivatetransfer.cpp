@@ -138,6 +138,7 @@ protected:
 	DirectTransferManager* manager = nullptr;
 	std::vector<std::unique_ptr<Endpoint>> endpoints;
 	std::string peerPin, source;
+	bool peerSupportsPrivateSend = true;
 
 	void SetUp() override {
 		WSADATA data {};
@@ -244,7 +245,7 @@ protected:
 	}
 
 	Endpoint& connect(bool privateData = false, const std::string& attempt = "",
-		const std::string& role = " PM1", bool accepted = true, bool stallBeforeIdentity = false) {
+		const std::string& role = " PM1", bool accepted = true, bool stallBeforeIdentity = false, bool registerToken = true) {
 		auto e = std::make_unique<Endpoint>();
 		e->local = ConnectionManager::getInstance()->getConnection(false, true);
 		e->local->setState(UserConnection::STATE_SUPNICK);
@@ -270,14 +271,14 @@ protected:
 		barrier(*e->local);
 		endpoints.push_back(std::move(e));
 		auto& connected = *endpoints.back();
-		write(connected, "CSUP ADBASE ADTIGR ADPFT1\n");
+		write(connected, peerSupportsPrivateSend ? "CSUP ADBASE ADTIGR ADPFT1\n" : "CSUP ADBASE ADTIGR\n");
 		const auto support = read(connected);
 		if(support.compare(0, 5, "CSUP ") != 0)
 			throw std::runtime_error("missing SUP");
 		if(stallBeforeIdentity) return connected;
 
 		const auto token = attempt.empty() ? pft::randomHex(16) : attempt;
-		{
+		if(registerToken) {
 			auto cm = ConnectionManager::getInstance();
 			Lock lock(cm->cs);
 			cm->tokens.emplace(token,
@@ -441,13 +442,57 @@ protected:
 };
 }
 
-TEST_P(PrivateTransferTest, ccpm_requires_explicit_unique_pm_role) {
-	for(const auto& role : { "", " PM0", " PM2", " PM1 PM1" }) {
+TEST_P(PrivateTransferTest, ccpm_callback_uses_requested_token_before_peer_knows_pm_role) {
+	// CTM does not carry a PM role. A standard peer connects back with ID/TO
+	// and learns that this is CCPM from our CINF PM1 reply.
+	auto& endpoint = connect(false, "", "");
+	EXPECT_TRUE(endpoint.local->isSet(UserConnection::FLAG_PM));
+	EXPECT_EQ(UserConnection::STATE_CMD, endpoint.local->getState());
+	EXPECT_EQ(endpoint.local, PrivateChatManager::getInstance()->getPMConn(peer.user));
+	EXPECT_NE(std::string::npos, endpoint.handshakeReply.find(" PM1"));
+}
+
+TEST_P(PrivateTransferTest, ccpm_rejects_invalid_or_duplicate_explicit_pm_role) {
+	for(const auto& role : { " PM0", " PM2", " PM1 PM1" }) {
 		auto& endpoint = connect(false, "", role, false);
 		EXPECT_EQ(0U, endpoint.handshakeReply.find("CSTA 2"));
 		waitDisconnected(endpoint);
 		EXPECT_EQ(nullptr, PrivateChatManager::getInstance()->getPMConn(peer.user));
 	}
+}
+
+TEST_P(PrivateTransferTest, ccpm_callback_still_requires_local_support) {
+	SettingsManager::getInstance()->set(SettingsManager::ENABLE_CCPM, false);
+	auto& endpoint = connect(false, "", "", false);
+	EXPECT_EQ(0U, endpoint.handshakeReply.find("CSTA 2"));
+	waitDisconnected(endpoint);
+	EXPECT_EQ(nullptr, PrivateChatManager::getInstance()->getPMConn(peer.user));
+}
+
+TEST_P(PrivateTransferTest, ccpm_callback_without_role_still_requires_expected_token) {
+	auto& endpoint = connect(false, "unsolicited-token", "", false, false, false);
+	EXPECT_EQ(0U, endpoint.handshakeReply.find("CSTA 2"));
+	EXPECT_NE(std::string::npos, endpoint.handshakeReply.find("invalid\\stoken"));
+	waitDisconnected(endpoint);
+	EXPECT_EQ(nullptr, PrivateChatManager::getInstance()->getPMConn(peer.user));
+}
+
+TEST_P(PrivateTransferTest, connected_chat_without_private_send_reports_missing_peer_support) {
+	peerSupportsPrivateSend = false;
+	auto& endpoint = connect();
+	ASSERT_TRUE(endpoint.local->isPrivateTransferSecure());
+	ASSERT_EQ(UserConnection::STATE_CMD, endpoint.local->getState());
+	ASSERT_EQ(endpoint.local, PrivateChatManager::getInstance()->getPMConn(peer.user));
+	try {
+		manager->checkSend(peer);
+		FAIL() << "Private Send must require the peer's capability";
+	} catch(const Exception& e) {
+		EXPECT_NE(std::string::npos, e.getError().find("Encrypted chat is connected"));
+		EXPECT_NE(std::string::npos, e.getError().find("other client"));
+		EXPECT_NE(std::string::npos, e.getError().find("reconnect"));
+	}
+	EXPECT_THROW(manager->offer(peer, source), Exception);
+	EXPECT_FALSE(endpoint.failed.load());
 }
 
 TEST_P(PrivateTransferTest, ccpm_duplicate_replacement_survives_stale_release) {

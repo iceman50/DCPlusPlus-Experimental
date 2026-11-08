@@ -540,8 +540,11 @@ DirectTransferManager::Connection& DirectTransferManager::control(const HintedUs
 		auto& connection = *entry.second;
 		if(!connection.data && connection.peer.user == peer.user && hubHintsEqual(connection.peer.hint, peer.hint) &&
 			connection.userConnection->getState() == UserConnection::STATE_CMD &&
-			connection.userConnection->isPrivateTransferSecure() && connection.userConnection->isSet(UserConnection::FLAG_SUPPORTS_PFT1) &&
 			ConnectionManager::getInstance()->isPMConnectionActive(peer.user, connection.token)) {
+			if(!connection.userConnection->isPrivateTransferSecure())
+				throw pft::ProtocolException("Private Send requires a TLS 1.2+ direct chat using authenticated encryption and a peer certificate.");
+			if(!connection.userConnection->isSet(UserConnection::FLAG_SUPPORTS_PFT1))
+				throw pft::ProtocolException("Encrypted chat is connected, but the other client has not enabled or does not support Private Send. Ask them to enable Private Send, then reconnect the direct chat.");
 			if(requirePin && !contactAllowed(peer.user->getCID().toBase32(), connection.pin))
 				throw pft::ProtocolException("Choose Add contact to verify using this secure hub, or Compare fingerprint... under Details.");
 
@@ -549,7 +552,7 @@ DirectTransferManager::Connection& DirectTransferManager::control(const HintedUs
 		}
 	}
 
-	throw pft::ProtocolException("Start a TLS 1.2+ direct chat using authenticated encryption with a Private Send compatible client first");
+	throw pft::ProtocolException("Start a direct encrypted chat with this contact first.");
 }
 
 bool DirectTransferManager::contactAllowed(const string& cid, const string& pin) const {
