@@ -1,11 +1,13 @@
-== 10-25-2026 - 0.8842 !!!Experimental!!! ==
+== xx-xx-xxxx - 0.8842 !!!Experimental!!! ==
+* Distinguish missing peer Private Send support from TLS requirements when encrypted chat is already connected, and explain when the peer must enable Private Send and reconnect (iceman50)
+* Restore CCPM callback compatibility with standard clients by recognizing the requested private-chat token before the peer learns the PM1 role; retain TLS, peer identity and explicit-role validation (iceman50)
+* Defer ADC identity updates until login completes so a delayed password challenge cannot trigger intermittent empty-nickname rejections; send pending changes after the hub acknowledges the login (iceman50)
+* Hide the outgoing tab before showing the next page and erase/repaint the selected chat immediately to prevent stale chat pixels showing through; cover blank report lines, background messages and scroll/selection preservation in light and dark modes (iceman50)
 * Center text and carets vertically in DWT's themed save-dialog fields and correct dark button text padding so captions remain centered (iceman50)
 * Make DWT automatically render standard Save dialogs with the active dark palette, including scrollbars, background folder scanning, navigation, new folders, file-type filters and overwrite prompts; keep Private Send's no-overwrite policy in the caller and move picker tests into test/dwt (iceman50)
 * Open absolute save destinations in their parent folder with only the basename in the filename box (iceman50)
 * Track generated revision and build-number changes by content through compilation and linking so rapid builds cannot retain stale version metadata (iceman50)
 * Default Private Send to the configured download directory and let recipients choose a filename and folder when accepting; support saving across local drives while retaining verification, share exclusion and protection against overwriting existing files (iceman50)
-
-== 10-24-2026 - 0.8842 !!!Experimental!!! ==
 * Honor rebar border styles when painting dark bands, removing the stray colored edge below and to the left of the toolbar theme selector (iceman50)
 * Match the toolbar theme dropdown and unused tab-strip space to the surrounding dark background, including after live theme changes (iceman50)
 * Host the toolbar theme label and dropdown in one DPI-aware layout container instead of a native rebar caption, keeping their background, alignment and sizing together across theme/font changes (iceman50)
@@ -82,7 +84,7 @@
 * Apply consistent TLS requirements to ADC direct and NAT traversal connections (iceman50)
 * Prevent System Log stalls by batching RichEdit updates, preserve severity colors for timestamps, and make its retained message limit configurable (iceman50)
 * Add configurable CCPM automatic-reconnect delays, stability and attempt limits, and consolidate Experimental settings into four focused tabs (iceman50)
-* Fix TransferView progress bars occasionally stopping until their row is clicked (https://github.com/iceman50/DCPlusPlus-No-MDI/issues/3) (iceman50)
+* Fix TransferView progress bars occasionally stopping until their row is clicked (https://github.com/iceman50/DCPlusPlus-Experimental/issues/3) (iceman50)
 * Track individual TransferView updates and redraw only affected visible rows while safely handling sorting, grouping and removal (iceman50)
 * Restore progress bars for grouped uploads by aggregating per-connection transfer ranges (iceman50)
 * Reduce large file-list UI stalls with low-priority loading, single-pass directory totals and an off-thread initial file cache (iceman50)
@@ -96,7 +98,7 @@
 * Add a reproducible NSIS release-installer builder with the stripped executable, matching PDB, BFE changelog, flat themes and flat emoticon packs (iceman50)
 * Replace missing NSIS CPU and post-install launch dependencies with a native Windows SSE4.2 check and remove obsolete help and locale payload requirements (iceman50)
 * Correct NSIS Windows 10/11 detection, reject unsupported 32-bit Windows for x64 packages and use the 64-bit registry view (iceman50)
-* Restore startup performance with large download queues by building the queued-file TTH index only when first needed (https://github.com/iceman50/DCPlusPlus-No-MDI/issues/2) (iceman50)
+* Restore startup performance with large download queues by building the queued-file TTH index only when first needed (https://github.com/iceman50/DCPlusPlus-Experimental/issues/2) (iceman50)
 
 == 07-07-2026 - 0.8834 !!!Experimental!!! ==
 * Accept shorter Base32 ADC password salts used by older hubsofts while rejecting empty and undecodable challenges
