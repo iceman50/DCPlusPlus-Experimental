@@ -113,6 +113,10 @@ public:
 	IconPtr getIcon(ContainerPtr w) const;
 	void setIcon(ContainerPtr w, const IconPtr& icon);
 
+	/// Override the tab label without changing the page title or tooltip; empty restores the page title.
+	void setTabText(ContainerPtr w, const tstring& text);
+	tstring getTabText(ContainerPtr w) const;
+
 	void onTitleChanged(const TitleChangedFunction& f) {
 		titleChangedFunction = f;
 	}
@@ -152,6 +156,7 @@ private:
 		TabView* control; // for painting messages
 		ContainerPtr w;
 		tstring text;
+		tstring customText;
 		IconPtr icon;
 		ContextMenuFunction handleContextMenu;
 		bool marked;

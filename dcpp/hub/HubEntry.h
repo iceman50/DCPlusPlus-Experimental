@@ -67,6 +67,7 @@ public:
 		hubDescription(rhs.getDescription()), encoding(Text::systemCharset), shareProfileSet(false) { }
 
 	GETSET(string, name, Name);
+	GETSET(string, tabText, TabText);
 	GETSET(string, server, Server);
 	GETSET(string, hubDescription, HubDescription);
 	GETSET(string, password, Password);

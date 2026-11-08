@@ -35,6 +35,7 @@ public:
 
 private:
 	TextBoxPtr name;
+	TextBoxPtr tabText;
 	TextBoxPtr address;
 	TextBoxPtr hubDescription;
 	TextBoxPtr nick;

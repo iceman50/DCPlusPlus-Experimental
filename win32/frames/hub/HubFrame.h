@@ -90,6 +90,7 @@ public:
 	static void resortUsers();
 	static void refreshRichTextSettings();
 	static void refreshUserIconSizes();
+	static void refreshTabTexts();
 	static void refreshCountries();
 
 	WindowParams getWindowParams() const;
@@ -185,6 +186,7 @@ private:
 
 	Client* client;
 	string url;
+	string temporaryTabText;
 	size_t selCount;
 	bool statusDirty;
 	bool waitingForPW;
@@ -259,6 +261,7 @@ private:
 	void handleDoubleClickUsers();
 	void handleCopyHub(bool keyprinted);
 	void handleSearchHub();
+	void handleSetTabText();
 	void handleAddAsFavorite();
 
 	void showFilterOpts();
@@ -329,6 +332,7 @@ private:
 
 	// Icon management
 	void setTabIcon();
+	void updateTabText();
 
 	int tabIcon;
 

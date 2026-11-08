@@ -520,13 +520,26 @@ TabView::TabInfo* TabView::getTabInfo(int i) const {
 	return 0;
 }
 
+void TabView::setTabText(ContainerPtr w, const tstring& text) {
+	auto info = getTabInfo(w);
+	if(!info || info->customText == text) return;
+	info->customText = text;
+	handleTextChanging(w, w->getText());
+}
+
+tstring TabView::getTabText(ContainerPtr w) const {
+	auto info = getTabInfo(w);
+	return info ? (info->customText.empty() ? w->getText() : info->customText) : tstring();
+}
+
 void TabView::handleTextChanging(ContainerPtr w, const tstring& newText) {
 	int i = findTab(w);
 	if(i != -1) {
 		if(hasStyle(TCS_OWNERDRAWFIXED)) {
 			redraw(i);
 		} else {
-			setText(i, formatTitle(newText));
+			const auto& custom = getTabInfo(i)->customText;
+			setText(i, formatTitle(custom.empty() ? newText : custom));
 			layout();
 		}
 
@@ -989,7 +1002,7 @@ void TabView::draw(Canvas& canvas, unsigned index, Rectangle&& rect, bool isSele
 	if(isSelected && closeable)
 		rect.size.x -= margin.x + scale(16); // keep some space for the 'X' button
 
-	const tstring text = ti->w->getText();
+	const tstring text = getTabText(ti->w);
 	const unsigned dtFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_WORD_ELLIPSIS;
 	auto select(canvas.select(*((isSelected || ti->marked) ? boldFont : font)));
 	if(manual) {
@@ -1129,7 +1142,7 @@ void TabView::configureAccessibility() {
 	};
 	provider.name = [this, fromId](accessibility::ItemId id) {
 		auto info = getTabInfo(fromId(id));
-		return info ? info->w->getText() : tstring();
+		return info ? getTabText(info->w) : tstring();
 	};
 	provider.bounds = [this, fromId](accessibility::ItemId id) {
 		RECT rect = { 0 };

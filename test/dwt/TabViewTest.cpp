@@ -205,6 +205,30 @@ void checkTabs(dwt::Window* window, dwt::Application& app, bool ownerDraw, bool 
 	int closeRequests = 0;
 	page->onClosing([&] { ++closeRequests; return false; });
 	tabs->add(page);
+	const auto originalTitle = page->getText();
+	const dwt::tstring customTitle = L"My hub & \u2605";
+	dwt::tstring windowTitle;
+	tabs->onTitleChanged([&](const dwt::tstring& title) { windowTitle = title; });
+	tabs->setTabText(page, customTitle);
+	check(tabs->getTabText(page) == customTitle, "Custom tab label was not applied");
+	check(page->getText() == originalTitle, "Custom tab label replaced the full hub title");
+	page->setText(L"Updated hub description (adcs://example.invalid)");
+	check(tabs->getTabText(page) == customTitle, "Hub title update replaced the custom tab label");
+	check(windowTitle == page->getText(), "Custom tab label replaced the main window title");
+	if(!ownerDraw) {
+		wchar_t text[128] {};
+		struct { TCITEM item { TCIF_TEXT }; ULONG_PTR extra[2] {}; } data;
+		data.item.pszText = text;
+		data.item.cchTextMax = 128;
+		check(TabCtrl_GetItem(tabs->handle(), 0, &data.item), "Cannot read custom tab label");
+		check(dwt::tstring(text) == L"My hub && \u2605", "Native tab lost the custom label or ampersand escaping");
+	}
+	paint(tabs);
+	tabs->setTabText(page, L"");
+	check(tabs->getTabText(page) == page->getText(), "Clearing the custom label did not restore the current hub title");
+	page->setText(originalTitle);
+	check(tabs->getTabText(page) == originalTitle, "Default tab label stopped following the hub title");
+	tabs->onTitleChanged({});
 	paint(tabs);
 
 	RECT rect { };

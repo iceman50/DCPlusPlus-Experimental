@@ -48,6 +48,7 @@ std::map<UINT, std::wstring> FavHubProperties::encodings;
 FavHubProperties::FavHubProperties(dwt::Widget* parent, FavoriteHubEntry *_entry) :
 GridDialog(parent, 620, DS_CONTEXTHELP),
 name(0),
+tabText(nullptr),
 address(0),
 hubDescription(0),
 nick(0),
@@ -87,7 +88,7 @@ bool FavHubProperties::handleInitDialog() {
 
 		bool isAdcHub = Util::isAdcUrl(entry->getServer()) || Util::isAdcsUrl(entry->getServer());
 
-		int rows = isAdcHub ? 3 : 4;
+		int rows = isAdcHub ? 4 : 5;
 
 		auto cur = group->addChild(Grid::Seed(rows, 2));
 		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
@@ -97,6 +98,12 @@ bool FavHubProperties::handleInitDialog() {
 		name = cur->addChild(ControlSeeds::Dialog::textBox);
 		name->setText(Text::toT(entry->getName()));
 		name->setHelpId(IDH_FAVORITE_HUB_NAME);
+
+		cur->addChild(Label::Seed(T_("Tab text")));
+		tabText = cur->addChild(ControlSeeds::Dialog::textBox);
+		tabText->setAccessibleName(T_("Tab text"));
+		tabText->setCue(T_("Leave blank to use the hub name"));
+		tabText->setText(Text::toT(entry->getTabText()));
 
 		cur->addChild(Label::Seed(T_("Address")))->setHelpId(IDH_FAVORITE_HUB_ADDRESS);
 		address = cur->addChild(ControlSeeds::Dialog::textBox);
@@ -298,6 +305,9 @@ void FavHubProperties::handleOKClicked() {
 	}
 	entry->setServer(Text::fromT(addressText));
 	entry->setName(Text::fromT(name->getText()));
+	auto customTabText = Text::fromT(tabText->getText());
+	Util::trim(customTabText);
+	entry->setTabText(customTabText);
 	entry->setHubDescription(Text::fromT(hubDescription->getText()));
 	if(encoding) { // the box is optional.
 		entry->setEncoding(
@@ -325,6 +335,7 @@ void FavHubProperties::handleOKClicked() {
 	}
 	FavoriteManager::getInstance()->save();
 	HubFrame::refreshUserIconSizes();
+	HubFrame::refreshTabTexts();
 	if(oldShareProfile != entry->hasShareProfile() || oldShareDirectories != entry->getShareDirectories()) {
 		ConnectionManager::getInstance()->disconnectUploads(oldServer);
 	}

@@ -70,6 +70,7 @@
 
 #include <win32/frames/bbs/BBSFrame.h>
 #include <win32/app/MainWindow.h>
+#include <win32/dialogs/ParamDlg.h>
 #include <win32/frames/chat/PrivateFrame.h>
 #include <win32/controls/HoldRedraw.h>
 #include <win32/controls/TypedTable.h>
@@ -140,6 +141,16 @@ void HubFrame::refreshRichTextSettings() {
 
 void HubFrame::refreshUserIconSizes() {
 	for(auto frame: frames) frame->readUserIconSize();
+}
+
+void HubFrame::refreshTabTexts() {
+	for(auto frame: frames) frame->updateTabText();
+}
+
+void HubFrame::updateTabText() {
+	auto favorite = FavoriteManager::getInstance()->getFavoriteHubEntry(url);
+	if(favorite) temporaryTabText.clear();
+	getParent()->setTabText(this, Text::toT(favorite ? favorite->getTabText() : temporaryTabText));
 }
 
 void HubFrame::closeAll(ClosePred f) {
@@ -393,6 +404,7 @@ tabIcon(IDI_HUB)
 	initTimer();
 
 	client = ClientManager::getInstance()->getClient(url);
+	updateTabText();
 	client->addListener(this);
 	BBSManager::getInstance()->addListener(this);
 	updateRichTextAvailability();
@@ -1438,6 +1450,7 @@ void HubFrame::on(Connecting, Client*) noexcept {
 		clearTaskList();
 		addStatus(str(TF_("Connecting to %1%...") % Text::toT(Util::addBrackets(hubUrl))));
 		setText(Text::toT(hubUrl));
+		updateTabText();
 	});
 }
 
@@ -1673,12 +1686,12 @@ pair<tstring, tstring> HubFrame::getStatusShared() const {
 }
 
 void HubFrame::on(FavoriteManagerListener::FavoriteAdded, const FavoriteHubEntryPtr entry) noexcept {
-	if(entry->hasServer(url)) callAsync([this] { readUserIconSize(); });
+	if(entry->hasServer(url)) callAsync([this] { readUserIconSize(); updateTabText(); });
 }
 
 void HubFrame::on(FavoriteManagerListener::FavoriteRemoved, const FavoriteHubEntryPtr entry) noexcept {
 	// FavoriteManager removes the entry after notifying listeners.
-	if(entry->hasServer(url)) callAsync([this] { readUserIconSize(); });
+	if(entry->hasServer(url)) callAsync([this] { readUserIconSize(); updateTabText(); });
 }
 
 void HubFrame::on(FavoriteManagerListener::UserAdded, const FavoriteUser& /*aUser*/) noexcept {
@@ -1701,6 +1714,7 @@ void HubFrame::addAsFavorite() {
 		FavoriteHubEntry entry;
 		entry.setServer(url);
 		entry.setName(client->getHubName());
+		entry.setTabText(temporaryTabText);
 		entry.setHubDescription(client->getHubDescription());
 		entry.get(HubSettings::UserIconSize) = getUserIconSizeOverride();
 		if(!client->getPassword().empty())  {
@@ -1859,6 +1873,7 @@ void HubFrame::tabMenuImpl(dwt::Menu* menu) {
 		menu->appendItem(T_("Add To &Favorites"), [this] { addAsFavorite(); }, IconManager::menuIcon(IDI_FAVORITE_HUBS));
 	}
 
+	menu->appendItem(T_("Set tab &text..."), [this] { handleSetTabText(); });
 	menu->appendItem(T_("&Reconnect\tCtrl+R"), [this] { reconnect(); }, IconManager::menuIcon(IDI_RECONNECT));
 	menu->appendItem(T_("Copy &address to clipboard"), [this] { handleCopyHub(false); });
 	if (client->isSecure() && Util::isAdcsUrl(client->getHubUrl()) && client->getHubUrl().find("?kp=") == string::npos)
@@ -1899,6 +1914,27 @@ void HubFrame::handleCopyHub(bool keyprinted) {
 
 void HubFrame::handleSearchHub() {
 	LinkActions::searchHub(Text::toT(url));
+}
+
+void HubFrame::handleSetTabText() {
+	auto favorite = FavoriteManager::getInstance()->getFavoriteHubEntry(url);
+	const auto hubUrl = url;
+	ParamDlg dlg(this, T_("Set tab text"), T_("Tab text (leave blank to use the hub name)"),
+		Text::toT(favorite ? favorite->getTabText() : temporaryTabText));
+	if(dlg.run() != IDOK || url != hubUrl) return;
+
+	auto text = Text::fromT(dlg.getValue());
+	Util::trim(text);
+	// Recheck after the modal dialog: favorites can change while it is open.
+	favorite = FavoriteManager::getInstance()->getFavoriteHubEntry(url);
+	if(favorite) {
+		favorite->setTabText(text);
+		FavoriteManager::getInstance()->save();
+		refreshTabTexts();
+	} else {
+		temporaryTabText = std::move(text);
+		updateTabText();
+	}
 }
 
 void HubFrame::handleDoubleClickUsers() {
@@ -2074,6 +2110,7 @@ void HubFrame::redirect(string&& target) {
 
 	BBSFrame::detachHub(this);
 	url = move(target);
+	temporaryTabText.clear();
 
 	// the client is dead, long live the client!
 	client->removeListener(this);

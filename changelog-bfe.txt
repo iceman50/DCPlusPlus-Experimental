@@ -1,4 +1,5 @@
 == xx-xx-xxxx - 0.8842 !!!Experimental!!! ==
+* Add optional tab text to Favorite Hub Properties and the hub tab's Set tab text dialog, saved per favorite and applied immediately while retaining the full hub title in tooltips; support temporary labels for other hubs and leave blank to restore the normal label (iceman50)
 * Distinguish missing peer Private Send support from TLS requirements when encrypted chat is already connected, and explain when the peer must enable Private Send and reconnect (iceman50)
 * Restore CCPM callback compatibility with standard clients by recognizing the requested private-chat token before the peer learns the PM1 role; retain TLS, peer identity and explicit-role validation (iceman50)
 * Defer ADC identity updates until login completes so a delayed password challenge cannot trigger intermittent empty-nickname rejections; send pending changes after the hub acknowledges the login (iceman50)
