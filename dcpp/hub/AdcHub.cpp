@@ -102,7 +102,7 @@ bool getBBSInteger(const AdcCommand& command, const char* name, bool required, i
 }
 
 AdcHub::AdcHub(const string& aHubURL, bool secure) :
-	Client(aHubURL, '\n', secure), oldPassword(false), protocolNegotiated(false), passwordResponseSent(false), udp(Socket::TYPE_UDP), sid(0), supportsHBRI(false), supportsRTF0(false), supportsTIGR(false), supportsBBS0(false) {
+	Client(aHubURL, '\n', secure), oldPassword(false), protocolNegotiated(false), passwordResponseSent(false), initialInfoAcknowledged(false), infoPending(false), udp(Socket::TYPE_UDP), sid(0), supportsHBRI(false), supportsRTF0(false), supportsTIGR(false), supportsBBS0(false) {
 	TimerManager::getInstance()->addListener(this);
 }
 
@@ -236,7 +236,11 @@ void AdcHub::handle(AdcCommand::INF, AdcCommand& c) noexcept {
 		state = STATE_NORMAL;
 		setAutoReconnect(true);
 		setMyIdentity(u->getIdentity());
+		initialInfoAcknowledged = true;
 		updateCounts(false);
+		if(infoPending) {
+			infoImpl();
+		}
 	}
 
 	if(u->getIdentity().isHub()) {
@@ -1388,9 +1392,18 @@ void AdcHub::appendConnectivity(StringMap& lastInfoMap, AdcCommand& c, bool v4, 
 }
 
 void AdcHub::infoImpl() {
+	// Until the hub echoes our identity, send only the initial, complete INF.
+	// Early SUP/IINF commands can advance the protocol state to NORMAL before
+	// authentication finishes. A delta without NI at that point can be treated
+	// as another login by hub scripts and rejected as an empty nickname.
+	if(state == STATE_VERIFY || (!initialInfoAcknowledged && !lastInfoMap.empty())) {
+		infoPending = true;
+		return;
+	}
 	if(state != STATE_IDENTIFY && state != STATE_NORMAL)
 		return;
 
+	infoPending = false;
 	reloadSettings(false);
 
 	AdcCommand c(AdcCommand::CMD_INF, AdcCommand::TYPE_BROADCAST);
@@ -1650,6 +1663,8 @@ void AdcHub::on(Connected c) noexcept {
 	}
 
 	lastInfoMap.clear();
+	initialInfoAcknowledged = false;
+	infoPending = false;
 	sid = 0;
 	oldPassword = false;
 	protocolNegotiated = false;

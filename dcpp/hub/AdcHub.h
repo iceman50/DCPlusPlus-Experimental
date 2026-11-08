@@ -110,6 +110,8 @@ private:
 	bool oldPassword;
 	bool protocolNegotiated;
 	bool passwordResponseSent;
+	bool initialInfoAcknowledged;
+	bool infoPending;
 	Socket udp;
 	unordered_map<uint32_t, OnlineUser*> users; /** Map session id to OnlineUser */
 	StringMap lastInfoMap;
