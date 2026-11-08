@@ -39,22 +39,49 @@ void click(dwt::TabView* tabs, POINT down, POINT up, WPARAM keys = 0) {
 	::SendMessage(tabs->handle(), WM_LBUTTONUP, keys, MAKELPARAM(up.x, up.y));
 }
 
+struct ChatPaints {
+	unsigned paints = 0;
+	unsigned erases = 0;
+};
+
 LRESULT CALLBACK countPaints(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
 	UINT_PTR, DWORD_PTR data) {
-	if(message == WM_PAINT) ++*reinterpret_cast<unsigned*>(data);
+	auto& counts = *reinterpret_cast<ChatPaints*>(data);
+	if(message == WM_PAINT) ++counts.paints;
+	if(message == WM_ERASEBKGND) ++counts.erases;
 	return ::DefSubclassProc(window, message, wParam, lParam);
 }
 
 void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance::Mode mode) {
 	app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
-	window->resize(dwt::Rectangle(-32000, -32000, 640, 400));
+	// Keep a real drawable surface without displaying the fixture to the user.
+	// Off-screen windows have an empty paint clip and skip background erasure.
+	window->addRemoveExStyle(WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, true);
+	check(::SetLayeredWindowAttributes(window->handle(), 0, 0, LWA_ALPHA), "Cannot conceal chat paint fixture");
+	window->resize(dwt::Rectangle(0, 0, 640, 400));
 	window->setVisible(true);
 	auto tabs = window->addChild(dwt::TabView::Seed());
 	tabs->resize(dwt::Rectangle(0, 0, 620, 360));
 	tabs->setVisible(true);
 	dwt::Container* pages[2];
 	dwt::RichTextBox* chats[2];
-	unsigned paints[2] {};
+	ChatPaints paints[2];
+	bool damageOnFocus = false;
+	unsigned damageCount[2] {};
+	COLORREF writtenPixel[2] {};
+	unsigned overlappingShows = 0;
+	constexpr COLORREF stalePixel = RGB(231, 17, 123);
+	auto cornerPixel = [](dwt::RichTextBox* chat) {
+		RECT rect {};
+		::GetClientRect(chat->handle(), &rect);
+		return POINT { rect.right - 40, rect.bottom - 10 };
+	};
+	// Remove callbacks while their captured state still exists, including on a
+	// failed check, before dwtMain destroys the fixture's parent window.
+	struct Cleanup {
+		dwt::TabView* tabs;
+		~Cleanup() { ::DestroyWindow(tabs->handle()); }
+	} cleanup { tabs };
 	for(int i = 0; i < 2; ++i) {
 		auto seed = dwt::Container::Seed();
 		seed.style &= ~WS_VISIBLE;
@@ -71,20 +98,48 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 		chats[i]->setReadOnly();
 		check(::SetWindowSubclass(chats[i]->handle(), countPaints, 1,
 			reinterpret_cast<DWORD_PTR>(&paints[i])), "Cannot observe chat repaints");
+		pages[i]->onVisibilityChanged([&, i](bool visible) {
+			if(visible && damageOnFocus && pages[1 - i]->getVisible()) ++overlappingShows;
+		});
+		pages[i]->onFocus([&, i] {
+			if(!damageOnFocus) return;
+			// Seed a stale surface after ShowWindow's incidental paint. The final
+			// tab-switch repaint must replace it even where there is no text.
+			pages[i]->redrawWindow(RDW_ALLCHILDREN | RDW_UPDATENOW);
+			const auto point = cornerPixel(chats[i]);
+			const RECT rect { point.x, point.y, point.x + 2, point.y + 2 };
+			const auto dc = ::GetDC(chats[i]->handle());
+			const auto brush = ::CreateSolidBrush(stalePixel);
+			::FillRect(dc, &rect, brush);
+			const auto pixel = ::GetPixel(dc, point.x, point.y);
+			::DeleteObject(brush);
+			::ReleaseDC(chats[i]->handle(), dc);
+			++damageCount[i];
+			writtenPixel[i] = pixel;
+			paints[i] = {};
+		});
 	}
 	// Warm both pages so subsequent switches do not rely on initial layout/resize.
 	tabs->setActive(pages[1]);
 	tabs->setActive(pages[0]);
-	for(int pass = 0; pass < 6; ++pass) {
+	damageOnFocus = true;
+	for(int pass = 0; pass < 12; ++pass) {
 		const int next = (pass + 1) % 2;
 		auto chat = chats[next];
+		if(pass == 6) {
+			// A short report with blank lines exposes retained pixels much more
+			// readily than two chat histories covering the entire viewport.
+			chat->setText(L"Second hub\n\n[ System Stats ]\n\nCPU: test\n\nRAM: test");
+		}
 		chat->setSelection(3, 9);
 		dwt::Point scroll(0, 100);
 		chat->setScrollPos(scroll);
 		const auto selection = chat->getCaretPosRange();
 		const auto previousScroll = chat->getScrollPos();
 		const auto text = chat->getText();
-		paints[0] = paints[1] = 0;
+		paints[0] = paints[1] = {};
+		damageCount[next] = 0;
+		writtenPixel[next] = CLR_INVALID;
 		// No message pumping: the selected chat must paint even while other UI
 		// work is queued, without requiring a scroll, resize or incoming message.
 		if(pass % 3 == 0) {
@@ -98,22 +153,40 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 			tabs->setActive(pages[next]);
 		}
 		check(tabs->getActive() == pages[next], "Hub tab activation selected the wrong page");
-		check(chat->getVisible(), "Selected chat is hidden; the paint check requires a visible off-screen window");
-		check(paints[next] != 0, "Switched hub chat waits for another event before repainting");
-		check(paints[1 - next] == 0, "Switching tabs repainted the hidden chat");
+		check(chat->getVisible(), "Selected chat is hidden; the paint check requires a visible test surface");
+		check(overlappingShows == 0, "Incoming hub was shown while the previous hub was still visible");
+		check(damageCount[next] != 0 && writtenPixel[next] == stalePixel, "Chat paint fixture has no drawable surface");
+		check(paints[next].paints != 0, "Switched hub chat waits for another event before repainting");
+		const auto point = cornerPixel(chat);
+		const auto dc = ::GetDC(chat->handle());
+		const auto pixel = ::GetPixel(dc, point.x, point.y);
+		::ReleaseDC(chat->handle(), dc);
+		check(pixel != CLR_INVALID && pixel != stalePixel, "Switching tabs retained stale pixels in blank chat space");
+		check(paints[next].erases != 0, "Switched hub chat did not erase the previous tab's pixels");
+		check(paints[1 - next].paints == 0, "Switching tabs repainted the hidden chat");
 		check(chat->getText() == text, "Switching tabs changed chat history");
 		check(chat->getCaretPosRange() == selection, "Switching tabs changed the chat selection");
 		const auto currentScroll = chat->getScrollPos();
 		check(currentScroll.x == previousScroll.x && currentScroll.y == previousScroll.y,
 			"Switching tabs moved the chat viewport");
-		paints[next] = 0;
+		paints[next] = {};
 		tabs->setActive(pages[next]);
-		check(paints[next] == 0, "Reselecting the active tab caused an unnecessary repaint");
+		check(paints[next].paints == 0, "Reselecting the active tab caused an unnecessary repaint");
+		// Incoming traffic in a hidden tab must update only that tab's history
+		// and leave the visible tab's pixels alone until the next activation.
+		auto background = chats[1 - next];
+		background->addTextSteadyBatch({ L"{\\urtf1 Background-only incoming message}" }, true);
+		::UpdateWindow(background->handle());
+		check(!background->getVisible(), "Background traffic exposed a hidden chat");
+		check(background->getText().find(L"Background-only incoming message") != dwt::tstring::npos,
+			"Hidden chat discarded an incoming message");
+		check(paints[1 - next].paints == 0 && paints[next].paints == 0,
+			"Background traffic repainted a chat while its tab was hidden");
+		check(chat->getText() == text, "Background traffic changed the selected chat history");
 	}
 	for(auto chat: chats) ::RemoveWindowSubclass(chat->handle(), countPaints, 1);
 	tabs->remove(pages[1]);
 	tabs->remove(pages[0]);
-	::DestroyWindow(tabs->handle());
 	window->setVisible(false);
 }
 
@@ -183,7 +256,7 @@ int dwtMain(dwt::Application& app) {
 		checkTabs(window, app, true, false);
 		checkChatSwitch(window, app, dwt::Appearance::Mode::Light);
 		checkChatSwitch(window, app, dwt::Appearance::Mode::Dark);
-		std::puts("PASS: tab clicks, adjacent/programmatic switching, immediate chat paint, viewport preservation and close handling");
+		std::puts("PASS: tab switching, immediate chat paint/background erase, hidden traffic, viewport preservation and close handling");
 	} catch(const std::exception& error) {
 		std::fprintf(stderr, "FAIL: %s\n", error.what());
 		result = 1;

@@ -430,15 +430,19 @@ bool TabView::activateRightTab() {
 
 void TabView::swapWidgets(ContainerPtr oldW, ContainerPtr newW) {
 	newW->resize(clientSize);
-	newW->setVisible(true);
 	if(oldW) {
 		oldW->setVisible(false);
 	}
+	// Do not expose overlapping pages while ShowWindow/focus notifications
+	// let controls update their display. Both pages occupy the same surface.
+	newW->setVisible(true);
 	newW->setFocus();
 	// Showing a page only queues painting. Once the old page is hidden and
 	// focus/layout have settled, paint the selected page and its descendants
 	// now so stale content is not displayed while the message queue is busy.
-	newW->redrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+	// RichEdit also needs an erase: invalidating alone may repaint text while
+	// retaining pixels from the previous page in blank lines and empty space.
+	newW->redrawWindow(RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
 void TabView::handleTabSelected() {
