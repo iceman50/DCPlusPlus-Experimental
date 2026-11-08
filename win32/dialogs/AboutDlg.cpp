@@ -366,7 +366,7 @@ bool AboutDlg::handleInitDialog() {
 		ls.caption += T_("Based on DC++");
 		cur->addChild(ls);
 
-		cur->addChild(Link::Seed(_T("https://github.com/iceman50/DCPlusPlus-No-MDI"), true));
+		cur->addChild(Link::Seed(_T("https://github.com/iceman50/DCPlusPlus-Experimental"), true));
 
 		auto ts = ControlSeeds::Dialog::textBox;
 		ts.style |= ES_READONLY;

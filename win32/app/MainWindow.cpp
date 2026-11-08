@@ -142,8 +142,8 @@ privateSendBlink(false),
 privateSendOpen(false)
 {
 	// Project-owned links are intentionally not overridden by the upstream version.xml.
-	links.homepage = _T("https://github.com/iceman50/DCPlusPlus-No-MDI");
-	links.bugs = _T("https://github.com/iceman50/DCPlusPlus-No-MDI/issues");
+	links.homepage = _T("https://github.com/iceman50/DCPlusPlus-Experimental");
+	links.bugs = _T("https://github.com/iceman50/DCPlusPlus-Experimental/issues");
 	links.community = _T("https://www.dcbase.org/");
 	links.pluginrepo = _T("https://dcplusplus.sourceforge.io/plugins/");
 
