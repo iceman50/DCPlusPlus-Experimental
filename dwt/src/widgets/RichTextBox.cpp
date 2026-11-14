@@ -612,7 +612,11 @@ RichTextBox::HoldScroll::~HoldScroll() {
 	}
 
 	box->sendMessage(WM_SETREDRAW, TRUE);
-	box->redraw();
+	// Restoring the viewport above changes RichEdit's display state while
+	// painting is held. Finish the visible batch before returning to queued
+	// hub/transfer work; otherwise selections repaint new text over stale chat
+	// pixels until the low-priority WM_PAINT finally gets dispatched.
+	box->redraw(box->getVisible());
 }
 
 }

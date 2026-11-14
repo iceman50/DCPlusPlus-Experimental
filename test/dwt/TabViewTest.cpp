@@ -4,6 +4,7 @@
 #include <dwt/widgets/TabView.h>
 #include <dwt/widgets/Container.h>
 #include <dwt/widgets/RichTextBox.h>
+#include <dwt/widgets/SplitterContainer.h>
 
 #include <cstdio>
 #include <stdexcept>
@@ -11,6 +12,16 @@
 namespace {
 void check(bool condition, const char* message) {
 	if(!condition) throw std::runtime_error(message);
+}
+
+void pumpMessages() {
+	MSG message;
+	unsigned count = 0;
+	while(::PeekMessage(&message, nullptr, 0, 0, PM_REMOVE)) {
+		check(++count < 10000, "Chat fixture's message queue did not settle");
+		::TranslateMessage(&message);
+		::DispatchMessage(&message);
+	}
 }
 
 void paint(dwt::TabView* tabs) {
@@ -89,13 +100,14 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 		pages[i]->setText(i ? L"Second hub" : L"First hub");
 		tabs->add(pages[i]);
 		// Hub chats are descendants of layout containers, not direct tab children.
-		auto panel = pages[i]->addChild(dwt::Container::Seed());
+		auto panel = pages[i]->addChild(dwt::SplitterContainer::Seed());
 		panel->resize(dwt::Rectangle(0, 0, 580, 300));
 		chats[i] = panel->addChild(dwt::RichTextBox::Seed());
 		chats[i]->resize(dwt::Rectangle(0, 0, 560, 260));
 		chats[i]->addTextSteadyBatch(std::vector<dwt::tstring>(80,
 			i ? L"{\\urtf1 Second hub chat}" : L"{\\urtf1 First hub chat}"), true);
 		chats[i]->setReadOnly();
+		panel->maximize(chats[i]);
 		check(::SetWindowSubclass(chats[i]->handle(), countPaints, 1,
 			reinterpret_cast<DWORD_PTR>(&paints[i])), "Cannot observe chat repaints");
 		pages[i]->onVisibilityChanged([&, i](bool visible) {
@@ -107,7 +119,8 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 			// tab-switch repaint must replace it even where there is no text.
 			pages[i]->redrawWindow(RDW_ALLCHILDREN | RDW_UPDATENOW);
 			const auto point = cornerPixel(chats[i]);
-			const RECT rect { point.x, point.y, point.x + 2, point.y + 2 };
+			RECT rect {};
+			::GetClientRect(chats[i]->handle(), &rect);
 			const auto dc = ::GetDC(chats[i]->handle());
 			const auto brush = ::CreateSolidBrush(stalePixel);
 			::FillRect(dc, &rect, brush);
@@ -122,6 +135,7 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 	// Warm both pages so subsequent switches do not rely on initial layout/resize.
 	tabs->setActive(pages[1]);
 	tabs->setActive(pages[0]);
+	pumpMessages();
 	damageOnFocus = true;
 	for(int pass = 0; pass < 12; ++pass) {
 		const int next = (pass + 1) % 2;
@@ -160,8 +174,10 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 		const auto point = cornerPixel(chat);
 		const auto dc = ::GetDC(chat->handle());
 		const auto pixel = ::GetPixel(dc, point.x, point.y);
+		const auto textPixel = ::GetPixel(dc, 120, 30);
 		::ReleaseDC(chat->handle(), dc);
 		check(pixel != CLR_INVALID && pixel != stalePixel, "Switching tabs retained stale pixels in blank chat space");
+		check(textPixel != CLR_INVALID && textPixel != stalePixel, "Switching tabs retained stale pixels in the chat text");
 		check(paints[next].erases != 0, "Switched hub chat did not erase the previous tab's pixels");
 		check(paints[1 - next].paints == 0, "Switching tabs repainted the hidden chat");
 		check(chat->getText() == text, "Switching tabs changed chat history");
@@ -183,6 +199,33 @@ void checkChatSwitch(dwt::Window* window, dwt::Application& app, dwt::Appearance
 		check(paints[1 - next].paints == 0 && paints[next].paints == 0,
 			"Background traffic repainted a chat while its tab was hidden");
 		check(chat->getText() == text, "Background traffic changed the selected chat history");
+		pumpMessages();
+
+		// A batch can arrive immediately after activation. Its scroll restoration
+		// changes what is on screen, so the completed batch must paint before more
+		// queued work runs, just as tab activation does.
+		if(pass % 2 == 0) chat->scrollToBottom();
+		const bool following = chat->scrollIsAtEnd();
+		const auto batchScroll = chat->getScrollPos();
+		const auto batchSelection = chat->getCaretPosRange();
+		paints[0] = paints[1] = {};
+		chat->addTextSteadyBatch({ L"{\\urtf1 Incoming message after switching hubs}",
+			L"{\\urtf1 Second incoming message}" }, true);
+		check(paints[next].paints != 0, "Chat batch after tab activation waits for an idle message queue to paint");
+		check(!::GetUpdateRect(chat->handle(), nullptr, FALSE), "Completed chat batch left stale display regions pending");
+		check(paints[1 - next].paints == 0, "Visible chat batch repainted the hidden hub");
+		check(chat->getCaretPosRange() == batchSelection, "Visible chat batch lost the selection");
+		const auto updatedScroll = chat->getScrollPos();
+		check(following ? chat->scrollIsAtEnd() :
+			(updatedScroll.x == batchScroll.x && updatedScroll.y == batchScroll.y),
+			"Visible chat batch lost the reading position or stopped following new messages");
+		paints[next] = {};
+		{
+			dwt::Appearance::UpdateScope update(app.getAppearance());
+			chat->addTextSteadyBatch({ L"{\\urtf1 Message in a combined appearance update}" }, true);
+			check(paints[next].paints == 0, "Chat batch painted an unfinished appearance update");
+		}
+		check(paints[next].paints != 0, "Completed appearance update left the chat batch unpainted");
 	}
 	for(auto chat: chats) ::RemoveWindowSubclass(chat->handle(), countPaints, 1);
 	tabs->remove(pages[1]);
@@ -280,7 +323,7 @@ int dwtMain(dwt::Application& app) {
 		checkTabs(window, app, true, false);
 		checkChatSwitch(window, app, dwt::Appearance::Mode::Light);
 		checkChatSwitch(window, app, dwt::Appearance::Mode::Dark);
-		std::puts("PASS: tab switching, immediate chat paint/background erase, hidden traffic, viewport preservation and close handling");
+		std::puts("PASS: tab switching, immediate chat batch paint/background erase, hidden traffic, viewport preservation, appearance batching and close handling");
 	} catch(const std::exception& error) {
 		std::fprintf(stderr, "FAIL: %s\n", error.what());
 		result = 1;
