@@ -1,3 +1,12 @@
+== 11-14-2026 - 0.8842-RC2 !!!Experimental!!! ==
+* Resize open tabs live from the Tabs settings width slider; preserve selection, custom labels and page layout, save with OK and restore the saved width with Cancel (iceman50)
+* Clarify which tab styles require a restart and how dark/custom appearance overrides the Windows and browser tab drawing choices (iceman50)
+* Apply the global font to open and newly created controls, title bars, menus and tooltips; preserve explicit content fonts and scale correctly when moving between display DPIs (iceman50)
+* Restore Windows interface colors in Light mode without overwriting the saved dark/custom palette; retain global typography across Light, Dark and Follow Windows mode changes (iceman50)
+* Keep theme editor font, color and text-effect controls reachable in smaller settings windows and with larger fonts; synchronize global text-color edits with the interface palette (iceman50)
+* Paint completed visible chat batches immediately while preserving scroll position and selection; avoid repainting hidden chats or unfinished appearance updates (iceman50)
+* Repaint only the dialog outline on activation to avoid invalidating the settings page behind the caption (iceman50)
+
 == 11-14-2026 - 0.8842-RC1 !!!Experimental!!! ==
 * Publish the first 0.8842 release candidate with x64 portable and installer downloads; include a GeoLite2 Country database snapshot and its attribution/terms in the portable package (iceman50)
 * Enable touchscreen panning with inertia in tables and configure native directory-tree gestures on Windows 8.1 and later; preserve older Windows behavior and refresh themed scrollbars during gestures (Launchpad #2171376) (iceman50)
