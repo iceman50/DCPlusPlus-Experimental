@@ -5,9 +5,9 @@
 #include <iostream>
 #include <cstdlib>
 
-#include <dcpp/system/FileReader.h>
+#include <dcpp/core/io/FileReader.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/hash/value/MerkleTree.h>
 
 using namespace std;
 using namespace dcpp;

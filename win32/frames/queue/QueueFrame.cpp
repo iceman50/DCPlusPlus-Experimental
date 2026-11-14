@@ -17,21 +17,21 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/util/Util.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/appearance/ImageLists.h>
-#include <win32/controls/TableActions.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/dialogs/FilePickers.h>
-#include <win32/frames/users/UserPresentation.h>
-#include <win32/services/LinkActions.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/util/ImageLists.h>
+#include <win32/components/TableActions.h>
+#include <win32/components/TableLayout.h>
+#include <win32/dialog/FilePickers.h>
+#include <win32/util/UserPresentation.h>
+#include <win32/util/LinkActions.h>
 #include <win32/frames/queue/QueueFrame.h>
 
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/FolderDialog.h>
@@ -42,10 +42,10 @@
 #include <dwt/widgets/Tree.h>
 
 #include <win32/resource.h>
-#include <win32/controls/HoldRedraw.h>
-#include <win32/frames/chat/PrivateFrame.h>
-#include <win32/controls/TypedTable.h>
-#include <win32/controls/TypedTree.h>
+#include <win32/components/HoldRedraw.h>
+#include <win32/frames/private_chat/PrivateFrame.h>
+#include <win32/components/TypedTable.h>
+#include <win32/components/TypedTree.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

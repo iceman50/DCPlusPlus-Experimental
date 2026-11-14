@@ -1,56 +1,56 @@
 /* Copyright (C) 2026 iceman50. GPL-3.0-or-later. */
 
 #include "stdafx.h"
-#include <win32/app/UiServices.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/ImageLists.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/ImageLists.h>
 
-#include <win32/appearance/CountryFlags.h>
+#include <win32/util/CountryFlags.h>
 #include <win32/resource.h>
-#include <win32/services/GeoIPUpdate.h>
-#include <win32/app/SingleInstance.h>
-#include <win32/controls/TypedTable.h>
-#include <win32/settings/appearance/AppearancePage.h>
-#include <win32/settings/advanced/ExperimentalPage.h>
-#include <win32/frames/transfers/private/PrivateSendDlg.h>
+#include <win32/util/GeoIPUpdate.h>
+#include <win32/SingleInstance.h>
+#include <win32/components/TypedTable.h>
+#include <win32/settings/AppearancePage.h>
+#include <win32/settings/ExperimentalPage.h>
+#include <win32/frames/private_transfer/PrivateSendDlg.h>
 #define private public
 #include <dcpp/hub/NmdcHub.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/UserConnection.h>
-#include <win32/frames/chat/PrivateFrame.h>
+#include <win32/frames/private_chat/PrivateFrame.h>
 #undef private
 #include <dcpp/plugins/PluginManager.h>
-#include <win32/frames/chat/ChatCommands.h>
-#include <win32/dialogs/MessageOutboxDlg.h>
-#include <dcpp/chat/PrivateChatManager.h>
-#include <dcpp/chat/MessageOutboxManager.h>
-#include <dcpp/app/WindowManager.h>
+#include <win32/ChatCommands.h>
+#include <win32/frames/private_chat/MessageOutboxDlg.h>
+#include <dcpp/private_chat/PrivateChatManager.h>
+#include <dcpp/private_chat/MessageOutboxManager.h>
+#include <dcpp/recents/WindowManager.h>
 #include <dwt/widgets/TabView.h>
 #include <dwt/widgets/Button.h>
-#include <win32/frames/transfers/TransferView.h>
+#include <win32/TransferView.h>
 
 #include <dcpp/transfer/private/DirectTransferManager.h>
 #include <dcpp/connection/ConnectionManager.h>
-#include <dcpp/net/CryptoManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
 
-#include <win32/appearance/IconManager.h>
+#include <win32/util/IconManager.h>
 
 #include <dwt/widgets/TabView.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/net/HttpConnection.h>
-#include <dcpp/geo/GeoManager.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/connection/http/HttpConnection.h>
+#include <dcpp/core/geo/GeoManager.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/hash/HashManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/transfer/UploadManager.h>
-#include <dcpp/transfer/DownloadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
+#include <dcpp/transfer/download/DownloadManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/share/ShareManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <atomic>
-#include <dcpp/system/File.h>
-#include <dcpp/app/ResourceManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dwt/Appearance.h>
 #include <dwt/Application.h>

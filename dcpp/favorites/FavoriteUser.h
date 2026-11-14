@@ -19,7 +19,7 @@
 #ifndef DCPLUSPLUS_DCPP_FAVORITE_USER_H
 #define DCPLUSPLUS_DCPP_FAVORITE_USER_H
 
-#include <dcpp/base/Flags.h>
+#include <dcpp/core/classes/Flags.h>
 
 namespace dcpp {
 

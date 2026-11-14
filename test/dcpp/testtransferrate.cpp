@@ -12,8 +12,8 @@
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/protocol/AdcCommand.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/transfer/ThrottleManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/connection/ThrottleManager.h>
 #include <dcpp/transfer/TransferRate.h>
 #include <dcpp/user/OnlineUser.h>
 

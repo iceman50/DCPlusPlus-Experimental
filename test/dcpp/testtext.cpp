@@ -1,7 +1,7 @@
 // Copyright (C) 2026 iceman50
 #include "testbase.h"
 
-#include <dcpp/text/Text.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/util/Util.h>
 
 using namespace dcpp;

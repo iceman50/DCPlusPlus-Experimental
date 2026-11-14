@@ -19,14 +19,14 @@
 #include "stdinc.h"
 #include <dcpp/hash/HashManager.h>
 
-#include <dcpp/system/File.h>
-#include <dcpp/system/FileReader.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/base/ScopedFunctor.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/hash/SFVReader.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/FileReader.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/core/io/SFVReader.h>
 #include <dcpp/hash/TigerTreeHasher.h>
-#include <dcpp/storage/ZUtils.h>
+#include <dcpp/core/io/compress/ZUtils.h>
 
 namespace dcpp {
 

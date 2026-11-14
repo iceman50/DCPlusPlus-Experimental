@@ -3,9 +3,9 @@
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/transfer/DownloadManager.h>
-#include <dcpp/transfer/ThrottleManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/transfer/download/DownloadManager.h>
+#include <dcpp/connection/ThrottleManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 
 #include <chrono>
 #include <future>

@@ -40,7 +40,7 @@ if not env["msvcproj"]:
     # interval. Compare content along the version -> archive -> executable chain.
     version_env.Decider("content")
     version_env.Append(CPPPATH=[env.Dir(dev.get_build_path("dcpp/"))])
-    version_source = dev.get_build_path("dcpp/version.cpp")
+    version_source = dev.get_build_path("dcpp/core/version.cpp")
     version_object = version_env.Object(version_source)
     for node in build_number + version_object:
         env.File(node.abspath).Decider(version_env.decide_source)

@@ -21,7 +21,7 @@ msgstr ""
 "X-Poedit-Country: BULGARIA\n"
 "X-Poedit-Language: Bulgarian\n"
 
-#: dcpp\transfer\DownloadManager.cpp:359
+#: dcpp\transfer\download\DownloadManager.cpp:359
 #, boost-format
 msgid " - Queued: %1%"
 msgstr " - На опашката: %1%"
@@ -66,8 +66,8 @@ msgstr "%1% %2% (добавено от %3%)"
 msgid "%1% %2% port (%3% %4%)"
 msgstr "%1% %2% порт (%3% %4%)"
 
-#: dcpp\net\HttpConnection.cpp:133 dcpp\net\HttpConnection.cpp:216
-#: dcpp\net\HttpConnection.cpp:272
+#: dcpp\connection\http\HttpConnection.cpp:133 dcpp\connection\http\HttpConnection.cpp:216
+#: dcpp\connection\http\HttpConnection.cpp:272
 #, boost-format
 msgid "%1% (%2%)"
 msgstr "%1% (%2%)"
@@ -122,7 +122,7 @@ msgstr "%1% бе изгонен от %2%: %3%"
 msgid "%1% was kicked: %2%"
 msgstr "%1% бе изгонен: %2%"
 
-#: dcpp\transfer\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
+#: dcpp\modules\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
 #, boost-format
 msgid "%1%/s"
 msgstr "%1%/s"
@@ -132,7 +132,7 @@ msgstr "%1%/s"
 msgid "%1%: %2%"
 msgstr ""
 
-#: dcpp\transfer\DownloadManager.cpp:460
+#: dcpp\transfer\download\DownloadManager.cpp:460
 #, boost-format
 msgid "%1%: File not available"
 msgstr "%1%: Файла не е достъпен"
@@ -147,7 +147,7 @@ msgstr "%d B"
 msgid "%s B"
 msgstr "%s B"
 
-#: dcpp\search\ADLSearch.cpp:34
+#: dcpp\modules\ADLSearch.cpp:34
 msgid "<Enter string>"
 msgstr "<Въведете низ>"
 
@@ -222,7 +222,7 @@ msgstr "CRC32 несъвпадение (SFV-проверка)"
 msgid "CRC32 inconsistency (SFV-Check): %1%"
 msgstr "CRC32 несъответствие (SFV-Проверка): %1%"
 
-#: dcpp\net\CryptoManager.cpp:374
+#: dcpp\core\crypto\CryptoManager.cpp:374
 #, boost-format
 msgid "Certificate verification for %1% failed with error: %2%"
 msgstr ""
@@ -231,13 +231,13 @@ msgstr ""
 msgid "Compressed"
 msgstr "Компресиран"
 
-#: dcpp\net\BufferedSocket.cpp:202 dcpp\net\SSLSocket.cpp:179 dcpp\net\SSLSocket.cpp:186
-#: dcpp\net\SSLSocket.cpp:196 dcpp\net\SSLSocket.cpp:208
+#: dcpp\connection\socket\BufferedSocket.cpp:202 dcpp\connection\socket\SSLSocket.cpp:179 dcpp\connection\socket\SSLSocket.cpp:186
+#: dcpp\connection\socket\SSLSocket.cpp:196 dcpp\connection\socket\SSLSocket.cpp:208
 msgid "Connection closed"
 msgstr "Връзката е прекъсната"
 
-#: dcpp\net\BufferedSocket.cpp:169 dcpp\net\BufferedSocket.cpp:187
-#: dcpp\connection\ConnectionManager.cpp:220 dcpp\net\Socket.cpp:390
+#: dcpp\connection\socket\BufferedSocket.cpp:169 dcpp\connection\socket\BufferedSocket.cpp:187
+#: dcpp\connection\ConnectionManager.cpp:220 dcpp\connection\socket\Socket.cpp:390
 msgid "Connection timeout"
 msgstr "Времето за свързване изтече"
 
@@ -289,16 +289,16 @@ msgstr "Връзката е възстановена"
 msgid "Connectivity settings are being configured; try again later"
 msgstr "Настройките за сързване се конфигурират; опитайте отново по-късно"
 
-#: dcpp\net\Socket.cpp:341
+#: dcpp\connection\socket\Socket.cpp:341
 msgid "Could not open port for listening"
 msgstr "Не мога да отворя порт за слушане"
 
-#: dcpp\transfer\DownloadManager.cpp:235
+#: dcpp\transfer\download\DownloadManager.cpp:235
 #, boost-format
 msgid "Could not open target file: %1%"
 msgstr "Грешка при отваряне на избрания файл: %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:130
+#: dcpp\DCPlusPlus.cpp:130
 msgid "Country information"
 msgstr "Информация за страната"
 
@@ -327,15 +327,15 @@ msgstr "Липсва атрибут за име на директорията"
 msgid "Disabled"
 msgstr "деактивирано"
 
-#: dcpp\search\ADLSearch.cpp:410
+#: dcpp\modules\ADLSearch.cpp:410
 msgid "Discard"
 msgstr "Отхвърляне"
 
-#: dcpp\net\BufferedSocket.cpp:473 dcpp\net\HttpManager.cpp:75
+#: dcpp\connection\socket\BufferedSocket.cpp:473 dcpp\connection\http\HttpManager.cpp:75
 msgid "Disconnected"
 msgstr "Връзката е прекъсната"
 
-#: dcpp\transfer\UploadManager.cpp:544
+#: dcpp\transfer\upload\UploadManager.cpp:544
 #, boost-format
 msgid "Disconnected user leaving the hub: %1%"
 msgstr "Изключен потребител при напускане на хъба: %1%"
@@ -344,7 +344,7 @@ msgstr "Изключен потребител при напускане на х�
 msgid "Document"
 msgstr "Документ"
 
-#: dcpp\app\DCPlusPlus.cpp:126
+#: dcpp\DCPlusPlus.cpp:126
 msgid "Download Queue"
 msgstr "Опашка за сваляне"
 
@@ -370,7 +370,7 @@ msgstr "Повтарящ се източник: %1%"
 msgid "Encrypted transfer"
 msgstr "Криптиран трансфер"
 
-#: dcpp\net\HttpConnection.cpp:242
+#: dcpp\connection\http\HttpConnection.cpp:242
 #, boost-format
 msgid "Endless redirection loop (%1%)"
 msgstr "Безкрайно циклично пренасочване (%1%)"
@@ -380,19 +380,19 @@ msgstr "Безкрайно циклично пренасочване (%1%)"
 msgid "Error creating hash data file: %1%"
 msgstr "Грешка при създаване на хеш файл: %1%"
 
-#: dcpp\storage\BZUtils.cpp:34 dcpp\storage\BZUtils.cpp:55 dcpp\storage\BZUtils.cpp:63
-#: dcpp\storage\ZUtils.cpp:36 dcpp\storage\ZUtils.cpp:69 dcpp\storage\ZUtils.cpp:93 dcpp\storage\ZUtils.cpp:103
+#: dcpp\core\io\compress\BZUtils.cpp:34 dcpp\core\io\compress\BZUtils.cpp:55 dcpp\core\io\compress\BZUtils.cpp:63
+#: dcpp\core\io\compress\ZUtils.cpp:36 dcpp\core\io\compress\ZUtils.cpp:69 dcpp\core\io\compress\ZUtils.cpp:93 dcpp\core\io\compress\ZUtils.cpp:103
 msgid "Error during compression"
 msgstr "Грешка при компресиране"
 
-#: dcpp\storage\BZUtils.cpp:75 dcpp\storage\BZUtils.cpp:97 dcpp\storage\BZUtils.cpp:100
-#: dcpp\net\CryptoManager.cpp:525 dcpp\net\CryptoManager.cpp:544
-#: dcpp\net\CryptoManager.cpp:558 dcpp\storage\ZUtils.cpp:117 dcpp\storage\ZUtils.cpp:142
-#: dcpp\storage\ZUtils.cpp:156
+#: dcpp\core\io\compress\BZUtils.cpp:75 dcpp\core\io\compress\BZUtils.cpp:97 dcpp\core\io\compress\BZUtils.cpp:100
+#: dcpp\core\crypto\CryptoManager.cpp:525 dcpp\core\crypto\CryptoManager.cpp:544
+#: dcpp\core\crypto\CryptoManager.cpp:558 dcpp\core\io\compress\ZUtils.cpp:117 dcpp\core\io\compress\ZUtils.cpp:142
+#: dcpp\core\io\compress\ZUtils.cpp:156
 msgid "Error during decompression"
 msgstr "Грешка при декомпресиране"
 
-#: dcpp\net\CryptoManager.cpp:164
+#: dcpp\core\crypto\CryptoManager.cpp:164
 msgid "Error generating certificate"
 msgstr "Грешка при генериране на сертификат"
 
@@ -433,15 +433,15 @@ msgstr "Грешка при взимане на външен IP адрес"
 msgid "Failed to initialize the %1% interface"
 msgstr "Не може да се инициализира %1% интерфейсът"
 
-#: dcpp\net\CryptoManager.cpp:268
+#: dcpp\core\crypto\CryptoManager.cpp:268
 msgid "Failed to load certificate file"
 msgstr "Неуспешно зареждане на файла със сертификат"
 
-#: dcpp\net\CryptoManager.cpp:276
+#: dcpp\core\crypto\CryptoManager.cpp:276
 msgid "Failed to load private key"
 msgstr "Неуспешно зареждане на личния ключ"
 
-#: dcpp\net\CryptoManager.cpp:289
+#: dcpp\core\crypto\CryptoManager.cpp:289
 #, boost-format
 msgid "Failed to load trusted certificate from %1%"
 msgstr "Неуспех при зареждане на доверен сертификат от %1%"
@@ -463,7 +463,7 @@ msgstr ""
 "Неуспешно премахване на пренасочването на портовете на устройството %1% с "
 "%2% интерфейса"
 
-#: dcpp\net\Socket.cpp:622
+#: dcpp\connection\socket\Socket.cpp:622
 msgid ""
 "Failed to set up the socks server for UDP relay (check socks address and "
 "port)"
@@ -516,11 +516,11 @@ msgstr "Завършено хеширане: %1% (%2% с %3%/s)"
 msgid "Finished hashing: %1% (%2%)"
 msgstr "Завършено хеширане: %1% (%2%)"
 
-#: dcpp\transfer\DownloadManager.cpp:295
+#: dcpp\transfer\download\DownloadManager.cpp:295
 msgid "Full tree does not match TTH root"
 msgstr "Списъка не съответства на TTH-хеша"
 
-#: dcpp\net\CryptoManager.cpp:257
+#: dcpp\core\crypto\CryptoManager.cpp:257
 msgid "Generated new TLS certificate"
 msgstr "Генерира се нов TLS сертификат"
 
@@ -528,7 +528,7 @@ msgstr "Генерира се нов TLS сертификат"
 msgid "Generic"
 msgstr "Генеричен"
 
-#: dcpp\net\HttpManager.cpp:99
+#: dcpp\connection\http\HttpManager.cpp:99
 #, boost-format
 msgid "HTTP file download failed to create file %1%, error: %2%"
 msgstr ""
@@ -538,7 +538,7 @@ msgstr ""
 msgid "Hash data rebuilding failed: %1%"
 msgstr "Неуспешно хеширане: %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:120
+#: dcpp\DCPlusPlus.cpp:120
 msgid "Hash database"
 msgstr "База-данни с хешове"
 
@@ -573,7 +573,7 @@ msgstr "Игнорирай"
 msgid "Invalid URL: %1%"
 msgstr "Невалиден URL адрес: %1%"
 
-#: dcpp\storage\Archive.cpp:41 dcpp\storage\Archive.cpp:93
+#: dcpp\core\io\compress\Archive.cpp:41 dcpp\core\io\compress\Archive.cpp:93
 msgid "Invalid archive"
 msgstr "Невалиден архив"
 
@@ -592,7 +592,7 @@ msgstr ""
 msgid "Invalid file name found while hashing folder %1%"
 msgstr "Невалидно име на файл, намерен при хеширане на папка %1%"
 
-#: dcpp\text\StringMatch.cpp:68
+#: dcpp\util\text\StringMatch.cpp:68
 #, boost-format
 msgid "Invalid regular expression: %1%"
 msgstr "Невалиден регулярен израз: %1%"
@@ -601,7 +601,7 @@ msgstr "Невалиден регулярен израз: %1%"
 msgid "Invalid search type name"
 msgstr "Невалидно име за типа търсене"
 
-#: dcpp\transfer\DownloadManager.cpp:223
+#: dcpp\transfer\download\DownloadManager.cpp:223
 msgid "Invalid size"
 msgstr "Невалиден размер"
 
@@ -613,7 +613,7 @@ msgstr ""
 "Невалиден целеви файл (липсваща папка - проверете папката за сваляне по "
 "подразбиране)"
 
-#: dcpp\net\SSLSocket.cpp:214
+#: dcpp\connection\socket\SSLSocket.cpp:214
 msgid "Keyprint mismatch"
 msgstr ""
 
@@ -627,7 +627,7 @@ msgstr ""
 "Открита е локална мрежа с възможност за преобразуване на мрежовите адреси и "
 "се прави опит да се пренасочат портовете..."
 
-#: dcpp\net\BufferedSocket.cpp:295
+#: dcpp\connection\socket\BufferedSocket.cpp:295
 msgid "Maximum command length exceeded"
 msgstr "Максималната дължина на командата е превишена"
 
@@ -636,11 +636,11 @@ msgstr "Максималната дължина на командата е пр�
 msgid "Missing dependencies for %1%"
 msgstr "Липсват зависимости за %1%"
 
-#: dcpp\system\Streams.h:159
+#: dcpp\core\io\stream\Streams.h:159
 msgid "More bytes written than requested"
 msgstr "Записани са повече байтове от заявения брой"
 
-#: dcpp\net\CryptoManager.cpp:153
+#: dcpp\core\crypto\CryptoManager.cpp:153
 msgid "No certificate file chosen"
 msgstr "Няма избран файл със сертификат"
 
@@ -648,11 +648,11 @@ msgstr "Няма избран файл със сертификат"
 msgid "No directory specified"
 msgstr "Не е определена папка"
 
-#: dcpp\net\CryptoManager.cpp:150
+#: dcpp\core\crypto\CryptoManager.cpp:150
 msgid "No private key file chosen"
 msgstr "Няма избран файл с личен ключ"
 
-#: dcpp\transfer\DownloadManager.cpp:360
+#: dcpp\transfer\download\DownloadManager.cpp:360
 msgid "No slots available"
 msgstr "Няма налични слотове"
 
@@ -670,13 +670,13 @@ msgid "Not listening for connections - please restart %1%"
 msgstr "Не се следи за връзки - моля, рестартирайте %1%"
 
 #: dcpp\hub\ClientManager.cpp:150 dcpp\hub\ClientManager.cpp:181
-#: dcpp\transfer\FinishedManager.cpp:130 dcpp\transfer\FinishedManager.cpp:136
-#: dcpp\transfer\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
+#: dcpp\modules\FinishedManager.cpp:130 dcpp\modules\FinishedManager.cpp:136
+#: dcpp\modules\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
 #: dcpp\search\SearchManager.cpp:398 dcpp\transfer\Transfer.cpp:80 dcpp\transfer\Transfer.cpp:84
 msgid "Offline"
 msgstr "Извън линия"
 
-#: dcpp\transfer\UploadManager.cpp:87
+#: dcpp\transfer\upload\UploadManager.cpp:87
 msgid "Partial file list"
 msgstr "Непълен файлов списък"
 
@@ -706,7 +706,7 @@ msgstr "Пренасочване на потребителя(ите)"
 msgid "Remove all subdirectories before adding this one"
 msgstr "Премахване на всички подпапки преди да се добави тази"
 
-#: dcpp\transfer\DownloadManager.cpp:228
+#: dcpp\transfer\download\DownloadManager.cpp:228
 msgid "Response does not match request"
 msgstr "Отговора не съвпада с искането"
 
@@ -727,20 +727,20 @@ msgstr "Търсенето е изключено: %1%"
 msgid "Search enabled again"
 msgstr "Търсенето е включено отново"
 
-#: dcpp\app\DCPlusPlus.cpp:117
+#: dcpp\DCPlusPlus.cpp:117
 msgid "Security certificates"
 msgstr "Сертификати за сигурност"
 
-#: dcpp\chat\ChatMessage.cpp:64
+#: dcpp\message\ChatMessage.cpp:64
 #, boost-format
 msgid "Sent %1%"
 msgstr "Изпратени %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:123
+#: dcpp\DCPlusPlus.cpp:123
 msgid "Shared Files"
 msgstr "Споделени файлове"
 
-#: dcpp\net\Socket.cpp:498 dcpp\net\Socket.cpp:502
+#: dcpp\connection\socket\Socket.cpp:498 dcpp\connection\socket\Socket.cpp:502
 msgid "Socks server authentication failed (bad login / password?)"
 msgstr "Грешка при свързването със Socks сървъра. (грешно име / парола?)"
 
@@ -767,25 +767,25 @@ msgstr ""
 "Успешно премахнато пренасочване на портове на устройството %1% с %2% "
 "интерфейса"
 
-#: dcpp\net\CryptoManager.cpp:473
+#: dcpp\core\crypto\CryptoManager.cpp:473
 #, boost-format
 msgid "Supplied KeyPrint %1% did not match %2%."
 msgstr ""
 
-#: dcpp\net\CryptoManager.cpp:471
+#: dcpp\core\crypto\CryptoManager.cpp:471
 msgid "Supplied KeyPrint did not match any certificate."
 msgstr ""
 
-#: dcpp\net\CryptoManager.cpp:259
+#: dcpp\core\crypto\CryptoManager.cpp:259
 #, boost-format
 msgid "TLS disabled, failed to generate certificate: %1%"
 msgstr "TLS е изключен, неуспех при генериране на сертификат: %1%"
 
-#: dcpp\net\CryptoManager.cpp:248
+#: dcpp\core\crypto\CryptoManager.cpp:248
 msgid "TLS disabled, no certificate file set"
 msgstr "TLS е изключен, няма дефиниран файл със сертификат"
 
-#: dcpp\net\SSLSocket.cpp:223
+#: dcpp\connection\socket\SSLSocket.cpp:223
 #, fuzzy, boost-format
 msgid "TLS error : %1%"
 msgstr "TLS грешка"
@@ -794,11 +794,11 @@ msgstr "TLS грешка"
 msgid "TTH"
 msgstr "TTH"
 
-#: dcpp\hash\MerkleCheckOutputStream.h:52 dcpp\hash\MerkleCheckOutputStream.h:112
+#: dcpp\hash\value\MerkleCheckOutputStream.h:52 dcpp\hash\value\MerkleCheckOutputStream.h:112
 msgid "TTH inconsistency"
 msgstr "ТТH несъвпадение"
 
-#: dcpp\transfer\Download.cpp:114
+#: dcpp\transfer\download\Download.cpp:114
 msgid "Target file is missing or wrong size"
 msgstr "Избрания файл липсва или е с грешен размер"
 
@@ -820,16 +820,16 @@ msgid ""
 "The queued file %1% already exists in your share, removing from the queue"
 msgstr ""
 
-#: dcpp\net\Socket.cpp:484
+#: dcpp\connection\socket\Socket.cpp:484
 msgid "The socks server doesn't support login / password authentication"
 msgstr "Socks сървъра не поддържа идентификация с име / парола"
 
-#: dcpp\net\Socket.cpp:397 dcpp\net\Socket.cpp:405 dcpp\net\Socket.cpp:438
-#: dcpp\net\Socket.cpp:442 dcpp\net\Socket.cpp:466 dcpp\net\Socket.cpp:481
+#: dcpp\connection\socket\Socket.cpp:397 dcpp\connection\socket\Socket.cpp:405 dcpp\connection\socket\Socket.cpp:438
+#: dcpp\connection\socket\Socket.cpp:442 dcpp\connection\socket\Socket.cpp:466 dcpp\connection\socket\Socket.cpp:481
 msgid "The socks server failed establish a connection"
 msgstr "Socks сървъра не можа да установи връзка"
 
-#: dcpp\net\Socket.cpp:470
+#: dcpp\connection\socket\Socket.cpp:470
 msgid "The socks server requires authentication"
 msgstr "Socks сървъра изисква идентификация (име и парола)"
 
@@ -858,7 +858,7 @@ msgstr ""
 msgid "This search type already exists"
 msgstr "Този тип на търсене вече съществува"
 
-#: dcpp\net\HttpConnection.cpp:287
+#: dcpp\connection\http\HttpConnection.cpp:287
 #, boost-format
 msgid "Too much data in response body (%1%)"
 msgstr ""
@@ -871,7 +871,7 @@ msgstr "Трансфер"
 msgid "Transfer (TCP)"
 msgstr "Трансфер (TCP)"
 
-#: dcpp\net\HttpConnection.cpp:203
+#: dcpp\connection\http\HttpConnection.cpp:203
 #, boost-format
 msgid "Transfer-encoding error (%1%)"
 msgstr ""
@@ -880,7 +880,7 @@ msgstr ""
 msgid "Un-ignore"
 msgstr "Извади от игнорираните"
 
-#: dcpp\system\Thread.cpp:29 dcpp\system\Thread.cpp:37
+#: dcpp\core\thread\Thread.cpp:29 dcpp\core\thread\Thread.cpp:37
 msgid "Unable to create thread"
 msgstr "Грешка при създаване на нишка"
 
@@ -912,17 +912,17 @@ msgstr "Грешка при отваряне на списъка с файлов
 msgid "Unable to read hash data file"
 msgstr "Грешка при четене на хеш файла"
 
-#: dcpp\transfer\UploadManager.cpp:209
+#: dcpp\transfer\upload\UploadManager.cpp:209
 #, boost-format
 msgid "Unable to send file %1%: %2%"
 msgstr "Не може да се изпрати файлът %1%: %2%"
 
-#: dcpp\net\Socket.cpp:201
+#: dcpp\connection\socket\Socket.cpp:201
 #, c-format, boost-format
 msgid "Unknown error: 0x%1$x"
 msgstr "Неизвестна грешка: 0x%1$x"
 
-#: dcpp\net\Socket.cpp:220
+#: dcpp\connection\socket\Socket.cpp:220
 #, c-format, boost-format
 msgid "Unknown protocol %d"
 msgstr "Неизвестен протокол %d"
@@ -932,7 +932,7 @@ msgstr "Неизвестен протокол %d"
 msgid "Updating the %1% plugin from version %2% to version %3%"
 msgstr "Актуализиране на приставката %1% от врсия %2% до версия %3%"
 
-#: dcpp\app\DCPlusPlus.cpp:111
+#: dcpp\DCPlusPlus.cpp:111
 msgid "Users"
 msgstr "Потребители"
 

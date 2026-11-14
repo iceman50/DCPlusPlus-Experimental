@@ -21,7 +21,7 @@
 
 #include <dcpp/connection/UserConnection.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 
 namespace dcpp {
 

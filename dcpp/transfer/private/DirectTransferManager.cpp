@@ -9,11 +9,11 @@
 #include <dcpp/protocol/AdcCommand.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/hub/Client.h>
-#include <dcpp/text/Encoder.h>
+#include <dcpp/hash/value/Encoder.h>
 #include <dcpp/connection/ConnectionManager.h>
-#include <dcpp/net/CryptoManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/system/Streams.h>
+#include <dcpp/core/io/stream/Streams.h>
 #include <dcpp/connection/UserConnection.h>
 
 #include <deque>

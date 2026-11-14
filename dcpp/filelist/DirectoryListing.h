@@ -24,9 +24,9 @@
 #include <dcpp/forward.h>
 
 #include <dcpp/user/HintedUser.h>
-#include <dcpp/base/FastAlloc.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/base/GetSet.h>
+#include <dcpp/core/classes/FastAlloc.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/core/types/GetSet.h>
 #include <dcpp/util/Util.h>
 
 namespace dcpp {

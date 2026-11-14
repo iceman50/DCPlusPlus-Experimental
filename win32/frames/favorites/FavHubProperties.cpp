@@ -18,17 +18,17 @@
 
 #include "stdafx.h"
 #include <dcpp/util/Util.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/controls/DialogControls.h>
-#include <win32/services/HelpService.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/components/DialogControls.h>
+#include <win32/util/HelpService.h>
 #include <win32/frames/favorites/FavHubProperties.h>
 
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/hub/HubEntry.h>
+#include <dcpp/favorites/HubEntry.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
@@ -37,7 +37,7 @@
 #include <win32/resource.h>
 #include <win32/frames/favorites/FavHubGroupsDlg.h>
 #include <win32/frames/hub/HubFrame.h>
-#include <win32/controls/HoldRedraw.h>
+#include <win32/components/HoldRedraw.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

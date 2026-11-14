@@ -23,14 +23,14 @@
 
 #include <dcpp/settings/SettingsManager.h>
 
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/net/HttpManagerListener.h>
-#include <dcpp/chat/UserCommand.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/connection/http/HttpManagerListener.h>
+#include <dcpp/hub/user_command/UserCommand.h>
 #include <dcpp/favorites/FavoriteUser.h>
-#include <dcpp/base/Singleton.h>
+#include <dcpp/core/Singleton.h>
 #include <dcpp/hub/ClientManagerListener.h>
 #include <dcpp/favorites/FavoriteManagerListener.h>
-#include <dcpp/hub/HubEntry.h>
+#include <dcpp/favorites/HubEntry.h>
 #include <dcpp/favorites/FavHubGroup.h>
 #include <dcpp/user/User.h>
 

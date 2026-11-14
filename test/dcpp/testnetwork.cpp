@@ -1,9 +1,9 @@
 // Copyright (C) 2026 iceman50
 #include "testbase.h"
 
-#include <dcpp/net/Socket.h>
-#include <dcpp/system/Thread.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/connection/socket/Socket.h>
+#include <dcpp/core/thread/Thread.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/util/Util.h>
 
 #include <thread>

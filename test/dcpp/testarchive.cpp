@@ -2,10 +2,10 @@
 
 #include "testbase.h"
 
-#include <dcpp/storage/Archive.h>
-#include <dcpp/system/File.h>
-#include <dcpp/hash/HashValue.h>
-#include <dcpp/hash/TigerHash.h>
+#include <dcpp/core/io/compress/Archive.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/hash/value/HashValue.h>
+#include <dcpp/hash/value/TigerHash.h>
 
 using namespace dcpp;
 

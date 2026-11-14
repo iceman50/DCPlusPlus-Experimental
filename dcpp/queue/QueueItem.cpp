@@ -20,14 +20,14 @@
 #include <dcpp/queue/QueueItem.h>
 
 #include <dcpp/hash/HashManager.h>
-#include <dcpp/transfer/Download.h>
-#include <dcpp/system/File.h>
+#include <dcpp/transfer/download/Download.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/util/Util.h>
 
 #ifdef _WIN32
-#include <dcpp/text/Encoder.h>
-#include <dcpp/text/Text.h>
-#include <dcpp/hash/TigerHash.h>
+#include <dcpp/hash/value/Encoder.h>
+#include <dcpp/util/text/Text.h>
+#include <dcpp/hash/value/TigerHash.h>
 #endif
 
 namespace dcpp {

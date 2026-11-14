@@ -1,9 +1,9 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "stdafx.h"
-#include <win32/app/SplashWindow.h>
-#include <win32/app/SingleInstance.h>
-#include <dcpp/app/ResourceManager.h>
-#include <dcpp/system/File.h>
+#include <win32/SplashWindow.h>
+#include <win32/SingleInstance.h>
+#include <dcpp/core/localization/ResourceManager.h>
+#include <dcpp/core/io/File.h>
 #include <dwt/Appearance.h>
 #include <dwt/resources/DibBitmap.h>
 #include <cstdio>

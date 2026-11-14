@@ -19,11 +19,11 @@
 #ifndef DCPLUSPLUS_DCPP_ADC_HUB_H
 #define DCPLUSPLUS_DCPP_ADC_HUB_H
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 #include <dcpp/hub/Client.h>
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/net/Socket.h>
+#include <dcpp/connection/socket/Socket.h>
 
 namespace dcpp {
 

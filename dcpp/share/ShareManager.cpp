@@ -21,25 +21,25 @@
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
 
 #include <dcpp/hub/AdcHub.h>
-#include <dcpp/storage/BZUtils.h>
+#include <dcpp/core/io/compress/BZUtils.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/transfer/Download.h>
-#include <dcpp/system/File.h>
-#include <dcpp/system/FilteredFile.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/transfer/download/Download.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/stream/FilteredFile.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/hash/HashBloom.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/hash/value/HashBloom.h>
 #include <dcpp/hash/HashManager.h>
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
 #include <dcpp/search/SearchResult.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/storage/SQLiteDB.h>
-#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/core/io/db/SQLiteDB.h>
+#include <dcpp/util/text/StringTokenizer.h>
 #include <dcpp/transfer/Transfer.h>
 #include <dcpp/connection/UserConnection.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #ifndef _WIN32
 #include <dirent.h>

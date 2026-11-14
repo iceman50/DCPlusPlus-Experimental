@@ -12,8 +12,8 @@
 #include <dcpp/protocol/AdcCommand.h>
 #include <dcpp/hub/AdcHub.h>
 #include <dcpp/hub/Client.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/hub/HubEntry.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/favorites/HubEntry.h>
 #include <dcpp/search/SearchManager.h>
 
 using namespace dcpp;

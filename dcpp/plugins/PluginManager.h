@@ -28,16 +28,16 @@
 #include <condition_variable>
 #include <set>
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 #include <dcpp/hub/ClientManagerListener.h>
 #include <dcpp/plugins/PluginDefs.h>
 #include <dcpp/plugins/PluginEntity.h>
 #include <dcpp/queue/QueueManagerListener.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/chat/Tagger.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/message/Tagger.h>
+#include <dcpp/core/timer/TimerManager.h>
 
 #ifdef _WIN32
 typedef HMODULE PluginHandle;

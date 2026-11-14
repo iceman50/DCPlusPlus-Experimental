@@ -6,8 +6,8 @@
 
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/system/File.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/core/io/File.h>
 
 using namespace dcpp;
 

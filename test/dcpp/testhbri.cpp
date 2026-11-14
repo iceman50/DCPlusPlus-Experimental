@@ -1,8 +1,8 @@
 // Copyright (C) 2026 iceman50
 #include "testbase.h"
 
-#include <dcpp/base/Exception.h>
-#include <dcpp/connectivity/HBRIValidation.h>
+#include <dcpp/core/classes/Exception.h>
+#include <dcpp/hub/HBRIValidation.h>
 
 using namespace dcpp;
 

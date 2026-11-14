@@ -1,27 +1,27 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "stdafx.h"
 
-#include <win32/app/SingleInstance.h>
-#include <win32/app/UiServices.h>
-#include <win32/appearance/ColorUtil.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/frames/chat/ChatCommands.h>
-#include <win32/frames/chat/ChatText.h>
-#include <win32/services/LinkActions.h>
-#include <win32/dialogs/ParamDlg.h>
-#include <win32/settings/connection/BandwidthLimitPage.h>
-#include <win32/settings/appearance/AppearancePage.h>
-#include <win32/appearance/ThemeManager.h>
+#include <win32/SingleInstance.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/ColorUtil.h>
+#include <win32/components/TableLayout.h>
+#include <win32/ChatCommands.h>
+#include <win32/ChatText.h>
+#include <win32/util/LinkActions.h>
+#include <win32/dialog/ParamDlg.h>
+#include <win32/settings/BandwidthLimitPage.h>
+#include <win32/settings/AppearancePage.h>
+#include <win32/util/ThemeManager.h>
 #include <dcpp/user/UserMatchManager.h>
 #include <dwt/widgets/Window.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/CheckBox.h>
-#include <dcpp/app/ResourceManager.h>
-#include <dcpp/search/Magnet.h>
+#include <dcpp/core/localization/ResourceManager.h>
+#include <dcpp/core/classes/Magnet.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/system/TimerManager.h>
-#include <dcpp/transfer/ThrottleManager.h>
+#include <dcpp/core/timer/TimerManager.h>
+#include <dcpp/connection/ThrottleManager.h>
 #include <cstdio>
 #include <stdexcept>
 

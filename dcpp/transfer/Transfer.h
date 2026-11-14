@@ -22,10 +22,10 @@
 #include <deque>
 
 #include <dcpp/forward.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/transfer/Segment.h>
-#include <dcpp/base/GetSet.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/core/classes/Segment.h>
+#include <dcpp/core/types/GetSet.h>
 
 namespace dcpp {
 

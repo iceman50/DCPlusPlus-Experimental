@@ -1,12 +1,12 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "testbase.h"
-#include <dcpp/net/HttpConnection.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/net/Socket.h>
+#include <dcpp/connection/http/HttpConnection.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/connection/socket/Socket.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/system/Streams.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/io/stream/Streams.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <chrono>
 #include <future>
 

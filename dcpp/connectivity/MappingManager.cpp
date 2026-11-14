@@ -21,14 +21,14 @@
 
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/text/format.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/connectivity/Mapper_MiniUPnPc.h>
-#include <dcpp/connectivity/Mapper_NATPMP.h>
-#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/connectivity/mappers/Mapper_MiniUPnPc.h>
+#include <dcpp/connectivity/mappers/Mapper_NATPMP.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 namespace dcpp {
 

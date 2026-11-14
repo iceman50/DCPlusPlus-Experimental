@@ -21,8 +21,8 @@
 #include <sys/resource.h>
 #endif
 
-#include <dcpp/system/File.h>
-#include <dcpp/system/FileReader.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/FileReader.h>
 
 namespace dcpp {
 

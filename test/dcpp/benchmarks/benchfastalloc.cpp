@@ -18,7 +18,7 @@
 #include "testbase.h"
 
 #include <dcpp/filelist/DirectoryListing.h>
-#include <dcpp/base/FastAlloc.h>
+#include <dcpp/core/classes/FastAlloc.h>
 #include <dcpp/user/OnlineUser.h>
 #include <dcpp/queue/QueueItem.h>
 #include <dcpp/search/SearchResult.h>

@@ -25,12 +25,12 @@
 #include <dcpp/settings/SettingsManager.h>
 
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/net/Socket.h>
-#include <dcpp/system/Thread.h>
-#include <dcpp/base/Singleton.h>
+#include <dcpp/connection/socket/Socket.h>
+#include <dcpp/core/thread/Thread.h>
+#include <dcpp/core/Singleton.h>
 
 #include <dcpp/search/SearchManagerListener.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/timer/TimerManager.h>
 
 namespace dcpp {
 

@@ -6,10 +6,10 @@
 
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
 
-#include <dcpp/system/File.h>
-#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/hash/value/MerkleTree.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/util/Util.h>
 
 #include <openssl/evp.h>

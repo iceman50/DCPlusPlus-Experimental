@@ -28,9 +28,9 @@
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
 
-#include <win32/frames/users/AspectUserCommand.h>
-#include <win32/controls/ListFilter.h>
-#include <win32/frames/base/MDIChildFrame.h>
+#include <win32/AspectUserCommand.h>
+#include <win32/components/ListFilter.h>
+#include <win32/frames/MDIChildFrame.h>
 
 using std::list;
 using std::set;

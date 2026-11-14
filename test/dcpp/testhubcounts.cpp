@@ -8,7 +8,7 @@
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/net/HttpManager.h>
+#include <dcpp/connection/http/HttpManager.h>
 #include <dcpp/settings/SettingsManager.h>
 
 using namespace dcpp;

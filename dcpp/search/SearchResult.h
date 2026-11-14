@@ -21,10 +21,10 @@
 
 #include <dcpp/forward.h>
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/base/FastAlloc.h>
+#include <dcpp/core/classes/FastAlloc.h>
 #include <dcpp/user/HintedUser.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/base/Pointer.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/core/classes/Pointer.h>
 
 namespace dcpp {
 

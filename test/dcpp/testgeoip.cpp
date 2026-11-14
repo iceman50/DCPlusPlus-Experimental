@@ -2,10 +2,10 @@
 
 #include "testbase.h"
 
-#include <dcpp/geo/GeoIP.h>
+#include <dcpp/core/geo/GeoIP.h>
 #include <dcpp/user/CID.h>
-#include <dcpp/system/File.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/util/text/Text.h>
 #include <filesystem>
 #include <fstream>
 #include <zlib.h>

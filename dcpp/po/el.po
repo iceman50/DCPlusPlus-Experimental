@@ -18,7 +18,7 @@ msgstr ""
 "X-Launchpad-Export-Date: 2025-09-09 10:37+0000\n"
 "X-Generator: Launchpad (build 3db21b43f675a56d404bb64e0fe1fcfc5dc01a90)\n"
 
-#: dcpp\transfer\DownloadManager.cpp:359
+#: dcpp\transfer\download\DownloadManager.cpp:359
 #, boost-format
 msgid " - Queued: %1%"
 msgstr ""
@@ -63,8 +63,8 @@ msgstr ""
 msgid "%1% %2% port (%3% %4%)"
 msgstr ""
 
-#: dcpp\net\HttpConnection.cpp:133 dcpp\net\HttpConnection.cpp:216
-#: dcpp\net\HttpConnection.cpp:272
+#: dcpp\connection\http\HttpConnection.cpp:133 dcpp\connection\http\HttpConnection.cpp:216
+#: dcpp\connection\http\HttpConnection.cpp:272
 #, boost-format
 msgid "%1% (%2%)"
 msgstr ""
@@ -119,7 +119,7 @@ msgstr "%1% αποβλήθηκε από %2%: %3%"
 msgid "%1% was kicked: %2%"
 msgstr "%1% αποβλήθηκε: %2%"
 
-#: dcpp\transfer\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
+#: dcpp\modules\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
 #, boost-format
 msgid "%1%/s"
 msgstr "%1%/s"
@@ -129,7 +129,7 @@ msgstr "%1%/s"
 msgid "%1%: %2%"
 msgstr ""
 
-#: dcpp\transfer\DownloadManager.cpp:460
+#: dcpp\transfer\download\DownloadManager.cpp:460
 #, boost-format
 msgid "%1%: File not available"
 msgstr "%1%: Το αρχείο δεν είναι διαθέσιμο"
@@ -144,7 +144,7 @@ msgstr "%d B"
 msgid "%s B"
 msgstr "%s B"
 
-#: dcpp\search\ADLSearch.cpp:34
+#: dcpp\modules\ADLSearch.cpp:34
 msgid "<Enter string>"
 msgstr "<Εισάγετε αλφαριθμητικό>"
 
@@ -215,7 +215,7 @@ msgstr "Ασυνέχεια CRC32 (Έλεγχος-SFV)"
 msgid "CRC32 inconsistency (SFV-Check): %1%"
 msgstr "Ασυνέχεια CRC32 (Έλεγχος-SFV)"
 
-#: dcpp\net\CryptoManager.cpp:374
+#: dcpp\core\crypto\CryptoManager.cpp:374
 #, boost-format
 msgid "Certificate verification for %1% failed with error: %2%"
 msgstr ""
@@ -224,13 +224,13 @@ msgstr ""
 msgid "Compressed"
 msgstr "Συμπιεσμένο"
 
-#: dcpp\net\BufferedSocket.cpp:202 dcpp\net\SSLSocket.cpp:179 dcpp\net\SSLSocket.cpp:186
-#: dcpp\net\SSLSocket.cpp:196 dcpp\net\SSLSocket.cpp:208
+#: dcpp\connection\socket\BufferedSocket.cpp:202 dcpp\connection\socket\SSLSocket.cpp:179 dcpp\connection\socket\SSLSocket.cpp:186
+#: dcpp\connection\socket\SSLSocket.cpp:196 dcpp\connection\socket\SSLSocket.cpp:208
 msgid "Connection closed"
 msgstr "Η σύνδεση τερματίστηκε"
 
-#: dcpp\net\BufferedSocket.cpp:169 dcpp\net\BufferedSocket.cpp:187
-#: dcpp\connection\ConnectionManager.cpp:220 dcpp\net\Socket.cpp:390
+#: dcpp\connection\socket\BufferedSocket.cpp:169 dcpp\connection\socket\BufferedSocket.cpp:187
+#: dcpp\connection\ConnectionManager.cpp:220 dcpp\connection\socket\Socket.cpp:390
 msgid "Connection timeout"
 msgstr "Σύνδεση εκτός χρόνου"
 
@@ -270,17 +270,17 @@ msgstr "Η σύνδεση αποκαταστάθηκε"
 msgid "Connectivity settings are being configured; try again later"
 msgstr ""
 
-#: dcpp\net\Socket.cpp:341
+#: dcpp\connection\socket\Socket.cpp:341
 #, fuzzy
 msgid "Could not open port for listening"
 msgstr "Δεν ήταν δυνατό να ανοιχτεί το αρχείο προορισμού: %1%"
 
-#: dcpp\transfer\DownloadManager.cpp:235
+#: dcpp\transfer\download\DownloadManager.cpp:235
 #, boost-format
 msgid "Could not open target file: %1%"
 msgstr "Δεν ήταν δυνατό να ανοιχτεί το αρχείο προορισμού: %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:130
+#: dcpp\DCPlusPlus.cpp:130
 msgid "Country information"
 msgstr ""
 
@@ -308,15 +308,15 @@ msgstr "Ο κατάλογος αποδίδει σε λάθος όνομα"
 msgid "Disabled"
 msgstr ""
 
-#: dcpp\search\ADLSearch.cpp:410
+#: dcpp\modules\ADLSearch.cpp:410
 msgid "Discard"
 msgstr "Απόρριψη"
 
-#: dcpp\net\BufferedSocket.cpp:473 dcpp\net\HttpManager.cpp:75
+#: dcpp\connection\socket\BufferedSocket.cpp:473 dcpp\connection\http\HttpManager.cpp:75
 msgid "Disconnected"
 msgstr "Αποσυνδέθηκε"
 
-#: dcpp\transfer\UploadManager.cpp:544
+#: dcpp\transfer\upload\UploadManager.cpp:544
 #, boost-format
 msgid "Disconnected user leaving the hub: %1%"
 msgstr "Αποσύνδεση χρήστη που αποχώρησε από την κυψέλη: %1%"
@@ -325,7 +325,7 @@ msgstr "Αποσύνδεση χρήστη που αποχώρησε από τη�
 msgid "Document"
 msgstr "Έγγραφο"
 
-#: dcpp\app\DCPlusPlus.cpp:126
+#: dcpp\DCPlusPlus.cpp:126
 msgid "Download Queue"
 msgstr "Αρχεία προς Λήψη"
 
@@ -351,7 +351,7 @@ msgstr "Διπλή πηγή: %1%"
 msgid "Encrypted transfer"
 msgstr " Κρυπτογραφημένη θύρα μεταφορών (%1% TCP)"
 
-#: dcpp\net\HttpConnection.cpp:242
+#: dcpp\connection\http\HttpConnection.cpp:242
 #, boost-format
 msgid "Endless redirection loop (%1%)"
 msgstr ""
@@ -361,19 +361,19 @@ msgstr ""
 msgid "Error creating hash data file: %1%"
 msgstr "Σφάλμα κατά τη δημιουργία αρχείου με τα δεδομένα δεικτοποίησης: %1%"
 
-#: dcpp\storage\BZUtils.cpp:34 dcpp\storage\BZUtils.cpp:55 dcpp\storage\BZUtils.cpp:63
-#: dcpp\storage\ZUtils.cpp:36 dcpp\storage\ZUtils.cpp:69 dcpp\storage\ZUtils.cpp:93 dcpp\storage\ZUtils.cpp:103
+#: dcpp\core\io\compress\BZUtils.cpp:34 dcpp\core\io\compress\BZUtils.cpp:55 dcpp\core\io\compress\BZUtils.cpp:63
+#: dcpp\core\io\compress\ZUtils.cpp:36 dcpp\core\io\compress\ZUtils.cpp:69 dcpp\core\io\compress\ZUtils.cpp:93 dcpp\core\io\compress\ZUtils.cpp:103
 msgid "Error during compression"
 msgstr "Σφάλμα κατά την συμπίεση"
 
-#: dcpp\storage\BZUtils.cpp:75 dcpp\storage\BZUtils.cpp:97 dcpp\storage\BZUtils.cpp:100
-#: dcpp\net\CryptoManager.cpp:525 dcpp\net\CryptoManager.cpp:544
-#: dcpp\net\CryptoManager.cpp:558 dcpp\storage\ZUtils.cpp:117 dcpp\storage\ZUtils.cpp:142
-#: dcpp\storage\ZUtils.cpp:156
+#: dcpp\core\io\compress\BZUtils.cpp:75 dcpp\core\io\compress\BZUtils.cpp:97 dcpp\core\io\compress\BZUtils.cpp:100
+#: dcpp\core\crypto\CryptoManager.cpp:525 dcpp\core\crypto\CryptoManager.cpp:544
+#: dcpp\core\crypto\CryptoManager.cpp:558 dcpp\core\io\compress\ZUtils.cpp:117 dcpp\core\io\compress\ZUtils.cpp:142
+#: dcpp\core\io\compress\ZUtils.cpp:156
 msgid "Error during decompression"
 msgstr "Σφάλμα κατά την αποσυμπίεση"
 
-#: dcpp\net\CryptoManager.cpp:164
+#: dcpp\core\crypto\CryptoManager.cpp:164
 msgid "Error generating certificate"
 msgstr "Σφάλμα κατά τη δημιουργία πιστοποιητικού"
 
@@ -414,15 +414,15 @@ msgstr "Αποτυχία ανάθεσης εξωτερικής IP"
 msgid "Failed to initialize the %1% interface"
 msgstr "Έναρξη ανανέωσης της λίστας διαθέσιμων αρχείων"
 
-#: dcpp\net\CryptoManager.cpp:268
+#: dcpp\core\crypto\CryptoManager.cpp:268
 msgid "Failed to load certificate file"
 msgstr "Αποτυχία φόρτωσης του αρχείου του πιστοποιητικού"
 
-#: dcpp\net\CryptoManager.cpp:276
+#: dcpp\core\crypto\CryptoManager.cpp:276
 msgid "Failed to load private key"
 msgstr "Αποτυχία φόρτωσης ιδιωτικού κλειδιού"
 
-#: dcpp\net\CryptoManager.cpp:289
+#: dcpp\core\crypto\CryptoManager.cpp:289
 #, boost-format
 msgid "Failed to load trusted certificate from %1%"
 msgstr ""
@@ -442,7 +442,7 @@ msgid ""
 "Failed to remove port mappings from the %1% device with the %2% interface"
 msgstr "Αδύνατο να δημιουργηθεί νήμα (thread)"
 
-#: dcpp\net\Socket.cpp:622
+#: dcpp\connection\socket\Socket.cpp:622
 msgid ""
 "Failed to set up the socks server for UDP relay (check socks address and "
 "port)"
@@ -495,11 +495,11 @@ msgstr "Τέλος δεικτοποίησης: %1% (%2%/s)"
 msgid "Finished hashing: %1% (%2%)"
 msgstr "Τέλος δεικτοποίησης: %1% (%2%/s)"
 
-#: dcpp\transfer\DownloadManager.cpp:295
+#: dcpp\transfer\download\DownloadManager.cpp:295
 msgid "Full tree does not match TTH root"
 msgstr "Το δέντρο αρχείων δεν ταιριάζει στο TTH"
 
-#: dcpp\net\CryptoManager.cpp:257
+#: dcpp\core\crypto\CryptoManager.cpp:257
 msgid "Generated new TLS certificate"
 msgstr "Δημιουργία νέου πιστοποιητικού TLS"
 
@@ -507,7 +507,7 @@ msgstr "Δημιουργία νέου πιστοποιητικού TLS"
 msgid "Generic"
 msgstr ""
 
-#: dcpp\net\HttpManager.cpp:99
+#: dcpp\connection\http\HttpManager.cpp:99
 #, boost-format
 msgid "HTTP file download failed to create file %1%, error: %2%"
 msgstr ""
@@ -517,7 +517,7 @@ msgstr ""
 msgid "Hash data rebuilding failed: %1%"
 msgstr "Η δεικτοποίηση απέτυχε: %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:120
+#: dcpp\DCPlusPlus.cpp:120
 msgid "Hash database"
 msgstr "Βάση Δεδομένων Δεικτοποίησης"
 
@@ -552,7 +552,7 @@ msgstr ""
 msgid "Invalid URL: %1%"
 msgstr "Απενεργοποίηση αναζήτησης %1%"
 
-#: dcpp\storage\Archive.cpp:41 dcpp\storage\Archive.cpp:93
+#: dcpp\core\io\compress\Archive.cpp:41 dcpp\core\io\compress\Archive.cpp:93
 #, fuzzy
 msgid "Invalid archive"
 msgstr "Μη έγκυρο μέγεθος"
@@ -571,7 +571,7 @@ msgstr ""
 msgid "Invalid file name found while hashing folder %1%"
 msgstr ""
 
-#: dcpp\text\StringMatch.cpp:68
+#: dcpp\util\text\StringMatch.cpp:68
 #, boost-format
 msgid "Invalid regular expression: %1%"
 msgstr ""
@@ -580,7 +580,7 @@ msgstr ""
 msgid "Invalid search type name"
 msgstr ""
 
-#: dcpp\transfer\DownloadManager.cpp:223
+#: dcpp\transfer\download\DownloadManager.cpp:223
 msgid "Invalid size"
 msgstr "Μη έγκυρο μέγεθος"
 
@@ -592,7 +592,7 @@ msgstr ""
 "Μη έγκυρο αρχείο προορισμού (ελλειπής φάκελος, ελέγξτε τις επιλογές του "
 "προκαθορισμένου φακέλου αποθήκευσης)"
 
-#: dcpp\net\SSLSocket.cpp:214
+#: dcpp\connection\socket\SSLSocket.cpp:214
 msgid "Keyprint mismatch"
 msgstr ""
 
@@ -604,7 +604,7 @@ msgstr "Αποβολή χρήστη(ών)"
 msgid "Local network with possible NAT detected, trying to map the ports..."
 msgstr ""
 
-#: dcpp\net\BufferedSocket.cpp:295
+#: dcpp\connection\socket\BufferedSocket.cpp:295
 msgid "Maximum command length exceeded"
 msgstr "Υπέρβαση του μέγιστου μήκους εντολής"
 
@@ -613,11 +613,11 @@ msgstr "Υπέρβαση του μέγιστου μήκους εντολής"
 msgid "Missing dependencies for %1%"
 msgstr ""
 
-#: dcpp\system\Streams.h:159
+#: dcpp\core\io\stream\Streams.h:159
 msgid "More bytes written than requested"
 msgstr "Γράφτηκαν περισσότερα bytes από όσα ζητήθηκαν"
 
-#: dcpp\net\CryptoManager.cpp:153
+#: dcpp\core\crypto\CryptoManager.cpp:153
 msgid "No certificate file chosen"
 msgstr "Δεν επιλέχθηκε αρχείο πιστοποιητικού"
 
@@ -625,11 +625,11 @@ msgstr "Δεν επιλέχθηκε αρχείο πιστοποιητικού"
 msgid "No directory specified"
 msgstr "Δεν έχει καθοριστεί κατάλογος"
 
-#: dcpp\net\CryptoManager.cpp:150
+#: dcpp\core\crypto\CryptoManager.cpp:150
 msgid "No private key file chosen"
 msgstr "Δεν επιλέχθηκε αρχείο ιδιωτικού κλειδιού"
 
-#: dcpp\transfer\DownloadManager.cpp:360
+#: dcpp\transfer\download\DownloadManager.cpp:360
 msgid "No slots available"
 msgstr "Δεν υπάρχουν διαθέσιμες θέσεις"
 
@@ -647,13 +647,13 @@ msgid "Not listening for connections - please restart %1%"
 msgstr "Δεν γίνεται listen για συνδέσεις - παρακαλώ επανεκκινήστε %1%"
 
 #: dcpp\hub\ClientManager.cpp:150 dcpp\hub\ClientManager.cpp:181
-#: dcpp\transfer\FinishedManager.cpp:130 dcpp\transfer\FinishedManager.cpp:136
-#: dcpp\transfer\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
+#: dcpp\modules\FinishedManager.cpp:130 dcpp\modules\FinishedManager.cpp:136
+#: dcpp\modules\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
 #: dcpp\search\SearchManager.cpp:398 dcpp\transfer\Transfer.cpp:80 dcpp\transfer\Transfer.cpp:84
 msgid "Offline"
 msgstr "Εκτός σύνδεσης"
 
-#: dcpp\transfer\UploadManager.cpp:87
+#: dcpp\transfer\upload\UploadManager.cpp:87
 msgid "Partial file list"
 msgstr ""
 
@@ -683,7 +683,7 @@ msgstr "Εκτροπή χρήστη(ών)"
 msgid "Remove all subdirectories before adding this one"
 msgstr "Αφαιρέστε όλους τους υποκαταλόγους πριν την προσθήκη αυτού"
 
-#: dcpp\transfer\DownloadManager.cpp:228
+#: dcpp\transfer\download\DownloadManager.cpp:228
 msgid "Response does not match request"
 msgstr "Η απόκριση δεν ταιριάζει στο αίτημα"
 
@@ -705,21 +705,21 @@ msgstr "Απενεργοποίηση αναζήτησης %1%"
 msgid "Search enabled again"
 msgstr "Η αναζήτηση ενεργοποιήθηκε ξανά"
 
-#: dcpp\app\DCPlusPlus.cpp:117
+#: dcpp\DCPlusPlus.cpp:117
 #, fuzzy
 msgid "Security certificates"
 msgstr "Σφάλμα κατά τη δημιουργία πιστοποιητικού"
 
-#: dcpp\chat\ChatMessage.cpp:64
+#: dcpp\message\ChatMessage.cpp:64
 #, boost-format
 msgid "Sent %1%"
 msgstr ""
 
-#: dcpp\app\DCPlusPlus.cpp:123
+#: dcpp\DCPlusPlus.cpp:123
 msgid "Shared Files"
 msgstr "Διαμοιραζόμενα Αρχεία"
 
-#: dcpp\net\Socket.cpp:498 dcpp\net\Socket.cpp:502
+#: dcpp\connection\socket\Socket.cpp:498 dcpp\connection\socket\Socket.cpp:502
 msgid "Socks server authentication failed (bad login / password?)"
 msgstr ""
 "Αποτυχία πιστοποίησης με το Διακομιστή Socks (λάθος χρήστης/συνθηματικό;)"
@@ -743,25 +743,25 @@ msgid ""
 "Successfully removed port mappings from the %1% device with the %2% interface"
 msgstr "Αδύνατο να δημιουργηθεί νήμα (thread)"
 
-#: dcpp\net\CryptoManager.cpp:473
+#: dcpp\core\crypto\CryptoManager.cpp:473
 #, boost-format
 msgid "Supplied KeyPrint %1% did not match %2%."
 msgstr ""
 
-#: dcpp\net\CryptoManager.cpp:471
+#: dcpp\core\crypto\CryptoManager.cpp:471
 msgid "Supplied KeyPrint did not match any certificate."
 msgstr ""
 
-#: dcpp\net\CryptoManager.cpp:259
+#: dcpp\core\crypto\CryptoManager.cpp:259
 #, boost-format
 msgid "TLS disabled, failed to generate certificate: %1%"
 msgstr "Απενεργοποίηση TLS, αποτυχία δημιουργίας πιστοποιητικού: %1%"
 
-#: dcpp\net\CryptoManager.cpp:248
+#: dcpp\core\crypto\CryptoManager.cpp:248
 msgid "TLS disabled, no certificate file set"
 msgstr "Απενεργοποίηση TLS, δεν έχει οριστεί αρχείο πιστοποιητικού"
 
-#: dcpp\net\SSLSocket.cpp:223
+#: dcpp\connection\socket\SSLSocket.cpp:223
 #, boost-format
 msgid "TLS error : %1%"
 msgstr ""
@@ -770,11 +770,11 @@ msgstr ""
 msgid "TTH"
 msgstr "ΤΤΗ"
 
-#: dcpp\hash\MerkleCheckOutputStream.h:52 dcpp\hash\MerkleCheckOutputStream.h:112
+#: dcpp\hash\value\MerkleCheckOutputStream.h:52 dcpp\hash\value\MerkleCheckOutputStream.h:112
 msgid "TTH inconsistency"
 msgstr "Ασυνέχεια TTH"
 
-#: dcpp\transfer\Download.cpp:114
+#: dcpp\transfer\download\Download.cpp:114
 msgid "Target file is missing or wrong size"
 msgstr "Το αρχείο προορισμού δεν βρέθηκε ή έχει λάθος μέγεθος"
 
@@ -794,16 +794,16 @@ msgid ""
 "The queued file %1% already exists in your share, removing from the queue"
 msgstr ""
 
-#: dcpp\net\Socket.cpp:484
+#: dcpp\connection\socket\Socket.cpp:484
 msgid "The socks server doesn't support login / password authentication"
 msgstr "Ο Διακομιστής Socks δεν υποστηρίζει πιστοποίηση χρήστη/συνθηματικού"
 
-#: dcpp\net\Socket.cpp:397 dcpp\net\Socket.cpp:405 dcpp\net\Socket.cpp:438
-#: dcpp\net\Socket.cpp:442 dcpp\net\Socket.cpp:466 dcpp\net\Socket.cpp:481
+#: dcpp\connection\socket\Socket.cpp:397 dcpp\connection\socket\Socket.cpp:405 dcpp\connection\socket\Socket.cpp:438
+#: dcpp\connection\socket\Socket.cpp:442 dcpp\connection\socket\Socket.cpp:466 dcpp\connection\socket\Socket.cpp:481
 msgid "The socks server failed establish a connection"
 msgstr "Ο Διακομιστής Socks απέτυχε να πραγματοποιήσει σύνδεση"
 
-#: dcpp\net\Socket.cpp:470
+#: dcpp\connection\socket\Socket.cpp:470
 msgid "The socks server requires authentication"
 msgstr "Ο Διακομιστής Socks απαιτεί πιστοποίηση"
 
@@ -830,7 +830,7 @@ msgstr ""
 msgid "This search type already exists"
 msgstr ""
 
-#: dcpp\net\HttpConnection.cpp:287
+#: dcpp\connection\http\HttpConnection.cpp:287
 #, boost-format
 msgid "Too much data in response body (%1%)"
 msgstr ""
@@ -844,7 +844,7 @@ msgstr ""
 msgid "Transfer (TCP)"
 msgstr " Θύρα μεταφορών (%1% TCP)"
 
-#: dcpp\net\HttpConnection.cpp:203
+#: dcpp\connection\http\HttpConnection.cpp:203
 #, boost-format
 msgid "Transfer-encoding error (%1%)"
 msgstr ""
@@ -853,7 +853,7 @@ msgstr ""
 msgid "Un-ignore"
 msgstr ""
 
-#: dcpp\system\Thread.cpp:29 dcpp\system\Thread.cpp:37
+#: dcpp\core\thread\Thread.cpp:29 dcpp\core\thread\Thread.cpp:37
 msgid "Unable to create thread"
 msgstr "Αδύνατο να δημιουργηθεί νήμα (thread)"
 
@@ -885,17 +885,17 @@ msgstr "Αδύνατο το άνοιγμα της λίστας αρχείων: %
 msgid "Unable to read hash data file"
 msgstr "Αδύνατη η ανάγνωση του αρχείου δεδομένων δεικτοποίησης"
 
-#: dcpp\transfer\UploadManager.cpp:209
+#: dcpp\transfer\upload\UploadManager.cpp:209
 #, boost-format
 msgid "Unable to send file %1%: %2%"
 msgstr "Αδύνατη η αποστολή του αρχείου %1%: %2%"
 
-#: dcpp\net\Socket.cpp:201
+#: dcpp\connection\socket\Socket.cpp:201
 #, c-format, boost-format
 msgid "Unknown error: 0x%1$x"
 msgstr "Άγνωστο σφάλμα: 0x%1$x"
 
-#: dcpp\net\Socket.cpp:220
+#: dcpp\connection\socket\Socket.cpp:220
 #, fuzzy, c-format, boost-format
 msgid "Unknown protocol %d"
 msgstr "Άγνωστο σφάλμα: 0x%1$x"
@@ -905,7 +905,7 @@ msgstr "Άγνωστο σφάλμα: 0x%1$x"
 msgid "Updating the %1% plugin from version %2% to version %3%"
 msgstr ""
 
-#: dcpp\app\DCPlusPlus.cpp:111
+#: dcpp\DCPlusPlus.cpp:111
 msgid "Users"
 msgstr "Χρήστες"
 

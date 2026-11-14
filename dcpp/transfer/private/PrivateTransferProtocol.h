@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include <dcpp/base/Exception.h>
+#include <dcpp/core/classes/Exception.h>
 
 namespace dcpp {
 namespace pft {

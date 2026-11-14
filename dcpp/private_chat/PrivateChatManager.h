@@ -1,0 +1,90 @@
+/*
+ * Copyright (C) 2001-2025 Jacek Sieka, arnetheduck on gmail point com
+ * Copyright (C) 2026 iceman50
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef DCPLUSPLUS_DCPP_PRIVATE_CHAT_MANAGER_H
+#define DCPLUSPLUS_DCPP_PRIVATE_CHAT_MANAGER_H
+
+#include <functional>
+#include <unordered_map>
+
+#include <dcpp/connection/ConnectionManagerListener.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/private_chat/PrivateChatManagerListener.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/Speaker.h>
+#include <dcpp/user/User.h>
+#include <dcpp/connection/UserConnectionListener.h>
+
+namespace dcpp {
+
+class PrivateChatManager :
+	public Singleton<PrivateChatManager>,
+	public Speaker<PrivateChatManagerListener>,
+	private ConnectionManagerListener,
+	private UserConnectionListener
+{
+public:
+	using AcceptConnectionF = std::function<bool (const UserPtr&)>;
+
+	void setAcceptConnectionF(AcceptConnectionF f);
+
+	UserConnection* getPMConn(const UserPtr& user,
+		const string& expectedToken = Util::emptyString);
+	// False means that the expected connection is no longer live or suitable
+	// for parking.
+	bool returnPMConn(const UserPtr& user, const string& token, UserConnection* uc);
+	void releasePMConn(const UserPtr& user, const string& token, bool disconnect);
+	// The manager pins the connection against Removed for the entire send.
+	bool outboxDirectMessage(const HintedUser& user, const string& text, bool thirdPerson, bool probeOnly);
+	void setOutboxRecipients(const vector<HintedUser>& users);
+
+private:
+	friend class Singleton<PrivateChatManager>;
+
+	PrivateChatManager();
+	~PrivateChatManager();
+
+	struct PMConnection {
+		UserConnection* connection;
+		string token;
+	};
+
+	struct KnownPMConnection {
+		UserPtr user;
+		string token;
+	};
+
+	unordered_map<UserPtr, PMConnection, User::Hash> ccpms;
+	unordered_map<UserConnection*, KnownPMConnection> knownCCPMs;
+	CriticalSection cs;
+	AcceptConnectionF acceptConnectionF;
+	bool shuttingDown = false;
+	vector<HintedUser> outboxRecipients;
+
+	// ConnectionManagerListener
+	void on(ConnectionManagerListener::Connected, ConnectionQueueItem* cqi, UserConnection* uc) noexcept;
+	void on(ConnectionManagerListener::Removed, ConnectionQueueItem* cqi) noexcept;
+
+	// UserConnectionListener
+	void on(UserConnectionListener::PrivateMessage, UserConnection* uc, const ChatMessage& message) noexcept;
+	void on(AdcCommand::PMI, UserConnection* uc, const AdcCommand& cmd) noexcept;
+};
+
+} // namespace dcpp
+
+#endif // DCPLUSPLUS_DCPP_PRIVATE_CHAT_MANAGER_H

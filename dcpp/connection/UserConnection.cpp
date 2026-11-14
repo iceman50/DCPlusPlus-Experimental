@@ -20,14 +20,14 @@
 #include <dcpp/connection/UserConnection.h>
 
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/chat/ChatMessage.h>
+#include <dcpp/message/ChatMessage.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/transfer/private/PrivateTransferProtocol.h>
-#include <dcpp/chat/RichText.h>
+#include <dcpp/message/RichText.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/text/StringTokenizer.h>
 #include <dcpp/transfer/Transfer.h>
 
 namespace dcpp {

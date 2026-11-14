@@ -21,26 +21,26 @@
 
 #include <dcpp/protocol/AdcCommand.h>
 #include <dcpp/bbs/BBSManager.h>
-#include <dcpp/chat/ChatMessage.h>
+#include <dcpp/message/ChatMessage.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/text/Encoder.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/hash/value/Encoder.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/text/format.h>
-#include <dcpp/connectivity/HBRIValidation.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/hub/HBRIValidation.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/text/StringTokenizer.h>
-#include <dcpp/transfer/ThrottleManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/util/text/StringTokenizer.h>
+#include <dcpp/connection/ThrottleManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/chat/RichText.h>
+#include <dcpp/message/RichText.h>
 #include <dcpp/transfer/private/PrivateTransferProtocol.h>
-#include <dcpp/chat/UserCommand.h>
+#include <dcpp/hub/user_command/UserCommand.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <cmath>
 

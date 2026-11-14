@@ -21,7 +21,7 @@
 
 #include <unordered_map>
 
-#include <dcpp/hub/HubSettings.h>
+#include <dcpp/settings/HubSettings.h>
 
 namespace dcpp {
 

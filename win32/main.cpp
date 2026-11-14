@@ -18,25 +18,25 @@
 
 #include "stdafx.h"
 #include <dcpp/util/Util.h>
-#include <win32/app/UiServices.h>
+#include <win32/util/UiServices.h>
 
 #include <exception>
 
-#include <win32/app/CrashLogger.h>
-#include <win32/app/dwtTexts.h>
-#include <win32/app/MainWindow.h>
+#include <win32/CrashLogger.h>
+#include <win32/dwtTexts.h>
+#include <win32/MainWindow.h>
 #include <win32/plugins/PluginApiWin.h>
-#include <win32/app/SingleInstance.h>
-#include <win32/app/SplashWindow.h>
+#include <win32/SingleInstance.h>
+#include <win32/SplashWindow.h>
 
-#include <dcpp/app/DCPlusPlus.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/system/File.h>
-#include <dcpp/text/Text.h>
-#include <dcpp/system/Thread.h>
+#include <dcpp/DCPlusPlus.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/util/text/Text.h>
+#include <dcpp/core/thread/Thread.h>
 #include <dcpp/connectivity/MappingManager.h>
-#include <dcpp/app/ResourceManager.h>
-#include <dcpp/version.h>
+#include <dcpp/core/localization/ResourceManager.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/Application.h>
 

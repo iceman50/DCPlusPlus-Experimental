@@ -8,15 +8,15 @@
  */
 
 #include "stdafx.h"
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/controls/DialogControls.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/components/DialogControls.h>
 
 #include <win32/frames/bbs/BBSPostDlg.h>
 
 #include <dcpp/bbs/BBSManager.h>
-#include <dcpp/text/format.h>
-#include <dcpp/chat/RichText.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/message/RichText.h>
 
 #include <dwt/widgets/Button.h>
 #include <dwt/widgets/CheckBox.h>
@@ -24,7 +24,7 @@
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/TextBox.h>
 
-#include <win32/controls/RichTextEditorDlg.h>
+#include <win32/dialog/RichTextEditorDlg.h>
 #include <win32/resource.h>
 
 using dwt::Grid;

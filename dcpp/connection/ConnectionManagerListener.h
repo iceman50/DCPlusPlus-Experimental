@@ -20,7 +20,7 @@
 #define CONNECTION_MANAGER_LISTENER_H
 
 #include <dcpp/forward.h>
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 namespace dcpp {
 

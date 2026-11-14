@@ -14,14 +14,14 @@
 #include <optional>
 #include <unordered_map>
 
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/hash/value/MerkleTree.h>
 #include <dcpp/queue/QueueManagerListener.h>
 #include <dcpp/search/SearchManagerListener.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/base/Speaker.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/Speaker.h>
+#include <dcpp/core/timer/TimerManager.h>
 
 namespace dcpp {
 

@@ -6,11 +6,11 @@
 #include <cmath>
 #include <iostream>
 
-#include <dcpp/system/File.h>
-#include <dcpp/system/FileReader.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/hash/TigerHash.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/FileReader.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/hash/value/TigerHash.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/util/Util.h>
 
 using namespace std;

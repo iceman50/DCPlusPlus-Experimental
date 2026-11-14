@@ -27,7 +27,7 @@
 
 #include <dcpp/forward.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/base/Singleton.h>
+#include <dcpp/core/Singleton.h>
 #include <dcpp/user/UserMatch.h>
 
 namespace dcpp {

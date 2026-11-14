@@ -11,16 +11,16 @@
 #include <dcpp/bbs/BBSManager.h>
 
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/text/Encoder.h>
-#include <dcpp/system/File.h>
+#include <dcpp/hash/value/Encoder.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/hash/HashManager.h>
 #include <dcpp/queue/QueueItem.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/search/SearchResult.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/util/Util.h>
 
 #include <limits>

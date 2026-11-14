@@ -1,8 +1,8 @@
 // Copyright (C) 2026 iceman50
 #include "testbase.h"
 
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/logging/LogMessage.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/events/LogMessage.h>
 #include <dcpp/settings/SettingsManager.h>
 
 using namespace dcpp;

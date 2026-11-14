@@ -19,7 +19,7 @@
 #ifndef DCPLUSPLUS_DCPP_UTIL_H
 #define DCPLUSPLUS_DCPP_UTIL_H
 
-#include <dcpp/compiler.h>
+#include <dcpp/core/header/compiler.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -44,7 +44,7 @@
 
 #endif
 
-#include <dcpp/text/Text.h>
+#include <dcpp/util/text/Text.h>
 
 namespace dcpp {
 
@@ -298,7 +298,7 @@ public:
 	}
 
 	// Overloads used by SimpleXML::addChildAttrib
-	// https://sourceforge.net/p/dcplusplus/code/ci/b508c2f2047949e6f815f9f9e6db08239facd7cb/tree/dcpp/text/SimpleXML.h#l63
+	// https://sourceforge.net/p/dcplusplus/code/ci/b508c2f2047949e6f815f9f9e6db08239facd7cb/tree/dcpp/core/io/xml/SimpleXML.h#l63
 	// Don't use unconstrained templates to avoid modifying overload
 	// resolution
 	static string toString(int val) {

@@ -25,7 +25,7 @@
 #define DCPLUSPLUS_DCPP_PLUGIN_API_IMPL_H
 
 #include <dcpp/forward.h>
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 #include <dcpp/plugins/PluginDefs.h>
 

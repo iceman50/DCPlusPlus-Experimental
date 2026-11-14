@@ -27,15 +27,15 @@
 
 #include <optional>
 
-#include <dcpp/base/Singleton.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/system/Thread.h>
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/system/SemaphoreDCpp.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/core/thread/Thread.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/core/thread/SemaphoreDCpp.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/hash/HashManagerListener.h>
-#include <dcpp/base/GetSet.h>
-#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/core/types/GetSet.h>
+#include <dcpp/core/io/db/SQLiteDB.h>
 
 namespace dcpp {
 

@@ -17,25 +17,25 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/util/Util.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/appearance/UiFonts.h>
-#include <win32/controls/TableActions.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/frames/users/UserPresentation.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/util/UiFonts.h>
+#include <win32/components/TableActions.h>
+#include <win32/components/TableLayout.h>
+#include <win32/util/UserPresentation.h>
 #include <win32/frames/users/UsersFrame.h>
 
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/transfer/UploadManager.h>
-#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/transfer/upload/UploadManager.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
 
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
@@ -44,9 +44,9 @@
 #include <dwt/widgets/SplitterContainer.h>
 #include <dwt/widgets/TextBox.h>
 
-#include <win32/dialogs/ParamDlg.h>
-#include <win32/controls/HoldRedraw.h>
-#include <win32/controls/TypedTable.h>
+#include <win32/dialog/ParamDlg.h>
+#include <win32/components/HoldRedraw.h>
+#include <win32/components/TypedTable.h>
 
 using std::for_each;
 using dwt::Grid;

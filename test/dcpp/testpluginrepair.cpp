@@ -4,10 +4,10 @@
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/plugins/PluginHttp.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/storage/Archive.h>
-#include <dcpp/system/File.h>
+#include <dcpp/core/io/compress/Archive.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/chat/Tagger.h>
+#include <dcpp/message/Tagger.h>
 #include <zlib.h>
 #include <filesystem>
 #include <future>

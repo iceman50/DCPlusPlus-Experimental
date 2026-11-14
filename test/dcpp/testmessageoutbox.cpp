@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "testbase.h"
-#include <dcpp/chat/MessageOutbox.h>
+#include <dcpp/private_chat/MessageOutbox.h>
 #include <chrono>
 #include <filesystem>
 #include <future>

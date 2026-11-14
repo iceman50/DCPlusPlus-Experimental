@@ -4,7 +4,7 @@
 
 #include "testbase.h"
 
-#include <win32/frames/transfers/private/PrivateSendNotifications.h>
+#include <win32/frames/private_transfer/PrivateSendNotifications.h>
 
 using namespace dcpp;
 

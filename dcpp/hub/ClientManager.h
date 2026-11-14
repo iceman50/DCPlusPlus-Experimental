@@ -28,9 +28,9 @@
 #include <dcpp/connection/ConnectionType.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/user/OnlineUser.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/net/Socket.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/connection/socket/Socket.h>
+#include <dcpp/core/timer/TimerManager.h>
 
 namespace dcpp {
 

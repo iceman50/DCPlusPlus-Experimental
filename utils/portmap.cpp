@@ -6,13 +6,13 @@
 #include <iostream>
 #include <memory>
 
-#include <dcpp/connectivity/Mapper_MiniUPnPc.h>
-#include <dcpp/connectivity/Mapper_NATPMP.h>
-#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/connectivity/mappers/Mapper_MiniUPnPc.h>
+#include <dcpp/connectivity/mappers/Mapper_NATPMP.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
 #include <dcpp/util/Util.h>
 
 #ifdef _WIN32
-#include <dcpp/system/w.h>
+#include <dcpp/core/header/w.h>
 
 #else
 #include <sys/socket.h>

@@ -1,9 +1,9 @@
 // Copyright (C) 2026 iceman50
 #include "testbase.h"
 
-#include <dcpp/hash/HashBloom.h>
-#include <dcpp/hash/HashValue.h>
-#include <dcpp/hash/TigerHash.h>
+#include <dcpp/hash/value/HashBloom.h>
+#include <dcpp/hash/value/HashValue.h>
+#include <dcpp/hash/value/TigerHash.h>
 
 using namespace dcpp;
 

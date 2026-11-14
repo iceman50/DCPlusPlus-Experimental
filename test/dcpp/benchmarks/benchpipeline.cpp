@@ -1,7 +1,7 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "testbase.h"
-#include <dcpp/system/File.h>
-#include <dcpp/system/FileReader.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/FileReader.h>
 #include <dcpp/hash/TigerTreeHasher.h>
 #include <dcpp/hash/HashManager.h>
 #include <algorithm>

@@ -11,10 +11,10 @@
 #include <dcpp/hash/HashManager.h>
 #undef private
 
-#include <dcpp/system/File.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/storage/SQLiteDB.h>
+#include <dcpp/core/io/db/SQLiteDB.h>
 #include <dcpp/util/Util.h>
 
 using namespace dcpp;

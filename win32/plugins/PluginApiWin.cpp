@@ -17,20 +17,20 @@
  */
 
 #include "stdafx.h"
-#include <win32/app/UiServices.h>
-#include <win32/services/Notifications.h>
+#include <win32/util/UiServices.h>
+#include <win32/Notifications.h>
 #include <win32/plugins/PluginApiWin.h>
 
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/widgets/LoadDialog.h>
 #include <dwt/widgets/MessageBox.h>
 
-#include <win32/app/MainWindow.h>
+#include <win32/MainWindow.h>
 #include <win32/plugins/PluginInfoDlg.h>
 
 DCUI PluginApiWin::dcUI = {

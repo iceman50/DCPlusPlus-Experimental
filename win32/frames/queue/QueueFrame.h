@@ -22,14 +22,14 @@
 #include <memory>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/util/Util.h>
-#include <win32/appearance/ImageLists.h>
+#include <win32/util/ImageLists.h>
 #include <unordered_map>
 
-#include <dcpp/base/FastAlloc.h>
+#include <dcpp/core/classes/FastAlloc.h>
 #include <dcpp/queue/QueueManagerListener.h>
 #include <dcpp/queue/QueueItem.h>
 
-#include <win32/frames/base/StaticFrame.h>
+#include <win32/frames/StaticFrame.h>
 
 using std::unique_ptr;
 using std::unordered_multimap;

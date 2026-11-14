@@ -19,7 +19,7 @@
 #ifndef DCPLUSPLUS_DCPP_STDINC_H
 #define DCPLUSPLUS_DCPP_STDINC_H
 
-#include <dcpp/compiler.h>
+#include <dcpp/core/header/compiler.h>
 
 #ifndef BZ_NO_STDIO
 #define BZ_NO_STDIO 1
@@ -32,7 +32,7 @@
 #ifdef HAS_PCH
 
 #ifdef _WIN32
-#include <dcpp/system/w.h>
+#include <dcpp/core/header/w.h>
 #else
 #include <arpa/inet.h>
 #include <dirent.h>

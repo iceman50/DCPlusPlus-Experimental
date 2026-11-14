@@ -7,11 +7,11 @@
 
 #include "testbase.h"
 
-#include <dcpp/system/File.h>
-#include <dcpp/system/FilteredFile.h>
-#include <dcpp/hash/HashValue.h>
-#include <dcpp/hash/TigerHash.h>
-#include <dcpp/storage/ZUtils.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/stream/FilteredFile.h>
+#include <dcpp/hash/value/HashValue.h>
+#include <dcpp/hash/value/TigerHash.h>
+#include <dcpp/core/io/compress/ZUtils.h>
 
 using namespace dcpp;
 

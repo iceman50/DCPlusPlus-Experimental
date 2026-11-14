@@ -1,21 +1,21 @@
 /* Copyright (C) 2026 iceman50. GPL-3.0-or-later. */
 
 #include "stdafx.h"
-#include <win32/app/UiServices.h>
-#include <win32/appearance/ControlSeeds.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/ControlSeeds.h>
 
-#include <win32/frames/chat/AspectChat.h>
-#include <win32/app/SingleInstance.h>
+#include <win32/AspectChat.h>
+#include <win32/SingleInstance.h>
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/hash/HashManager.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/app/ResourceManager.h>
+#include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/search/SearchManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dwt/widgets/Window.h>
 #include <cstdio>
 #include <stdexcept>

@@ -7,8 +7,8 @@
 #include <dcpp/transfer/private/PrivateTransferProtocol.h>
 
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/text/Text.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/util/text/Text.h>
+#include <dcpp/core/timer/TimerManager.h>
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>

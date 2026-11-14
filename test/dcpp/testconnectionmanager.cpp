@@ -19,15 +19,15 @@
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/hub/NmdcHub.h>
 #include <dcpp/connection/UserConnection.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dcpp/plugins/PluginManager.h>
 #undef private
 
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/transfer/DownloadManager.h>
+#include <dcpp/transfer/download/DownloadManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>

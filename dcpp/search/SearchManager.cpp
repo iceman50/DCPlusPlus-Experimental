@@ -23,12 +23,12 @@
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/text/format.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/search/SearchResult.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/net/CryptoManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
 
 namespace dcpp {
 

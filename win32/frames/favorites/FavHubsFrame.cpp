@@ -17,13 +17,13 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
-#include <win32/app/UiServices.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/controls/TableActions.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/frames/users/UserPresentation.h>
+#include <dcpp/core/header/format.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/components/TableActions.h>
+#include <win32/components/TableLayout.h>
+#include <win32/util/UserPresentation.h>
 #include <win32/frames/favorites/FavHubsFrame.h>
 
 #include <set>
@@ -31,7 +31,7 @@
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/MessageBox.h>

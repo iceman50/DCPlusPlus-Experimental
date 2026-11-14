@@ -19,8 +19,8 @@
 #include "stdinc.h"
 #include <dcpp/search/SearchResult.h>
 
-#include <dcpp/transfer/UploadManager.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/transfer/upload/UploadManager.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/user/User.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/hub/Client.h>

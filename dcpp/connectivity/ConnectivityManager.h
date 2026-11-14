@@ -19,12 +19,12 @@
 #ifndef DCPLUSPLUS_DCPP_CONNECTIVITY_MANAGER_H
 #define DCPLUSPLUS_DCPP_CONNECTIVITY_MANAGER_H
 
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/logging/LogMessage.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/events/LogMessage.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/base/Speaker.h>
-#include <dcpp/base/tribool.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/Speaker.h>
+#include <dcpp/core/classes/tribool.h>
 
 #include <string>
 #include <unordered_map>

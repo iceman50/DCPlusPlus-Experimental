@@ -21,12 +21,12 @@
 
 #include <list>
 
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/settings/SettingsManager.h>
 
 #include <dcpp/forward.h>
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/hub/Client.h>
 
 namespace dcpp {

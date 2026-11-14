@@ -20,10 +20,10 @@
 #define DCPLUSPLUS_DCPP_SETTINGS_MANAGER_H
 
 #include <dcpp/util/Util.h>
-#include <dcpp/base/Speaker.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/base/Exception.h>
-#include <dcpp/hub/HubSettings.h>
+#include <dcpp/core/Speaker.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/classes/Exception.h>
+#include <dcpp/settings/HubSettings.h>
 
 #include <algorithm>
 

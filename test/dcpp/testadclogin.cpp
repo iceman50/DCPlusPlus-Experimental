@@ -7,7 +7,7 @@
 // Drive the real login handlers and capture their outgoing commands without a hub.
 #define private public
 #include <dcpp/hub/AdcHub.h>
-#include <dcpp/net/BufferedSocket.h>
+#include <dcpp/connection/socket/BufferedSocket.h>
 #undef private
 
 #include <dcpp/bbs/BBSManager.h>
@@ -15,14 +15,14 @@
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/hash/HashManager.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/net/HttpManager.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/connection/http/HttpManager.h>
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dcpp/user/UserMatchManager.h>
 
 using namespace dcpp;

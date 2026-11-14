@@ -19,21 +19,21 @@
 #include "stdinc.h"
 #include <dcpp/hub/NmdcHub.h>
 
-#include <dcpp/chat/ChatMessage.h>
+#include <dcpp/message/ChatMessage.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/text/format.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/net/Socket.h>
-#include <dcpp/text/StringTokenizer.h>
-#include <dcpp/text/Text.h>
-#include <dcpp/transfer/ThrottleManager.h>
+#include <dcpp/connection/socket/Socket.h>
+#include <dcpp/util/text/StringTokenizer.h>
+#include <dcpp/util/text/Text.h>
+#include <dcpp/connection/ThrottleManager.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/chat/UserCommand.h>
-#include <dcpp/version.h>
+#include <dcpp/hub/user_command/UserCommand.h>
+#include <dcpp/core/version.h>
 
 namespace dcpp {
 

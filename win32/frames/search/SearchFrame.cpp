@@ -17,29 +17,29 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/user/HintedUser.h>
-#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/text/StringTokenizer.h>
 #include <dcpp/util/Util.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/appearance/ImageLists.h>
-#include <win32/appearance/UiFonts.h>
-#include <win32/controls/KeyState.h>
-#include <win32/controls/TableActions.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/dialogs/FilePickers.h>
-#include <win32/frames/users/UserActions.h>
-#include <win32/frames/users/UserCommands.h>
-#include <win32/frames/users/UserPresentation.h>
-#include <win32/services/LinkActions.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/util/ImageLists.h>
+#include <win32/util/UiFonts.h>
+#include <win32/components/KeyState.h>
+#include <win32/components/TableActions.h>
+#include <win32/components/TableLayout.h>
+#include <win32/dialog/FilePickers.h>
+#include <win32/util/UserActions.h>
+#include <win32/UserCommands.h>
+#include <win32/util/UserPresentation.h>
+#include <win32/util/LinkActions.h>
 #include <win32/frames/search/SearchFrame.h>
-#include <win32/appearance/CountryFlags.h>
+#include <win32/util/CountryFlags.h>
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/geo/GeoManager.h>
+#include <dcpp/core/geo/GeoManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchResult.h>
 #include <dcpp/share/ShareManager.h>
@@ -49,9 +49,9 @@
 #include <dwt/widgets/SplitterContainer.h>
 #include <dwt/widgets/TableTree.h>
 
-#include <win32/controls/HoldRedraw.h>
+#include <win32/components/HoldRedraw.h>
 #include <win32/resource.h>
-#include <win32/controls/TypedTable.h>
+#include <win32/components/TypedTable.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

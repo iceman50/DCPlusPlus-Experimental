@@ -19,13 +19,13 @@
 #ifndef DCPLUSPLUS_WIN32_STDAFX_H
 #define DCPLUSPLUS_WIN32_STDAFX_H
 
-#include <dcpp/compiler.h>
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/compiler.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/util/Util.h>
 #include "compiler.h"
 
 #include <dcpp/stdinc.h>
-#include <dcpp/system/w.h>
+#include <dcpp/core/header/w.h>
 
 namespace dcpp { }
 using namespace dcpp;
@@ -53,8 +53,8 @@ using namespace dcpp;
 #include <dwt/widgets/Tree.h>
 #include <dwt/widgets/Window.h>
 
-#include <win32/controls/RichTextBox.h>
-#include <win32/shell/ShellMenu.h>
+#include <win32/RichTextBox.h>
+#include <win32/components/ShellMenu.h>
 
 #endif
 

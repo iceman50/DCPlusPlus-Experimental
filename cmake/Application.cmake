@@ -2,7 +2,7 @@
 set(generated "${CMAKE_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${generated}/dcpp" "${generated}/help")
 # Copy just this translation unit so quoted includes select CMake's own metadata.
-configure_file("${DCPP_ROOT}/dcpp/version.cpp" "${generated}/dcpp/version.cpp" COPYONLY)
+configure_file("${DCPP_ROOT}/dcpp/core/version.cpp" "${generated}/dcpp/version.cpp" COPYONLY)
 file(CONFIGURE OUTPUT "${generated}/dcpp/version-build.inc"
     CONTENT "#define DCPP_BUILD_NUMBER @DCPP_BUILD_NUMBER@\n" @ONLY)
 add_custom_target(cmake_revision
@@ -23,7 +23,7 @@ add_custom_target(cmake_help_ids DEPENDS "${generated}/help/cshelp.h")
 
 file(GLOB_RECURSE core_sources CONFIGURE_DEPENDS "${DCPP_ROOT}/dcpp/*.cpp")
 file(GLOB_RECURSE core_headers CONFIGURE_DEPENDS "${DCPP_ROOT}/dcpp/*.h")
-list(REMOVE_ITEM core_sources "${DCPP_ROOT}/dcpp/version.cpp")
+list(REMOVE_ITEM core_sources "${DCPP_ROOT}/dcpp/core/version.cpp")
 add_library(dcpp STATIC ${core_sources} ${core_headers} "${generated}/dcpp/version.cpp")
 source_group(TREE "${DCPP_ROOT}/dcpp" PREFIX Core FILES ${core_sources} ${core_headers})
 add_dependencies(dcpp cmake_revision)

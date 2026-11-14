@@ -17,36 +17,36 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/user/HintedUser.h>
 #include <unordered_map>
 #include <dcpp/util/Util.h>
-#include <win32/app/UiServices.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/appearance/ImageLists.h>
-#include <win32/controls/DialogControls.h>
-#include <win32/controls/KeyState.h>
-#include <win32/controls/TableActions.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/dialogs/FilePickers.h>
-#include <win32/frames/users/UserCommands.h>
-#include <win32/frames/users/UserPresentation.h>
-#include <win32/services/LinkActions.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/util/ImageLists.h>
+#include <win32/components/DialogControls.h>
+#include <win32/components/KeyState.h>
+#include <win32/components/TableActions.h>
+#include <win32/components/TableLayout.h>
+#include <win32/dialog/FilePickers.h>
+#include <win32/UserCommands.h>
+#include <win32/util/UserPresentation.h>
+#include <win32/util/LinkActions.h>
 #include <win32/frames/filelist/DirectoryListingFrame.h>
 
 #include <atomic>
 
-#include <dcpp/search/ADLSearch.h>
+#include <dcpp/modules/ADLSearch.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/system/File.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/base/ScopedFunctor.h>
-#include <dcpp/system/Thread.h>
-#include <dcpp/app/WindowInfo.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
+#include <dcpp/core/thread/Thread.h>
+#include <dcpp/recents/WindowInfo.h>
 
 #include <dwt/widgets/FolderDialog.h>
 #include <dwt/widgets/Grid.h>
@@ -56,12 +56,12 @@
 #include <dwt/widgets/ToolBar.h>
 #include <dwt/widgets/VirtualTree.h>
 
-#include <win32/controls/TypedTable.h>
-#include <win32/controls/TypedTree.h>
-#include <win32/shell/ShellMenu.h>
-#include <win32/app/MainWindow.h>
-#include <win32/frames/tools/TextFrame.h>
-#include <win32/controls/HoldRedraw.h>
+#include <win32/components/TypedTable.h>
+#include <win32/components/TypedTree.h>
+#include <win32/components/ShellMenu.h>
+#include <win32/MainWindow.h>
+#include <win32/frames/text/TextFrame.h>
+#include <win32/components/HoldRedraw.h>
 
 #include <win32/resource.h>
 

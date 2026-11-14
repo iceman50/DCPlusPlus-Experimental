@@ -21,13 +21,13 @@
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
-#include <dcpp/base/debug.h>
-#include <dcpp/text/format.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/header/debug.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/connectivity/MappingManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 namespace dcpp {
 

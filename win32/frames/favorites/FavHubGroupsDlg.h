@@ -19,11 +19,11 @@
 #ifndef DCPLUSPLUS_WIN32_FAVHUBGROUPSDLG_H
 #define DCPLUSPLUS_WIN32_FAVHUBGROUPSDLG_H
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 #include <dcpp/favorites/FavHubGroup.h>
-#include <dcpp/base/FastAlloc.h>
-#include <dcpp/hub/HubEntry.h>
-#include <dcpp/hub/HubSettings.h>
+#include <dcpp/core/classes/FastAlloc.h>
+#include <dcpp/favorites/HubEntry.h>
+#include <dcpp/settings/HubSettings.h>
 
 #include <dwt/widgets/ModalDialog.h>
 

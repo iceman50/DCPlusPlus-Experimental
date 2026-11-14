@@ -22,7 +22,7 @@
 #include <dcpp/favorites/FavoriteManagerListener.h>
 #include <dcpp/hub/ClientManagerListener.h>
 
-#include <win32/frames/base/StaticFrame.h>
+#include <win32/frames/StaticFrame.h>
 
 class FavHubsFrame :
 	public StaticFrame<FavHubsFrame>,

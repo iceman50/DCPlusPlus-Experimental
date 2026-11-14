@@ -21,7 +21,7 @@ class DistBuildTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         (self.root / "scripts").mkdir()
         shutil.copy2(ROOT / "scripts/dist-build.ps1", self.root / "scripts/dist-build.ps1")
-        self.write("dcpp/version.h", '#define VERSIONSTRING "0.8842"\n')
+        self.write("dcpp/core/version.h", '#define VERSIONSTRING "0.8842"\n')
         self.write("dcpp/version-rev-id.inc", '#define DCPP_REVISION "[123abcd]"\n')
         self.write("changelog-bfe.txt", "Fixture changelog")
         self.write("Themes/sample.xml", "theme")

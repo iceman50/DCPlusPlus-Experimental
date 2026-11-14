@@ -21,9 +21,9 @@
 
 #include <dcpp/hub/Client.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/text/format.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/version.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/core/version.h>
 
 namespace dcpp {
 

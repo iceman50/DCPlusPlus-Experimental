@@ -20,11 +20,11 @@
 #define DCPLUSPLUS_DCPP_USER_H
 
 #include <dcpp/forward.h>
-#include <dcpp/base/Pointer.h>
+#include <dcpp/core/classes/Pointer.h>
 #include <dcpp/user/CID.h>
-#include <dcpp/base/FastAlloc.h>
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/base/Flags.h>
+#include <dcpp/core/classes/FastAlloc.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/core/classes/Flags.h>
 
 namespace dcpp {
 

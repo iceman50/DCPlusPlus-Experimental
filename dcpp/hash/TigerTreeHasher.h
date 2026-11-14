@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <functional>
 
-#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/hash/value/MerkleTree.h>
 
 namespace dcpp {
 

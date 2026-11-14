@@ -5,8 +5,8 @@
 
 #include "testbase.h"
 
-#include <dcpp/transfer/Download.h>
-#include <dcpp/system/File.h>
+#include <dcpp/transfer/download/Download.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/queue/QueueItem.h>
 #define private public
 #include <dcpp/connection/UserConnection.h>

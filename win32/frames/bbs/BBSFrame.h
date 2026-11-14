@@ -14,9 +14,9 @@
 #include <memory>
 
 #include <dcpp/bbs/BBSManager.h>
-#include <dcpp/app/WindowInfo.h>
+#include <dcpp/recents/WindowInfo.h>
 
-#include <win32/frames/base/MDIChildFrame.h>
+#include <win32/frames/MDIChildFrame.h>
 
 namespace dcpp { class AdcHub; }
 

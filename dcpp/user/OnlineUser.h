@@ -22,10 +22,10 @@
 #include <map>
 
 #include <dcpp/forward.h>
-#include <dcpp/base/Flags.h>
-#include <dcpp/base/FastAlloc.h>
-#include <dcpp/base/GetSet.h>
-#include <dcpp/chat/Style.h>
+#include <dcpp/core/classes/Flags.h>
+#include <dcpp/core/classes/FastAlloc.h>
+#include <dcpp/core/types/GetSet.h>
+#include <dcpp/message/Style.h>
 #include <dcpp/util/Util.h>
 #include <dcpp/user/User.h>
 #include <dcpp/plugins/PluginEntity.h>

@@ -23,14 +23,14 @@
 #include <set>
 
 #include <dcpp/user/User.h>
-#include <dcpp/base/FastAlloc.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/transfer/MCN.h>
-#include <dcpp/base/Flags.h>
+#include <dcpp/core/classes/FastAlloc.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/connection/MCN.h>
+#include <dcpp/core/classes/Flags.h>
 #include <dcpp/forward.h>
-#include <dcpp/transfer/Segment.h>
+#include <dcpp/core/classes/Segment.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/base/GetSet.h>
+#include <dcpp/core/types/GetSet.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/plugins/PluginEntity.h>
 

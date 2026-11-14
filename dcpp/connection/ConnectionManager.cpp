@@ -22,12 +22,12 @@
 #include <dcpp/hub/Client.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/transfer/DownloadManager.h>
-#include <dcpp/text/Encoder.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/transfer/download/DownloadManager.h>
+#include <dcpp/hash/value/Encoder.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dcpp/connection/UserConnection.h>
 
 namespace dcpp {

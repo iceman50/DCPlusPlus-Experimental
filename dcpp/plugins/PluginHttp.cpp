@@ -2,8 +2,8 @@
 #include "stdinc.h"
 #include <dcpp/plugins/PluginHttp.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/net/HttpConnection.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/connection/http/HttpConnection.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <atomic>
 #include <condition_variable>

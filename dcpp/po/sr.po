@@ -18,7 +18,7 @@ msgstr ""
 "X-Launchpad-Export-Date: 2025-09-09 10:37+0000\n"
 "X-Generator: Launchpad (build 3db21b43f675a56d404bb64e0fe1fcfc5dc01a90)\n"
 
-#: dcpp\transfer\DownloadManager.cpp:359
+#: dcpp\transfer\download\DownloadManager.cpp:359
 #, boost-format
 msgid " - Queued: %1%"
 msgstr " - U redu: %1%"
@@ -63,8 +63,8 @@ msgstr "%1% %2% (dodato od %3%)"
 msgid "%1% %2% port (%3% %4%)"
 msgstr "%1% %2% port (%3% %4%)"
 
-#: dcpp\net\HttpConnection.cpp:133 dcpp\net\HttpConnection.cpp:216
-#: dcpp\net\HttpConnection.cpp:272
+#: dcpp\connection\http\HttpConnection.cpp:133 dcpp\connection\http\HttpConnection.cpp:216
+#: dcpp\connection\http\HttpConnection.cpp:272
 #, boost-format
 msgid "%1% (%2%)"
 msgstr "%1% (%2%)"
@@ -118,7 +118,7 @@ msgstr "%1% je izbačen od %2%: %3%"
 msgid "%1% was kicked: %2%"
 msgstr "%1% je izbačen: %2%"
 
-#: dcpp\transfer\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
+#: dcpp\modules\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
 #, boost-format
 msgid "%1%/s"
 msgstr "%1%/s"
@@ -128,7 +128,7 @@ msgstr "%1%/s"
 msgid "%1%: %2%"
 msgstr "%1%: %2%"
 
-#: dcpp\transfer\DownloadManager.cpp:460
+#: dcpp\transfer\download\DownloadManager.cpp:460
 #, boost-format
 msgid "%1%: File not available"
 msgstr "%1%: Datoteka nije dostupna"
@@ -143,7 +143,7 @@ msgstr "%d B"
 msgid "%s B"
 msgstr "%s B"
 
-#: dcpp\search\ADLSearch.cpp:34
+#: dcpp\modules\ADLSearch.cpp:34
 msgid "<Enter string>"
 msgstr "<Unesite tekst>"
 
@@ -217,7 +217,7 @@ msgstr "CRC32 neusaglašenost (SFV-Check)"
 msgid "CRC32 inconsistency (SFV-Check): %1%"
 msgstr "CRC32 neusaglašenost (SFV-Check): %1%"
 
-#: dcpp\net\CryptoManager.cpp:374
+#: dcpp\core\crypto\CryptoManager.cpp:374
 #, boost-format
 msgid "Certificate verification for %1% failed with error: %2%"
 msgstr "Potvrda sertifikata za %1% nije uspela uz grešku: %2%"
@@ -226,13 +226,13 @@ msgstr "Potvrda sertifikata za %1% nije uspela uz grešku: %2%"
 msgid "Compressed"
 msgstr "Kompresovano"
 
-#: dcpp\net\BufferedSocket.cpp:202 dcpp\net\SSLSocket.cpp:179 dcpp\net\SSLSocket.cpp:186
-#: dcpp\net\SSLSocket.cpp:196 dcpp\net\SSLSocket.cpp:208
+#: dcpp\connection\socket\BufferedSocket.cpp:202 dcpp\connection\socket\SSLSocket.cpp:179 dcpp\connection\socket\SSLSocket.cpp:186
+#: dcpp\connection\socket\SSLSocket.cpp:196 dcpp\connection\socket\SSLSocket.cpp:208
 msgid "Connection closed"
 msgstr "Veza je prekinuta"
 
-#: dcpp\net\BufferedSocket.cpp:169 dcpp\net\BufferedSocket.cpp:187
-#: dcpp\connection\ConnectionManager.cpp:220 dcpp\net\Socket.cpp:390
+#: dcpp\connection\socket\BufferedSocket.cpp:169 dcpp\connection\socket\BufferedSocket.cpp:187
+#: dcpp\connection\ConnectionManager.cpp:220 dcpp\connection\socket\Socket.cpp:390
 msgid "Connection timeout"
 msgstr "Vreme povezivanja je isteklo"
 
@@ -285,16 +285,16 @@ msgstr "Veza ponovo uspostavljena"
 msgid "Connectivity settings are being configured; try again later"
 msgstr "Parametri veze se trenutno podešavaju; pokušajte ponovo kasnije"
 
-#: dcpp\net\Socket.cpp:341
+#: dcpp\connection\socket\Socket.cpp:341
 msgid "Could not open port for listening"
 msgstr "Ne mogu da otvorim port"
 
-#: dcpp\transfer\DownloadManager.cpp:235
+#: dcpp\transfer\download\DownloadManager.cpp:235
 #, boost-format
 msgid "Could not open target file: %1%"
 msgstr "Ne mogu da otvorim datoteku: %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:130
+#: dcpp\DCPlusPlus.cpp:130
 msgid "Country information"
 msgstr "Informacije o zemlji"
 
@@ -322,15 +322,15 @@ msgstr "Direktorijumu nedostaje atribut ime"
 msgid "Disabled"
 msgstr "Onemogućeno"
 
-#: dcpp\search\ADLSearch.cpp:410
+#: dcpp\modules\ADLSearch.cpp:410
 msgid "Discard"
 msgstr "Odbaci"
 
-#: dcpp\net\BufferedSocket.cpp:473 dcpp\net\HttpManager.cpp:75
+#: dcpp\connection\socket\BufferedSocket.cpp:473 dcpp\connection\http\HttpManager.cpp:75
 msgid "Disconnected"
 msgstr "Isključen"
 
-#: dcpp\transfer\UploadManager.cpp:544
+#: dcpp\transfer\upload\UploadManager.cpp:544
 #, boost-format
 msgid "Disconnected user leaving the hub: %1%"
 msgstr "Isključen korisnik koji je napustio hab: %1%"
@@ -339,7 +339,7 @@ msgstr "Isključen korisnik koji je napustio hab: %1%"
 msgid "Document"
 msgstr "Dokument"
 
-#: dcpp\app\DCPlusPlus.cpp:126
+#: dcpp\DCPlusPlus.cpp:126
 msgid "Download Queue"
 msgstr "Red za preuzimanje"
 
@@ -363,7 +363,7 @@ msgstr "Izvor duplikata: %1%"
 msgid "Encrypted transfer"
 msgstr "Šifrovan prenos"
 
-#: dcpp\net\HttpConnection.cpp:242
+#: dcpp\connection\http\HttpConnection.cpp:242
 #, boost-format
 msgid "Endless redirection loop (%1%)"
 msgstr "Beskrajna redirekcija (%1%)"
@@ -373,19 +373,19 @@ msgstr "Beskrajna redirekcija (%1%)"
 msgid "Error creating hash data file: %1%"
 msgstr "Greška pri kreiranju hash podataka za datoteku: %1%"
 
-#: dcpp\storage\BZUtils.cpp:34 dcpp\storage\BZUtils.cpp:55 dcpp\storage\BZUtils.cpp:63
-#: dcpp\storage\ZUtils.cpp:36 dcpp\storage\ZUtils.cpp:69 dcpp\storage\ZUtils.cpp:93 dcpp\storage\ZUtils.cpp:103
+#: dcpp\core\io\compress\BZUtils.cpp:34 dcpp\core\io\compress\BZUtils.cpp:55 dcpp\core\io\compress\BZUtils.cpp:63
+#: dcpp\core\io\compress\ZUtils.cpp:36 dcpp\core\io\compress\ZUtils.cpp:69 dcpp\core\io\compress\ZUtils.cpp:93 dcpp\core\io\compress\ZUtils.cpp:103
 msgid "Error during compression"
 msgstr "Greška tokom pakovanja"
 
-#: dcpp\storage\BZUtils.cpp:75 dcpp\storage\BZUtils.cpp:97 dcpp\storage\BZUtils.cpp:100
-#: dcpp\net\CryptoManager.cpp:525 dcpp\net\CryptoManager.cpp:544
-#: dcpp\net\CryptoManager.cpp:558 dcpp\storage\ZUtils.cpp:117 dcpp\storage\ZUtils.cpp:142
-#: dcpp\storage\ZUtils.cpp:156
+#: dcpp\core\io\compress\BZUtils.cpp:75 dcpp\core\io\compress\BZUtils.cpp:97 dcpp\core\io\compress\BZUtils.cpp:100
+#: dcpp\core\crypto\CryptoManager.cpp:525 dcpp\core\crypto\CryptoManager.cpp:544
+#: dcpp\core\crypto\CryptoManager.cpp:558 dcpp\core\io\compress\ZUtils.cpp:117 dcpp\core\io\compress\ZUtils.cpp:142
+#: dcpp\core\io\compress\ZUtils.cpp:156
 msgid "Error during decompression"
 msgstr "Greška tokom otpakivanja"
 
-#: dcpp\net\CryptoManager.cpp:164
+#: dcpp\core\crypto\CryptoManager.cpp:164
 msgid "Error generating certificate"
 msgstr "Greška pri kreiranju sertifikata"
 
@@ -426,15 +426,15 @@ msgstr "Neuspešno uzimanje spoljne IP adrese"
 msgid "Failed to initialize the %1% interface"
 msgstr "Neuspešna inicijalizacija %1% interfejsa"
 
-#: dcpp\net\CryptoManager.cpp:268
+#: dcpp\core\crypto\CryptoManager.cpp:268
 msgid "Failed to load certificate file"
 msgstr "Ne mogu da učitam datoteku sa sertifikatom"
 
-#: dcpp\net\CryptoManager.cpp:276
+#: dcpp\core\crypto\CryptoManager.cpp:276
 msgid "Failed to load private key"
 msgstr "Ne mogu da učitam privatni ključ"
 
-#: dcpp\net\CryptoManager.cpp:289
+#: dcpp\core\crypto\CryptoManager.cpp:289
 #, boost-format
 msgid "Failed to load trusted certificate from %1%"
 msgstr "Neuspešno učitavanje poverljivog sertifikata od %1%"
@@ -455,7 +455,7 @@ msgid ""
 msgstr ""
 "Nisam uspeo da obrišem mapiranje port sa %1% uređaja sa %2% interfejsom"
 
-#: dcpp\net\Socket.cpp:622
+#: dcpp\connection\socket\Socket.cpp:622
 msgid ""
 "Failed to set up the socks server for UDP relay (check socks address and "
 "port)"
@@ -508,11 +508,11 @@ msgstr "Završeno hashovanje: %1% (%2% at %3%/s)"
 msgid "Finished hashing: %1% (%2%)"
 msgstr "Završeno hashovanje: %1% (%2%)"
 
-#: dcpp\transfer\DownloadManager.cpp:295
+#: dcpp\transfer\download\DownloadManager.cpp:295
 msgid "Full tree does not match TTH root"
 msgstr "Celo stablo ne odgovara TTH osnovi"
 
-#: dcpp\net\CryptoManager.cpp:257
+#: dcpp\core\crypto\CryptoManager.cpp:257
 msgid "Generated new TLS certificate"
 msgstr "Napravljen je novi TLS sertifikat"
 
@@ -520,7 +520,7 @@ msgstr "Napravljen je novi TLS sertifikat"
 msgid "Generic"
 msgstr "Opšte"
 
-#: dcpp\net\HttpManager.cpp:99
+#: dcpp\connection\http\HttpManager.cpp:99
 #, boost-format
 msgid "HTTP file download failed to create file %1%, error: %2%"
 msgstr ""
@@ -531,7 +531,7 @@ msgstr ""
 msgid "Hash data rebuilding failed: %1%"
 msgstr "Hashovanje nije uspelo: %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:120
+#: dcpp\DCPlusPlus.cpp:120
 msgid "Hash database"
 msgstr "Hash baze podataka"
 
@@ -566,7 +566,7 @@ msgstr "Zanemari"
 msgid "Invalid URL: %1%"
 msgstr "Neispravan URL: %1%"
 
-#: dcpp\storage\Archive.cpp:41 dcpp\storage\Archive.cpp:93
+#: dcpp\core\io\compress\Archive.cpp:41 dcpp\core\io\compress\Archive.cpp:93
 msgid "Invalid archive"
 msgstr "Neispravna arhiva"
 
@@ -584,7 +584,7 @@ msgstr "Neispravna ekstenzija liste datoteka (mora biti .xml ili .bz2)"
 msgid "Invalid file name found while hashing folder %1%"
 msgstr "Pronašao neispravno ime datoteke tokom hashovanja direktorijuma %1%"
 
-#: dcpp\text\StringMatch.cpp:68
+#: dcpp\util\text\StringMatch.cpp:68
 #, boost-format
 msgid "Invalid regular expression: %1%"
 msgstr "Regular expression nije validan: %1%"
@@ -593,7 +593,7 @@ msgstr "Regular expression nije validan: %1%"
 msgid "Invalid search type name"
 msgstr "Neispravan tip pretrage"
 
-#: dcpp\transfer\DownloadManager.cpp:223
+#: dcpp\transfer\download\DownloadManager.cpp:223
 msgid "Invalid size"
 msgstr "Pogrešna veličina"
 
@@ -605,7 +605,7 @@ msgstr ""
 "Neispravna odredišna datoteka (nema direktorijuma, proveri podešavanje "
 "standardnog direktorijuma za preuzimanje)"
 
-#: dcpp\net\SSLSocket.cpp:214
+#: dcpp\connection\socket\SSLSocket.cpp:214
 msgid "Keyprint mismatch"
 msgstr ""
 
@@ -619,7 +619,7 @@ msgstr ""
 "Pronađena lokalna mreža sa mogućim prisustvom NAT-a, pokušavam da remapiram "
 "portove"
 
-#: dcpp\net\BufferedSocket.cpp:295
+#: dcpp\connection\socket\BufferedSocket.cpp:295
 msgid "Maximum command length exceeded"
 msgstr "Prekoračena maksimalna dužina komande"
 
@@ -628,11 +628,11 @@ msgstr "Prekoračena maksimalna dužina komande"
 msgid "Missing dependencies for %1%"
 msgstr "Nedostaju zavisnosti za %1%"
 
-#: dcpp\system\Streams.h:159
+#: dcpp\core\io\stream\Streams.h:159
 msgid "More bytes written than requested"
 msgstr "Više bajtova zapisano nego što je traženo"
 
-#: dcpp\net\CryptoManager.cpp:153
+#: dcpp\core\crypto\CryptoManager.cpp:153
 msgid "No certificate file chosen"
 msgstr "Izabrana datoteka za sertifikat"
 
@@ -640,11 +640,11 @@ msgstr "Izabrana datoteka za sertifikat"
 msgid "No directory specified"
 msgstr "Nije određen direktorijum"
 
-#: dcpp\net\CryptoManager.cpp:150
+#: dcpp\core\crypto\CryptoManager.cpp:150
 msgid "No private key file chosen"
 msgstr "Nije izabarana datoteka za privatni ključ"
 
-#: dcpp\transfer\DownloadManager.cpp:360
+#: dcpp\transfer\download\DownloadManager.cpp:360
 msgid "No slots available"
 msgstr "Nema slobodnih slotova"
 
@@ -662,13 +662,13 @@ msgid "Not listening for connections - please restart %1%"
 msgstr "Ne osluškujem konekcije - molim restartujte %1%"
 
 #: dcpp\hub\ClientManager.cpp:150 dcpp\hub\ClientManager.cpp:181
-#: dcpp\transfer\FinishedManager.cpp:130 dcpp\transfer\FinishedManager.cpp:136
-#: dcpp\transfer\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
+#: dcpp\modules\FinishedManager.cpp:130 dcpp\modules\FinishedManager.cpp:136
+#: dcpp\modules\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
 #: dcpp\search\SearchManager.cpp:398 dcpp\transfer\Transfer.cpp:80 dcpp\transfer\Transfer.cpp:84
 msgid "Offline"
 msgstr "Nije na mreži"
 
-#: dcpp\transfer\UploadManager.cpp:87
+#: dcpp\transfer\upload\UploadManager.cpp:87
 msgid "Partial file list"
 msgstr "Delimična lista datoteka"
 
@@ -698,7 +698,7 @@ msgstr "Preusmeri korisnika(e)"
 msgid "Remove all subdirectories before adding this one"
 msgstr "Ukloni sve poddirektorijume pre dodavanja ovog"
 
-#: dcpp\transfer\DownloadManager.cpp:228
+#: dcpp\transfer\download\DownloadManager.cpp:228
 msgid "Response does not match request"
 msgstr "Odgovor se ne poklapa sa zahtevom"
 
@@ -719,20 +719,20 @@ msgstr "Pretraga onemogućena: %1%"
 msgid "Search enabled again"
 msgstr "Pretraga ponovo omogućena"
 
-#: dcpp\app\DCPlusPlus.cpp:117
+#: dcpp\DCPlusPlus.cpp:117
 msgid "Security certificates"
 msgstr "Sigurnosni sertifikati"
 
-#: dcpp\chat\ChatMessage.cpp:64
+#: dcpp\message\ChatMessage.cpp:64
 #, boost-format
 msgid "Sent %1%"
 msgstr "Poslao %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:123
+#: dcpp\DCPlusPlus.cpp:123
 msgid "Shared Files"
 msgstr "Deljene datoteke"
 
-#: dcpp\net\Socket.cpp:498 dcpp\net\Socket.cpp:502
+#: dcpp\connection\socket\Socket.cpp:498 dcpp\connection\socket\Socket.cpp:502
 msgid "Socks server authentication failed (bad login / password?)"
 msgstr "Socks server provera nije uspela (loše korisničko ime / lozinka?)"
 
@@ -757,25 +757,25 @@ msgid ""
 "Successfully removed port mappings from the %1% device with the %2% interface"
 msgstr "Uspešno uklonjeno mapiranje portova na uređaju %1% sa %2% interfejsom"
 
-#: dcpp\net\CryptoManager.cpp:473
+#: dcpp\core\crypto\CryptoManager.cpp:473
 #, boost-format
 msgid "Supplied KeyPrint %1% did not match %2%."
 msgstr "Prosleđeni KeyPrint %1% se nije poklopio sa %2%."
 
-#: dcpp\net\CryptoManager.cpp:471
+#: dcpp\core\crypto\CryptoManager.cpp:471
 msgid "Supplied KeyPrint did not match any certificate."
 msgstr "Prosleđeni KeyPrint se nije poklopio sa nijednim sertifikatom."
 
-#: dcpp\net\CryptoManager.cpp:259
+#: dcpp\core\crypto\CryptoManager.cpp:259
 #, boost-format
 msgid "TLS disabled, failed to generate certificate: %1%"
 msgstr "TLS onemogućen, ne mogu da napravim sertifikat: %1%"
 
-#: dcpp\net\CryptoManager.cpp:248
+#: dcpp\core\crypto\CryptoManager.cpp:248
 msgid "TLS disabled, no certificate file set"
 msgstr "TLS onemogućen, nije izabrana datoteka za sertifikat"
 
-#: dcpp\net\SSLSocket.cpp:223
+#: dcpp\connection\socket\SSLSocket.cpp:223
 #, fuzzy, boost-format
 msgid "TLS error : %1%"
 msgstr "TLS greška"
@@ -784,11 +784,11 @@ msgstr "TLS greška"
 msgid "TTH"
 msgstr "TTH"
 
-#: dcpp\hash\MerkleCheckOutputStream.h:52 dcpp\hash\MerkleCheckOutputStream.h:112
+#: dcpp\hash\value\MerkleCheckOutputStream.h:52 dcpp\hash\value\MerkleCheckOutputStream.h:112
 msgid "TTH inconsistency"
 msgstr "TTH neusaglašenost"
 
-#: dcpp\transfer\Download.cpp:114
+#: dcpp\transfer\download\Download.cpp:114
 msgid "Target file is missing or wrong size"
 msgstr "Odredišna datoteka nedostaje ili je pogrešne veličine"
 
@@ -811,16 +811,16 @@ msgid ""
 msgstr ""
 "Datoteka %1% već postoji u deljenim datotekama, uklanjam iz reda za skidanje"
 
-#: dcpp\net\Socket.cpp:484
+#: dcpp\connection\socket\Socket.cpp:484
 msgid "The socks server doesn't support login / password authentication"
 msgstr "Socks server ne podržava proveru korisničko ime / lozinka"
 
-#: dcpp\net\Socket.cpp:397 dcpp\net\Socket.cpp:405 dcpp\net\Socket.cpp:438
-#: dcpp\net\Socket.cpp:442 dcpp\net\Socket.cpp:466 dcpp\net\Socket.cpp:481
+#: dcpp\connection\socket\Socket.cpp:397 dcpp\connection\socket\Socket.cpp:405 dcpp\connection\socket\Socket.cpp:438
+#: dcpp\connection\socket\Socket.cpp:442 dcpp\connection\socket\Socket.cpp:466 dcpp\connection\socket\Socket.cpp:481
 msgid "The socks server failed establish a connection"
 msgstr "Socks server nije uspeo uspostaviti vezu"
 
-#: dcpp\net\Socket.cpp:470
+#: dcpp\connection\socket\Socket.cpp:470
 msgid "The socks server requires authentication"
 msgstr "Socks server zahteva proveru"
 
@@ -849,7 +849,7 @@ msgstr ""
 msgid "This search type already exists"
 msgstr "Ovaj tip pretrage već postoji"
 
-#: dcpp\net\HttpConnection.cpp:287
+#: dcpp\connection\http\HttpConnection.cpp:287
 #, boost-format
 msgid "Too much data in response body (%1%)"
 msgstr "Previše podataka u telu odgovora (%1%)"
@@ -862,7 +862,7 @@ msgstr "Prenos"
 msgid "Transfer (TCP)"
 msgstr "Prenos (TCP)"
 
-#: dcpp\net\HttpConnection.cpp:203
+#: dcpp\connection\http\HttpConnection.cpp:203
 #, boost-format
 msgid "Transfer-encoding error (%1%)"
 msgstr "Greška u prenosnom kodiranju (%1%)"
@@ -871,7 +871,7 @@ msgstr "Greška u prenosnom kodiranju (%1%)"
 msgid "Un-ignore"
 msgstr "Neignoriši"
 
-#: dcpp\system\Thread.cpp:29 dcpp\system\Thread.cpp:37
+#: dcpp\core\thread\Thread.cpp:29 dcpp\core\thread\Thread.cpp:37
 msgid "Unable to create thread"
 msgstr "Ne mogu kreirati nit"
 
@@ -901,17 +901,17 @@ msgstr "Ne mogu otvoriti listu datoteka: %1%"
 msgid "Unable to read hash data file"
 msgstr "Ne mogu da pročitam datoteku sa hash podatcima"
 
-#: dcpp\transfer\UploadManager.cpp:209
+#: dcpp\transfer\upload\UploadManager.cpp:209
 #, boost-format
 msgid "Unable to send file %1%: %2%"
 msgstr "Ne mogu poslati datoteku %1%: %2%"
 
-#: dcpp\net\Socket.cpp:201
+#: dcpp\connection\socket\Socket.cpp:201
 #, c-format, boost-format
 msgid "Unknown error: 0x%1$x"
 msgstr "Nepoznata greška: 0x%1$x"
 
-#: dcpp\net\Socket.cpp:220
+#: dcpp\connection\socket\Socket.cpp:220
 #, c-format, boost-format
 msgid "Unknown protocol %d"
 msgstr "Nepoznat protokol %d"
@@ -921,7 +921,7 @@ msgstr "Nepoznat protokol %d"
 msgid "Updating the %1% plugin from version %2% to version %3%"
 msgstr "Ažuriram priključak %1% sa verzije %2% na verziju %3%"
 
-#: dcpp\app\DCPlusPlus.cpp:111
+#: dcpp\DCPlusPlus.cpp:111
 msgid "Users"
 msgstr "Korisnici"
 

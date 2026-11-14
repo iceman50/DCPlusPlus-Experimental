@@ -25,10 +25,10 @@
 #include <vector>
 
 #include <dcpp/forward.h>
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 #include <dcpp/connectivity/Mapper.h>
-#include <dcpp/system/TimerManager.h>
-#include <dcpp/base/tribool.h>
+#include <dcpp/core/timer/TimerManager.h>
+#include <dcpp/core/classes/tribool.h>
 
 namespace dcpp {
 

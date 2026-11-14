@@ -5,15 +5,15 @@
 #include <filesystem>
 
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/system/File.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/user/HintedUser.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/transfer/MCN.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/connection/MCN.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/text/Text.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/util/text/Text.h>
+#include <dcpp/core/timer/TimerManager.h>
 
 using namespace dcpp;
 

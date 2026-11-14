@@ -22,16 +22,16 @@
 #include <dcpp/hub/AdcHub.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/net/CryptoManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/system/File.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/hub/NmdcHub.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/search/SearchResult.h>
 #include <dcpp/share/ShareManager.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/chat/UserCommand.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/hub/user_command/UserCommand.h>
 
 namespace dcpp {
 

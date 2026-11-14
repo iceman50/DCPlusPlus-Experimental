@@ -8,21 +8,21 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/user/HintedUser.h>
 #include <unordered_map>
 #include <dcpp/util/Util.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/controls/KeyState.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/shell/ClipboardActions.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/components/KeyState.h>
+#include <win32/components/TableLayout.h>
+#include <win32/util/ClipboardActions.h>
 
 #include <win32/frames/bbs/BBSFrame.h>
 
 #include <dcpp/hub/AdcHub.h>
-#include <dcpp/chat/RichText.h>
+#include <dcpp/message/RichText.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
@@ -33,11 +33,11 @@
 #include <dwt/widgets/ToolBar.h>
 
 #include <win32/frames/bbs/BBSPostDlg.h>
-#include <win32/controls/HoldRedraw.h>
-#include <win32/controls/HtmlToRtf.h>
+#include <win32/components/HoldRedraw.h>
+#include <win32/HtmlToRtf.h>
 #include <win32/frames/hub/HubFrame.h>
-#include <win32/controls/RichTextBox.h>
-#include <win32/controls/TypedTable.h>
+#include <win32/RichTextBox.h>
+#include <win32/components/TypedTable.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

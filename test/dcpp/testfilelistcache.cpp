@@ -12,9 +12,9 @@
 #include <cstdlib>
 #include <clocale>
 #include <dcpp/filelist/DirectoryListing.h>
-#include <dcpp/system/File.h>
-#include <dcpp/system/FilteredFile.h>
-#include <dcpp/storage/ZstdUtils.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/stream/FilteredFile.h>
+#include <dcpp/core/io/compress/ZstdUtils.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/user/User.h>
 #include <sqlite3.h>

@@ -17,47 +17,47 @@
  */
 
 #include "stdafx.h"
-#include <dcpp/text/format.h>
+#include <dcpp/core/header/format.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/util/Util.h>
-#include <win32/app/UiServices.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/appearance/ImageLists.h>
-#include <win32/appearance/UiFonts.h>
-#include <win32/controls/DialogControls.h>
-#include <win32/controls/KeyState.h>
-#include <win32/controls/TableActions.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/frames/chat/ChatCommands.h>
-#include <win32/frames/users/UserCommands.h>
-#include <win32/services/LinkActions.h>
-#include <win32/services/Notifications.h>
-#include <win32/shell/ClipboardActions.h>
-#include <win32/shell/ShellActions.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/util/IconManager.h>
+#include <win32/util/ImageLists.h>
+#include <win32/util/UiFonts.h>
+#include <win32/components/DialogControls.h>
+#include <win32/components/KeyState.h>
+#include <win32/components/TableActions.h>
+#include <win32/components/TableLayout.h>
+#include <win32/ChatCommands.h>
+#include <win32/UserCommands.h>
+#include <win32/util/LinkActions.h>
+#include <win32/Notifications.h>
+#include <win32/util/ClipboardActions.h>
+#include <win32/util/ShellActions.h>
 
 #include <win32/frames/hub/HubFrame.h>
-#include <win32/appearance/CountryFlags.h>
-#include <dcpp/geo/GeoManager.h>
+#include <win32/util/CountryFlags.h>
+#include <dcpp/core/geo/GeoManager.h>
 
 #include <dcpp/hub/AdcHub.h>
 #include <dcpp/bbs/BBSManager.h>
-#include <dcpp/chat/ChatMessage.h>
+#include <dcpp/message/ChatMessage.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/search/SearchManager.h>
-#include <dcpp/text/SimpleXML.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/chat/RichText.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/message/RichText.h>
 #include <dcpp/user/User.h>
 #include <dcpp/user/UserMatch.h>
-#include <dcpp/version.h>
-#include <dcpp/app/WindowInfo.h>
+#include <dcpp/core/version.h>
+#include <dcpp/recents/WindowInfo.h>
 
 #include <dwt/util/HoldResize.h>
 #include <dwt/widgets/Button.h>
@@ -69,11 +69,11 @@
 #include <dwt/widgets/TextBox.h>
 
 #include <win32/frames/bbs/BBSFrame.h>
-#include <win32/app/MainWindow.h>
-#include <win32/dialogs/ParamDlg.h>
-#include <win32/frames/chat/PrivateFrame.h>
-#include <win32/controls/HoldRedraw.h>
-#include <win32/controls/TypedTable.h>
+#include <win32/MainWindow.h>
+#include <win32/dialog/ParamDlg.h>
+#include <win32/frames/private_chat/PrivateFrame.h>
+#include <win32/components/HoldRedraw.h>
+#include <win32/components/TypedTable.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

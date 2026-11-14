@@ -22,15 +22,15 @@
 #include <atomic>
 
 #include <dcpp/forward.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/connection/UserConnectionListener.h>
-#include <dcpp/net/BufferedSocketListener.h>
-#include <dcpp/net/BufferedSocket.h>
-#include <dcpp/system/CriticalSection.h>
+#include <dcpp/connection/socket/BufferedSocketListener.h>
+#include <dcpp/connection/socket/BufferedSocket.h>
+#include <dcpp/core/thread/CriticalSection.h>
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/protocol/AdcCommand.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/transfer/MCN.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/connection/MCN.h>
 #include <dcpp/plugins/PluginEntity.h>
 
 namespace dcpp {

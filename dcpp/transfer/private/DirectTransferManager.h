@@ -9,8 +9,8 @@
 #include <dcpp/user/HintedUser.h>
 #include <dcpp/transfer/private/PrivateTransferProtocol.h>
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/connection/UserConnectionListener.h>
 
 #include <future>

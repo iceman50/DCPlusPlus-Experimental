@@ -13,14 +13,14 @@
 #undef private
 
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
-#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/storage/SQLiteDB.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/io/db/SQLiteDB.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/util/Util.h>
 
 using namespace dcpp;

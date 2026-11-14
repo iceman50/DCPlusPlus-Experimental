@@ -17,23 +17,23 @@
  */
 
 #include "stdafx.h"
-#include <win32/appearance/ControlSeeds.h>
-#include <win32/controls/DialogControls.h>
-#include <win32/controls/TableLayout.h>
-#include <win32/services/HelpService.h>
+#include <win32/util/ControlSeeds.h>
+#include <win32/components/DialogControls.h>
+#include <win32/components/TableLayout.h>
+#include <win32/util/HelpService.h>
 #include <win32/frames/favorites/FavHubGroupsDlg.h>
 
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/text/format.h>
-#include <dcpp/version.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/core/version.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/MessageBox.h>
 
 #include <win32/resource.h>
-#include <win32/controls/HoldRedraw.h>
-#include <win32/controls/TypedTable.h>
+#include <win32/components/HoldRedraw.h>
+#include <win32/components/TypedTable.h>
 
 using dwt::Grid;
 using dwt::GridInfo;

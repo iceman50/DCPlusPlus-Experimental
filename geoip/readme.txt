@@ -6,7 +6,7 @@ The legacy library is archived upstream. DC++ still reads its existing legacy
 
 patches/patch.patch records the DC++ changes against libGeoIP in that release:
 Windows GEOID conversion, UTF-8/Unicode file paths, and safe IPv6 literal parsing
-with InetPtonA. City records now use unmodified upstream fields; dcpp/geo/GeoIP.cpp
+with InetPtonA. City records now use unmodified upstream fields; dcpp/core/geo/GeoIP.cpp
 converts the country code to the internal country ID when needed.
 
 See docs/dependency-updates.md for the source archive checksum and validation.

@@ -21,7 +21,7 @@
 
 #include <list>
 
-#include <dcpp/system/CriticalSection.h>
+#include <dcpp/core/thread/CriticalSection.h>
 #include <dcpp/plugins/PluginApiImpl.h>
 
 namespace dcpp {

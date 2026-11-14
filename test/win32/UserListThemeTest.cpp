@@ -1,16 +1,16 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "stdafx.h"
-#include <win32/app/SingleInstance.h>
-#include <win32/app/UiServices.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/ThemeManager.h>
-#include <win32/appearance/UiFonts.h>
-#include <dcpp/app/ResourceManager.h>
+#include <win32/SingleInstance.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/ThemeManager.h>
+#include <win32/util/UiFonts.h>
+#include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/user/UserMatchManager.h>
 #include <dwt/Application.h>
 #include <dwt/widgets/Table.h>
 #include <dwt/widgets/Window.h>
-#include <win32/controls/TypedTable.h>
+#include <win32/components/TypedTable.h>
 #include <cstdio>
 #include <stdexcept>
 

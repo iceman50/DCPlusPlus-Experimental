@@ -18,7 +18,7 @@ msgstr ""
 "X-Launchpad-Export-Date: 2025-09-09 10:37+0000\n"
 "X-Generator: Launchpad (build 3db21b43f675a56d404bb64e0fe1fcfc5dc01a90)\n"
 
-#: dcpp\transfer\DownloadManager.cpp:359
+#: dcpp\transfer\download\DownloadManager.cpp:359
 #, boost-format
 msgid " - Queued: %1%"
 msgstr " - 已加入队列：%1%"
@@ -63,8 +63,8 @@ msgstr "%1% %2% (由%3%添加)"
 msgid "%1% %2% port (%3% %4%)"
 msgstr "%1% %2% 端口 (%3% %4%)"
 
-#: dcpp\net\HttpConnection.cpp:133 dcpp\net\HttpConnection.cpp:216
-#: dcpp\net\HttpConnection.cpp:272
+#: dcpp\connection\http\HttpConnection.cpp:133 dcpp\connection\http\HttpConnection.cpp:216
+#: dcpp\connection\http\HttpConnection.cpp:272
 #, boost-format
 msgid "%1% (%2%)"
 msgstr "%1% (%2%)"
@@ -117,7 +117,7 @@ msgstr "%1% 被 %2% 踢走：%3%"
 msgid "%1% was kicked: %2%"
 msgstr "%1% 被踢：%2%"
 
-#: dcpp\transfer\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
+#: dcpp\modules\FinishedManager.cpp:159 dcpp\transfer\Transfer.cpp:90 dcpp\user\User.cpp:153
 #, boost-format
 msgid "%1%/s"
 msgstr "%1%/秒"
@@ -127,7 +127,7 @@ msgstr "%1%/秒"
 msgid "%1%: %2%"
 msgstr "%1%: %2%"
 
-#: dcpp\transfer\DownloadManager.cpp:460
+#: dcpp\transfer\download\DownloadManager.cpp:460
 #, boost-format
 msgid "%1%: File not available"
 msgstr "%1%：文件不可用"
@@ -142,7 +142,7 @@ msgstr "%d B"
 msgid "%s B"
 msgstr "%s B"
 
-#: dcpp\search\ADLSearch.cpp:34
+#: dcpp\modules\ADLSearch.cpp:34
 msgid "<Enter string>"
 msgstr "<输入字符串>"
 
@@ -213,7 +213,7 @@ msgstr "CRC32 出错(SFV-Check)"
 msgid "CRC32 inconsistency (SFV-Check): %1%"
 msgstr "CRC32 不一致 (SFV-Check): %1%"
 
-#: dcpp\net\CryptoManager.cpp:374
+#: dcpp\core\crypto\CryptoManager.cpp:374
 #, boost-format
 msgid "Certificate verification for %1% failed with error: %2%"
 msgstr "%1% 的证书验证失败了，错误：%2%"
@@ -222,13 +222,13 @@ msgstr "%1% 的证书验证失败了，错误：%2%"
 msgid "Compressed"
 msgstr "已压缩"
 
-#: dcpp\net\BufferedSocket.cpp:202 dcpp\net\SSLSocket.cpp:179 dcpp\net\SSLSocket.cpp:186
-#: dcpp\net\SSLSocket.cpp:196 dcpp\net\SSLSocket.cpp:208
+#: dcpp\connection\socket\BufferedSocket.cpp:202 dcpp\connection\socket\SSLSocket.cpp:179 dcpp\connection\socket\SSLSocket.cpp:186
+#: dcpp\connection\socket\SSLSocket.cpp:196 dcpp\connection\socket\SSLSocket.cpp:208
 msgid "Connection closed"
 msgstr "连接已关闭"
 
-#: dcpp\net\BufferedSocket.cpp:169 dcpp\net\BufferedSocket.cpp:187
-#: dcpp\connection\ConnectionManager.cpp:220 dcpp\net\Socket.cpp:390
+#: dcpp\connection\socket\BufferedSocket.cpp:169 dcpp\connection\socket\BufferedSocket.cpp:187
+#: dcpp\connection\ConnectionManager.cpp:220 dcpp\connection\socket\Socket.cpp:390
 msgid "Connection timeout"
 msgstr "连接超时"
 
@@ -281,16 +281,16 @@ msgstr "连接恢复"
 msgid "Connectivity settings are being configured; try again later"
 msgstr "连接设置正在配置；稍后再试"
 
-#: dcpp\net\Socket.cpp:341
+#: dcpp\connection\socket\Socket.cpp:341
 msgid "Could not open port for listening"
 msgstr "无法打开监听端口"
 
-#: dcpp\transfer\DownloadManager.cpp:235
+#: dcpp\transfer\download\DownloadManager.cpp:235
 #, boost-format
 msgid "Could not open target file: %1%"
 msgstr "无法打开目标文件：%1%"
 
-#: dcpp\app\DCPlusPlus.cpp:130
+#: dcpp\DCPlusPlus.cpp:130
 msgid "Country information"
 msgstr "国家信息"
 
@@ -318,15 +318,15 @@ msgstr "路径无名称属性"
 msgid "Disabled"
 msgstr "已禁用"
 
-#: dcpp\search\ADLSearch.cpp:410
+#: dcpp\modules\ADLSearch.cpp:410
 msgid "Discard"
 msgstr "丢弃"
 
-#: dcpp\net\BufferedSocket.cpp:473 dcpp\net\HttpManager.cpp:75
+#: dcpp\connection\socket\BufferedSocket.cpp:473 dcpp\connection\http\HttpManager.cpp:75
 msgid "Disconnected"
 msgstr "已断开"
 
-#: dcpp\transfer\UploadManager.cpp:544
+#: dcpp\transfer\upload\UploadManager.cpp:544
 #, boost-format
 msgid "Disconnected user leaving the hub: %1%"
 msgstr "已断开离线用户：%1%"
@@ -335,7 +335,7 @@ msgstr "已断开离线用户：%1%"
 msgid "Document"
 msgstr "文档"
 
-#: dcpp\app\DCPlusPlus.cpp:126
+#: dcpp\DCPlusPlus.cpp:126
 msgid "Download Queue"
 msgstr "下载队列"
 
@@ -359,7 +359,7 @@ msgstr "重复的源：%1%"
 msgid "Encrypted transfer"
 msgstr "加密传输"
 
-#: dcpp\net\HttpConnection.cpp:242
+#: dcpp\connection\http\HttpConnection.cpp:242
 #, boost-format
 msgid "Endless redirection loop (%1%)"
 msgstr "无限重定向循环 (%1%)"
@@ -369,19 +369,19 @@ msgstr "无限重定向循环 (%1%)"
 msgid "Error creating hash data file: %1%"
 msgstr "生成哈希数据文件出错：%1%"
 
-#: dcpp\storage\BZUtils.cpp:34 dcpp\storage\BZUtils.cpp:55 dcpp\storage\BZUtils.cpp:63
-#: dcpp\storage\ZUtils.cpp:36 dcpp\storage\ZUtils.cpp:69 dcpp\storage\ZUtils.cpp:93 dcpp\storage\ZUtils.cpp:103
+#: dcpp\core\io\compress\BZUtils.cpp:34 dcpp\core\io\compress\BZUtils.cpp:55 dcpp\core\io\compress\BZUtils.cpp:63
+#: dcpp\core\io\compress\ZUtils.cpp:36 dcpp\core\io\compress\ZUtils.cpp:69 dcpp\core\io\compress\ZUtils.cpp:93 dcpp\core\io\compress\ZUtils.cpp:103
 msgid "Error during compression"
 msgstr "压缩过程发生错误"
 
-#: dcpp\storage\BZUtils.cpp:75 dcpp\storage\BZUtils.cpp:97 dcpp\storage\BZUtils.cpp:100
-#: dcpp\net\CryptoManager.cpp:525 dcpp\net\CryptoManager.cpp:544
-#: dcpp\net\CryptoManager.cpp:558 dcpp\storage\ZUtils.cpp:117 dcpp\storage\ZUtils.cpp:142
-#: dcpp\storage\ZUtils.cpp:156
+#: dcpp\core\io\compress\BZUtils.cpp:75 dcpp\core\io\compress\BZUtils.cpp:97 dcpp\core\io\compress\BZUtils.cpp:100
+#: dcpp\core\crypto\CryptoManager.cpp:525 dcpp\core\crypto\CryptoManager.cpp:544
+#: dcpp\core\crypto\CryptoManager.cpp:558 dcpp\core\io\compress\ZUtils.cpp:117 dcpp\core\io\compress\ZUtils.cpp:142
+#: dcpp\core\io\compress\ZUtils.cpp:156
 msgid "Error during decompression"
 msgstr "解压缩出错"
 
-#: dcpp\net\CryptoManager.cpp:164
+#: dcpp\core\crypto\CryptoManager.cpp:164
 msgid "Error generating certificate"
 msgstr "生成证书发生错误"
 
@@ -422,15 +422,15 @@ msgstr "获取外部IP失败"
 msgid "Failed to initialize the %1% interface"
 msgstr "初始化  %1% 接口失败"
 
-#: dcpp\net\CryptoManager.cpp:268
+#: dcpp\core\crypto\CryptoManager.cpp:268
 msgid "Failed to load certificate file"
 msgstr "读取证书文件出错"
 
-#: dcpp\net\CryptoManager.cpp:276
+#: dcpp\core\crypto\CryptoManager.cpp:276
 msgid "Failed to load private key"
 msgstr "读取密钥失败"
 
-#: dcpp\net\CryptoManager.cpp:289
+#: dcpp\core\crypto\CryptoManager.cpp:289
 #, boost-format
 msgid "Failed to load trusted certificate from %1%"
 msgstr "从%1%加载证书失败"
@@ -450,7 +450,7 @@ msgid ""
 "Failed to remove port mappings from the %1% device with the %2% interface"
 msgstr "从%1% 设备的 %2% 接口删除端口映射失败"
 
-#: dcpp\net\Socket.cpp:622
+#: dcpp\connection\socket\Socket.cpp:622
 msgid ""
 "Failed to set up the socks server for UDP relay (check socks address and "
 "port)"
@@ -499,11 +499,11 @@ msgstr "完成hashing：%1% (%2% 在 %3%/s)"
 msgid "Finished hashing: %1% (%2%)"
 msgstr "完成hashing：%1% (%2%)"
 
-#: dcpp\transfer\DownloadManager.cpp:295
+#: dcpp\transfer\download\DownloadManager.cpp:295
 msgid "Full tree does not match TTH root"
 msgstr "已下载的“树”不匹配于 TTH root"
 
-#: dcpp\net\CryptoManager.cpp:257
+#: dcpp\core\crypto\CryptoManager.cpp:257
 msgid "Generated new TLS certificate"
 msgstr "生成新 TLS 证书"
 
@@ -511,7 +511,7 @@ msgstr "生成新 TLS 证书"
 msgid "Generic"
 msgstr "常规"
 
-#: dcpp\net\HttpManager.cpp:99
+#: dcpp\connection\http\HttpManager.cpp:99
 #, boost-format
 msgid "HTTP file download failed to create file %1%, error: %2%"
 msgstr "HTTP 文件下载未能创建文件  %1%，错误：%2%"
@@ -521,7 +521,7 @@ msgstr "HTTP 文件下载未能创建文件  %1%，错误：%2%"
 msgid "Hash data rebuilding failed: %1%"
 msgstr "哈希失败：%1%"
 
-#: dcpp\app\DCPlusPlus.cpp:120
+#: dcpp\DCPlusPlus.cpp:120
 msgid "Hash database"
 msgstr "Hash 数据库"
 
@@ -554,7 +554,7 @@ msgstr "忽略"
 msgid "Invalid URL: %1%"
 msgstr "无效的URL： %1%"
 
-#: dcpp\storage\Archive.cpp:41 dcpp\storage\Archive.cpp:93
+#: dcpp\core\io\compress\Archive.cpp:41 dcpp\core\io\compress\Archive.cpp:93
 msgid "Invalid archive"
 msgstr "无效归档"
 
@@ -572,7 +572,7 @@ msgstr "无效的的文件列表扩展名(必须是 .xml 或 .bz2)"
 msgid "Invalid file name found while hashing folder %1%"
 msgstr "当hashing %1%文件夹时发现无效的文件名"
 
-#: dcpp\text\StringMatch.cpp:68
+#: dcpp\util\text\StringMatch.cpp:68
 #, boost-format
 msgid "Invalid regular expression: %1%"
 msgstr "无效的正则表达式：%1%"
@@ -581,7 +581,7 @@ msgstr "无效的正则表达式：%1%"
 msgid "Invalid search type name"
 msgstr "无效的搜索类型名称"
 
-#: dcpp\transfer\DownloadManager.cpp:223
+#: dcpp\transfer\download\DownloadManager.cpp:223
 msgid "Invalid size"
 msgstr "无效的尺寸"
 
@@ -591,7 +591,7 @@ msgid ""
 "setting)"
 msgstr "目标文件无法访问(目录已被删除, 请检查缺省的下载地址设置)"
 
-#: dcpp\net\SSLSocket.cpp:214
+#: dcpp\connection\socket\SSLSocket.cpp:214
 msgid "Keyprint mismatch"
 msgstr ""
 
@@ -603,7 +603,7 @@ msgstr "踢出该用户"
 msgid "Local network with possible NAT detected, trying to map the ports..."
 msgstr "本地网络可能是NAT，尝试端口映射..."
 
-#: dcpp\net\BufferedSocket.cpp:295
+#: dcpp\connection\socket\BufferedSocket.cpp:295
 msgid "Maximum command length exceeded"
 msgstr "超出最大命令长度"
 
@@ -612,11 +612,11 @@ msgstr "超出最大命令长度"
 msgid "Missing dependencies for %1%"
 msgstr "丢失 %1% 信赖"
 
-#: dcpp\system\Streams.h:159
+#: dcpp\core\io\stream\Streams.h:159
 msgid "More bytes written than requested"
 msgstr "写入的字节数超过请求的"
 
-#: dcpp\net\CryptoManager.cpp:153
+#: dcpp\core\crypto\CryptoManager.cpp:153
 msgid "No certificate file chosen"
 msgstr "未选择证书文件"
 
@@ -624,11 +624,11 @@ msgstr "未选择证书文件"
 msgid "No directory specified"
 msgstr "没有指定目录"
 
-#: dcpp\net\CryptoManager.cpp:150
+#: dcpp\core\crypto\CryptoManager.cpp:150
 msgid "No private key file chosen"
 msgstr "未选择密钥文件"
 
-#: dcpp\transfer\DownloadManager.cpp:360
+#: dcpp\transfer\download\DownloadManager.cpp:360
 msgid "No slots available"
 msgstr "对方上传通道都已经满了"
 
@@ -646,13 +646,13 @@ msgid "Not listening for connections - please restart %1%"
 msgstr "未监听连接 - 请重启 %1%"
 
 #: dcpp\hub\ClientManager.cpp:150 dcpp\hub\ClientManager.cpp:181
-#: dcpp\transfer\FinishedManager.cpp:130 dcpp\transfer\FinishedManager.cpp:136
-#: dcpp\transfer\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
+#: dcpp\modules\FinishedManager.cpp:130 dcpp\modules\FinishedManager.cpp:136
+#: dcpp\modules\FinishedManager.cpp:142 dcpp\search\SearchManager.cpp:337
 #: dcpp\search\SearchManager.cpp:398 dcpp\transfer\Transfer.cpp:80 dcpp\transfer\Transfer.cpp:84
 msgid "Offline"
 msgstr "离线"
 
-#: dcpp\transfer\UploadManager.cpp:87
+#: dcpp\transfer\upload\UploadManager.cpp:87
 msgid "Partial file list"
 msgstr "部分的文件列表"
 
@@ -682,7 +682,7 @@ msgstr "重定向用户"
 msgid "Remove all subdirectories before adding this one"
 msgstr "增加前先删除所有子文件夹"
 
-#: dcpp\transfer\DownloadManager.cpp:228
+#: dcpp\transfer\download\DownloadManager.cpp:228
 msgid "Response does not match request"
 msgstr "响应与请求不匹配"
 
@@ -703,20 +703,20 @@ msgstr "禁止搜索：%1%"
 msgid "Search enabled again"
 msgstr "再次允许搜索"
 
-#: dcpp\app\DCPlusPlus.cpp:117
+#: dcpp\DCPlusPlus.cpp:117
 msgid "Security certificates"
 msgstr "安全证书"
 
-#: dcpp\chat\ChatMessage.cpp:64
+#: dcpp\message\ChatMessage.cpp:64
 #, boost-format
 msgid "Sent %1%"
 msgstr "已经发送 %1%"
 
-#: dcpp\app\DCPlusPlus.cpp:123
+#: dcpp\DCPlusPlus.cpp:123
 msgid "Shared Files"
 msgstr "共享文件"
 
-#: dcpp\net\Socket.cpp:498 dcpp\net\Socket.cpp:502
+#: dcpp\connection\socket\Socket.cpp:498 dcpp\connection\socket\Socket.cpp:502
 msgid "Socks server authentication failed (bad login / password?)"
 msgstr "Socks代理鉴权失败 (用户名/密码错误?)"
 
@@ -740,25 +740,25 @@ msgid ""
 "Successfully removed port mappings from the %1% device with the %2% interface"
 msgstr "在%1%设备的%2% 接口上删除端口映射成功"
 
-#: dcpp\net\CryptoManager.cpp:473
+#: dcpp\core\crypto\CryptoManager.cpp:473
 #, boost-format
 msgid "Supplied KeyPrint %1% did not match %2%."
 msgstr "提供的 KeyPrint %1% 和 %2% 不匹配"
 
-#: dcpp\net\CryptoManager.cpp:471
+#: dcpp\core\crypto\CryptoManager.cpp:471
 msgid "Supplied KeyPrint did not match any certificate."
 msgstr "提供的 KeyPrint 不匹配任何证书"
 
-#: dcpp\net\CryptoManager.cpp:259
+#: dcpp\core\crypto\CryptoManager.cpp:259
 #, boost-format
 msgid "TLS disabled, failed to generate certificate: %1%"
 msgstr "TLS已禁用，获取证书失败：%1%"
 
-#: dcpp\net\CryptoManager.cpp:248
+#: dcpp\core\crypto\CryptoManager.cpp:248
 msgid "TLS disabled, no certificate file set"
 msgstr "禁用 TLS，未设置证书文件"
 
-#: dcpp\net\SSLSocket.cpp:223
+#: dcpp\connection\socket\SSLSocket.cpp:223
 #, fuzzy, boost-format
 msgid "TLS error : %1%"
 msgstr "TLS 错误"
@@ -767,11 +767,11 @@ msgstr "TLS 错误"
 msgid "TTH"
 msgstr "TTH"
 
-#: dcpp\hash\MerkleCheckOutputStream.h:52 dcpp\hash\MerkleCheckOutputStream.h:112
+#: dcpp\hash\value\MerkleCheckOutputStream.h:52 dcpp\hash\value\MerkleCheckOutputStream.h:112
 msgid "TTH inconsistency"
 msgstr "TTH冲突"
 
-#: dcpp\transfer\Download.cpp:114
+#: dcpp\transfer\download\Download.cpp:114
 msgid "Target file is missing or wrong size"
 msgstr "目标文件丢失或尺寸错误"
 
@@ -791,16 +791,16 @@ msgid ""
 "The queued file %1% already exists in your share, removing from the queue"
 msgstr "已排队的文件 %1% 已经存在于您的共享中，正从队列中删除"
 
-#: dcpp\net\Socket.cpp:484
+#: dcpp\connection\socket\Socket.cpp:484
 msgid "The socks server doesn't support login / password authentication"
 msgstr "Socks代理不支持「用户/密码」验证"
 
-#: dcpp\net\Socket.cpp:397 dcpp\net\Socket.cpp:405 dcpp\net\Socket.cpp:438
-#: dcpp\net\Socket.cpp:442 dcpp\net\Socket.cpp:466 dcpp\net\Socket.cpp:481
+#: dcpp\connection\socket\Socket.cpp:397 dcpp\connection\socket\Socket.cpp:405 dcpp\connection\socket\Socket.cpp:438
+#: dcpp\connection\socket\Socket.cpp:442 dcpp\connection\socket\Socket.cpp:466 dcpp\connection\socket\Socket.cpp:481
 msgid "The socks server failed establish a connection"
 msgstr "Socks代理连接失败"
 
-#: dcpp\net\Socket.cpp:470
+#: dcpp\connection\socket\Socket.cpp:470
 msgid "The socks server requires authentication"
 msgstr "Socks代理需要「用户/密码」验证"
 
@@ -828,7 +828,7 @@ msgstr ""
 msgid "This search type already exists"
 msgstr "此搜索类型已存在"
 
-#: dcpp\net\HttpConnection.cpp:287
+#: dcpp\connection\http\HttpConnection.cpp:287
 #, boost-format
 msgid "Too much data in response body (%1%)"
 msgstr "响应体中数据过多 (%1%)"
@@ -841,7 +841,7 @@ msgstr "传输"
 msgid "Transfer (TCP)"
 msgstr "传输(TCP)"
 
-#: dcpp\net\HttpConnection.cpp:203
+#: dcpp\connection\http\HttpConnection.cpp:203
 #, boost-format
 msgid "Transfer-encoding error (%1%)"
 msgstr "传输编码错误 (%1%)"
@@ -850,7 +850,7 @@ msgstr "传输编码错误 (%1%)"
 msgid "Un-ignore"
 msgstr "不忽略"
 
-#: dcpp\system\Thread.cpp:29 dcpp\system\Thread.cpp:37
+#: dcpp\core\thread\Thread.cpp:29 dcpp\core\thread\Thread.cpp:37
 msgid "Unable to create thread"
 msgstr "不能建立线程"
 
@@ -879,17 +879,17 @@ msgstr "无法打开文件列表：%1%"
 msgid "Unable to read hash data file"
 msgstr "无法读取哈希数据文件"
 
-#: dcpp\transfer\UploadManager.cpp:209
+#: dcpp\transfer\upload\UploadManager.cpp:209
 #, boost-format
 msgid "Unable to send file %1%: %2%"
 msgstr "无法发送文件 %1%：%2%"
 
-#: dcpp\net\Socket.cpp:201
+#: dcpp\connection\socket\Socket.cpp:201
 #, c-format, boost-format
 msgid "Unknown error: 0x%1$x"
 msgstr "未知错误：0x%1$x"
 
-#: dcpp\net\Socket.cpp:220
+#: dcpp\connection\socket\Socket.cpp:220
 #, c-format, boost-format
 msgid "Unknown protocol %d"
 msgstr "未知的协议 %d"
@@ -899,7 +899,7 @@ msgstr "未知的协议 %d"
 msgid "Updating the %1% plugin from version %2% to version %3%"
 msgstr "正将 %1% 插件从版本 %2% 更新到版本 %3%"
 
-#: dcpp\app\DCPlusPlus.cpp:111
+#: dcpp\DCPlusPlus.cpp:111
 msgid "Users"
 msgstr "用户"
 

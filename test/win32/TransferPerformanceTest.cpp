@@ -1,27 +1,27 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 #include "stdafx.h"
 #include <dwt/widgets/TableTree.h>
-#include <win32/app/SingleInstance.h>
-#include <win32/app/UiServices.h>
-#include <win32/appearance/IconManager.h>
-#include <win32/appearance/AppAppearance.h>
-#include <win32/appearance/UiFonts.h>
-#include <win32/appearance/ImageLists.h>
-#include <win32/controls/TypedTable.h>
-#include <win32/frames/users/AspectUserCommand.h>
-#include <win32/frames/users/UserInfoBase.h>
-#include <dcpp/app/ResourceManager.h>
+#include <win32/SingleInstance.h>
+#include <win32/util/UiServices.h>
+#include <win32/util/IconManager.h>
+#include <win32/util/AppAppearance.h>
+#include <win32/util/UiFonts.h>
+#include <win32/util/ImageLists.h>
+#include <win32/components/TypedTable.h>
+#include <win32/AspectUserCommand.h>
+#include <win32/UserInfoBase.h>
+#include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/hash/HashManager.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/net/HttpManager.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/connection/http/HttpManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/transfer/DownloadManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/transfer/download/DownloadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dwt/widgets/Window.h>
 #include <dwt/widgets/Container.h>
 #include <dwt/Application.h>
@@ -33,7 +33,7 @@
 
 // Keep test access in this translation unit, following the core test pattern.
 #define private public
-#include <win32/frames/transfers/TransferView.h>
+#include <win32/TransferView.h>
 #undef private
 
 const UINT SingleInstance::WMU_WHERE_ARE_YOU = WM_APP + 181;

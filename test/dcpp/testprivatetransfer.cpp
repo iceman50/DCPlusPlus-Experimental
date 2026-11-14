@@ -12,23 +12,23 @@
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/UserConnection.h>
 #include <dcpp/connection/ConnectionManager.h>
-#include <dcpp/net/SSLSocket.h>
+#include <dcpp/connection/socket/SSLSocket.h>
 #undef private
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/text/Encoder.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/hash/value/Encoder.h>
 #include <dcpp/transfer/private/DirectTransferManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/transfer/DownloadManager.h>
-#include <dcpp/transfer/UploadManager.h>
-#include <dcpp/transfer/ThrottleManager.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/transfer/download/DownloadManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
+#include <dcpp/connection/ThrottleManager.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/net/SSLSocket.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/connection/socket/SSLSocket.h>
 #include <dcpp/plugins/PluginManager.h>
-#include <dcpp/chat/PrivateChatManager.h>
-#include <dcpp/chat/ChatMessage.h>
+#include <dcpp/private_chat/PrivateChatManager.h>
+#include <dcpp/message/ChatMessage.h>
 // TLS, SUP/INF, the manager and storage are real. Only the token registration
 // normally done by hub rendezvous is injected; no external hub is contacted.
 

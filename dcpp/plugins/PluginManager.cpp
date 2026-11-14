@@ -19,17 +19,17 @@
 #include "stdinc.h"
 #include <dcpp/plugins/PluginManager.h>
 
-#include <dcpp/storage/Archive.h>
+#include <dcpp/core/io/compress/Archive.h>
 #include <dcpp/hub/Client.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/base/ScopedFunctor.h>
-#include <dcpp/text/SimpleXML.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/connection/UserConnection.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 
 #include <utility>
 #include <filesystem>

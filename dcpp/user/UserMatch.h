@@ -20,9 +20,9 @@
 #define DCPLUSPLUS_DCPP_USER_MATCH_H
 
 #include <dcpp/forward.h>
-#include <dcpp/base/Flags.h>
-#include <dcpp/text/StringMatch.h>
-#include <dcpp/chat/Style.h>
+#include <dcpp/core/classes/Flags.h>
+#include <dcpp/util/text/StringMatch.h>
+#include <dcpp/message/Style.h>
 
 #include <string>
 #include <vector>

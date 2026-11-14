@@ -4,10 +4,10 @@
 #include <dcpp/stdinc.h>
 
 #ifdef _WIN32
-#include <dcpp/system/w.h>
+#include <dcpp/core/header/w.h>
 #endif
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 #include "gtest.h"
 

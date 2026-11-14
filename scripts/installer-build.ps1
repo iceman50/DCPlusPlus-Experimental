@@ -185,7 +185,7 @@ try {
 
 $rawInstaller = Join-Path $stageDirectory "DCPlusPlus-xxx.exe"
 Assert-RequiredFile -Path $rawInstaller -Description "Compiled installer"
-$versionLine = Select-String -LiteralPath (Join-Path $repoRoot "dcpp\version.h") -Pattern '^\s*#define\s+VERSIONSTRING\s+"([^"]+)"' | Select-Object -First 1
+$versionLine = Select-String -LiteralPath (Join-Path $repoRoot "dcpp\core\version.h") -Pattern '^\s*#define\s+VERSIONSTRING\s+"([^"]+)"' | Select-Object -First 1
 if($null -eq $versionLine) {
 	throw "Unable to determine the application version."
 }

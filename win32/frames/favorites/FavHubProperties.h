@@ -20,9 +20,9 @@
 #define DCPLUSPLUS_WIN32_FAV_HUB_PROPERTIES_H
 
 #include <dcpp/forward.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/util/text/Text.h>
 
-#include <win32/dialogs/GridDialog.h>
+#include <win32/dialog/GridDialog.h>
 
 #include <map>
 #include <set>

@@ -24,8 +24,8 @@
 #include <string>
 
 #include <dcpp/forward.h>
-#include <dcpp/base/Exception.h>
-#include <dcpp/typedefs.h>
+#include <dcpp/core/classes/Exception.h>
+#include <dcpp/core/header/typedefs.h>
 
 namespace dcpp {
 

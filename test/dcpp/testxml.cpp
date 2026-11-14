@@ -1,9 +1,9 @@
 // Copyright (C) 2026 iceman50
 #include "testbase.h"
 
-#include <dcpp/text/SimpleXMLReader.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/core/io/xml/SimpleXMLReader.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/util/text/Text.h>
 #include <unordered_map>
 
 using namespace dcpp;
@@ -109,7 +109,7 @@ TEST(testxml, test_cdata)
     ASSERT_EQ(collector.endTags["root"], 1);
 }
 
-#include <dcpp/system/File.h>
+#include <dcpp/core/io/File.h>
 
 TEST(testxml, test_file)
 {

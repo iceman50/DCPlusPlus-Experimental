@@ -19,17 +19,17 @@
 #include "stdinc.h"
 #include <dcpp/favorites/FavoriteManager.h>
 
-#include <dcpp/storage/BZUtils.h>
+#include <dcpp/core/io/compress/BZUtils.h>
 #include <dcpp/hub/ClientManager.h>
-#include <dcpp/net/CryptoManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/system/FilteredFile.h>
-#include <dcpp/net/HttpConnection.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/text/StringTokenizer.h>
-#include <dcpp/chat/UserCommand.h>
-#include <dcpp/app/WindowInfo.h>
+#include <dcpp/core/crypto/CryptoManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/io/stream/FilteredFile.h>
+#include <dcpp/connection/http/HttpConnection.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/util/text/StringTokenizer.h>
+#include <dcpp/hub/user_command/UserCommand.h>
+#include <dcpp/recents/WindowInfo.h>
 
 namespace dcpp {
 

@@ -155,7 +155,7 @@ gen_build_number.gen_build_number = fixed_timestamp(gen_build_number.gen_build_n
 dev.tests_only = False
 dev.add_dcpp = dev.add_intl = dev.add_openssl = lambda env: None
 library = dev.build('dcpp/')
-env.AddPostAction(dev.get_build_path('dcpp/version.o'),
+env.AddPostAction(dev.get_build_path('dcpp/core/version.o'),
     lambda target, source, env: os.utime(str(target[0]), (stamp, stamp)))
 env.AddPostAction(library,
     lambda target, source, env: os.utime(str(target[0]), (stamp, stamp)))
@@ -164,7 +164,7 @@ Default(env.Program('probe', ['main.cpp', library]))
             self.write(directory, "timestamp.txt", str(int(time.time()) + 60))
             self.write(directory, "main.cpp", '#include <cstdio>\nconst char* revision(); int build();\n'
                        'int main() { std::printf("%s:%d", revision(), build()); }\n')
-            self.write(directory, "dcpp/version.cpp",
+            self.write(directory, "dcpp/core/version.cpp",
                        '#include "version-rev-id.inc"\n#include "version-build.inc"\n'
                        'const char* revision() { return DCPP_REVISION; }\n'
                        'int build() { return DCPP_BUILD_NUMBER; }\n')

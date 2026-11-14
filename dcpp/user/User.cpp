@@ -21,9 +21,9 @@
 
 #include <dcpp/hub/AdcHub.h>
 #include <dcpp/favorites/FavoriteUser.h>
-#include <dcpp/text/format.h>
-#include <dcpp/geo/GeoManager.h>
-#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/core/header/format.h>
+#include <dcpp/core/geo/GeoManager.h>
+#include <dcpp/util/text/StringTokenizer.h>
 
 namespace dcpp {
 

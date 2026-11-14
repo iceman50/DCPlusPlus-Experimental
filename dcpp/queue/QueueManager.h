@@ -27,16 +27,16 @@
 #include <unordered_map>
 
 #include <dcpp/hub/ClientManagerListener.h>
-#include <dcpp/system/CriticalSection.h>
+#include <dcpp/core/thread/CriticalSection.h>
 #include <dcpp/filelist/DirectoryListing.h>
-#include <dcpp/base/Exception.h>
-#include <dcpp/system/File.h>
-#include <dcpp/hash/MerkleTree.h>
+#include <dcpp/core/classes/Exception.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/hash/value/MerkleTree.h>
 #include <dcpp/queue/QueueItem.h>
 #include <dcpp/queue/QueueManagerListener.h>
 #include <dcpp/search/SearchManagerListener.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/user/User.h>
 
 namespace dcpp {

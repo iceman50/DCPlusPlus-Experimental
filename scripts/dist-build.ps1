@@ -204,7 +204,7 @@ function Get-VersionNumber {
 		[string]$RepoRoot
 	)
 
-	$versionHeader = Join-Path $RepoRoot "dcpp\version.h"
+	$versionHeader = Join-Path $RepoRoot "dcpp\core\version.h"
 	$versionLine = Select-String -LiteralPath $versionHeader -Pattern '^\s*#define\s+VERSIONSTRING\s+"([^"]+)"' | Select-Object -First 1
 	if($null -eq $versionLine) {
 		throw "Unable to find VERSIONSTRING in $versionHeader"

@@ -5,8 +5,8 @@
 #include "testbase.h"
 
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
-#include <dcpp/system/File.h>
-#include <dcpp/text/Text.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <filesystem>
 

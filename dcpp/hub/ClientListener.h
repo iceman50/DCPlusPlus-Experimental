@@ -19,7 +19,7 @@
 #ifndef CLIENTLISTENER_H_
 #define CLIENTLISTENER_H_
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 namespace dcpp {
 

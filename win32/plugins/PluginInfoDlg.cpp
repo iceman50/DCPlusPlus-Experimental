@@ -18,8 +18,8 @@
 
 #include "stdafx.h"
 #include <dcpp/util/Util.h>
-#include <win32/controls/DialogControls.h>
-#include <win32/services/LinkActions.h>
+#include <win32/components/DialogControls.h>
+#include <win32/util/LinkActions.h>
 #include <win32/plugins/PluginInfoDlg.h>
 
 #include <dcpp/plugins/PluginManager.h>

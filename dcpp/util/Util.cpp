@@ -21,7 +21,7 @@
 
 #ifdef _WIN32
 
-#include <dcpp/system/w.h>
+#include <dcpp/core/header/w.h>
 #include <iphlpapi.h>
 #include <shlobj.h>
 
@@ -33,12 +33,12 @@
 #include <dcpp/user/CID.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/text/SimpleXML.h>
-#include <dcpp/text/StringTokenizer.h>
-#include <dcpp/version.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
+#include <dcpp/util/text/StringTokenizer.h>
+#include <dcpp/core/version.h>
 
 #ifndef _WIN32
 #include <sys/socket.h>

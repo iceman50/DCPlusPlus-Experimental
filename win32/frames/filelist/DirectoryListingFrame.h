@@ -29,13 +29,13 @@
 #include <dcpp/forward.h>
 #include <dcpp/hub/ClientManagerListener.h>
 #include <dcpp/filelist/DirectoryListing.h>
-#include <dcpp/text/StringMatch.h>
+#include <dcpp/util/text/StringMatch.h>
 #include <dcpp/user/User.h>
 
-#include <win32/frames/users/AspectUserCommand.h>
-#include <win32/frames/base/IRecent.h>
-#include <win32/frames/base/MDIChildFrame.h>
-#include <win32/frames/users/UserInfoBase.h>
+#include <win32/AspectUserCommand.h>
+#include <win32/frames/IRecent.h>
+#include <win32/frames/MDIChildFrame.h>
+#include <win32/UserInfoBase.h>
 
 using std::deque;
 using std::list;

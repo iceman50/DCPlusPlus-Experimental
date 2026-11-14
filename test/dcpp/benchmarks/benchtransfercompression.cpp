@@ -3,10 +3,10 @@
  */
 
 #include "testbase.h"
-#include <dcpp/system/FilteredFile.h>
-#include <dcpp/storage/ZUtils.h>
-#include <dcpp/storage/ZstdUtils.h>
-#include <dcpp/storage/BZUtils.h>
+#include <dcpp/core/io/stream/FilteredFile.h>
+#include <dcpp/core/io/compress/ZUtils.h>
+#include <dcpp/core/io/compress/ZstdUtils.h>
+#include <dcpp/core/io/compress/BZUtils.h>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>

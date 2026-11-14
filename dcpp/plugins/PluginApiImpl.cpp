@@ -32,13 +32,13 @@
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/system/File.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/plugins/PluginManager.h>
 #include <dcpp/queue/QueueManager.h>
-#include <dcpp/chat/Tagger.h>
+#include <dcpp/message/Tagger.h>
 #include <dcpp/connection/UserConnection.h>
-#include <dcpp/version.h>
+#include <dcpp/core/version.h>
 #include <dcpp/plugins/PluginHttp.h>
 #include <mutex>
 #include <type_traits>

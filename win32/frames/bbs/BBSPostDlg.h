@@ -10,9 +10,9 @@
 #ifndef DCPLUSPLUS_WIN32_BBS_POST_DLG_H
 #define DCPLUSPLUS_WIN32_BBS_POST_DLG_H
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
-#include <win32/dialogs/GridDialog.h>
+#include <win32/dialog/GridDialog.h>
 
 class BBSPostDlg : public GridDialog {
 public:

@@ -24,14 +24,14 @@
 #include <unordered_map>
 #include <vector>
 
-#include <dcpp/net/BufferedSocket.h>
+#include <dcpp/connection/socket/BufferedSocket.h>
 #include <dcpp/connection/ConnectionManagerListener.h>
 #include <dcpp/connection/ConnectionType.h>
-#include <dcpp/system/CriticalSection.h>
+#include <dcpp/core/thread/CriticalSection.h>
 #include <dcpp/user/HintedUser.h>
-#include <dcpp/transfer/MCN.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/connection/MCN.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/connection/UserConnectionListener.h>
 
 namespace dcpp {

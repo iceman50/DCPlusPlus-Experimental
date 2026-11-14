@@ -19,18 +19,18 @@
 #ifndef DCPLUSPLUS_DCPP_CLIENT_H
 #define DCPLUSPLUS_DCPP_CLIENT_H
 
-#include <dcpp/compiler.h>
+#include <dcpp/core/header/compiler.h>
 
-#include <dcpp/net/BufferedSocketListener.h>
+#include <dcpp/connection/socket/BufferedSocketListener.h>
 #include <dcpp/hub/ClientListener.h>
 #include <dcpp/connection/ConnectionType.h>
 #include <dcpp/forward.h>
-#include <dcpp/hub/HubSettings.h>
+#include <dcpp/settings/HubSettings.h>
 #include <dcpp/user/OnlineUser.h>
 #include <dcpp/plugins/PluginEntity.h>
-#include <dcpp/base/Speaker.h>
-#include <dcpp/system/TimerManager.h>
-#include <dcpp/typedefs.h>
+#include <dcpp/core/Speaker.h>
+#include <dcpp/core/timer/TimerManager.h>
+#include <dcpp/core/header/typedefs.h>
 
 #include <atomic>
 

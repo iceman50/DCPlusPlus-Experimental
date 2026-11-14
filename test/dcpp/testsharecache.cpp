@@ -23,17 +23,17 @@
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/system/File.h>
+#include <dcpp/core/io/File.h>
 #include <dcpp/hash/HashManager.h>
-#include <dcpp/net/HttpManager.h>
-#include <dcpp/logging/LogManager.h>
+#include <dcpp/connection/http/HttpManager.h>
+#include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchResult.h>
 #include <dcpp/settings/SettingsManager.h>
-#include <dcpp/storage/SQLiteDB.h>
-#include <dcpp/system/Streams.h>
-#include <dcpp/system/TimerManager.h>
-#include <dcpp/transfer/UploadManager.h>
+#include <dcpp/core/io/db/SQLiteDB.h>
+#include <dcpp/core/io/stream/Streams.h>
+#include <dcpp/core/timer/TimerManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <dcpp/util/Util.h>
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
 

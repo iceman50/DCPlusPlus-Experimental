@@ -19,7 +19,7 @@
 #ifndef DCPLUSPLUS_WIN32_PLUGININFODLG_H
 #define DCPLUSPLUS_WIN32_PLUGININFODLG_H
 
-#include <dcpp/typedefs.h>
+#include <dcpp/core/header/typedefs.h>
 
 #include <dwt/widgets/ModalDialog.h>
 

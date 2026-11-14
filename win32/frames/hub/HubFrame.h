@@ -30,12 +30,12 @@
 #include <dcpp/user/User.h>
 #include <dcpp/favorites/FavoriteManagerListener.h>
 
-#include <win32/frames/chat/AspectChat.h>
-#include <win32/frames/users/AspectUserCommand.h>
-#include <win32/controls/ListFilter.h>
-#include <win32/frames/base/IRecent.h>
-#include <win32/frames/base/MDIChildFrame.h>
-#include <win32/frames/users/UserInfoBase.h>
+#include <win32/AspectChat.h>
+#include <win32/AspectUserCommand.h>
+#include <win32/components/ListFilter.h>
+#include <win32/frames/IRecent.h>
+#include <win32/frames/MDIChildFrame.h>
+#include <win32/UserInfoBase.h>
 
 using std::function;
 

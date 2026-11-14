@@ -19,15 +19,15 @@
 #include "stdinc.h"
 #include <dcpp/settings/SettingsManager.h>
 
-#include <dcpp/text/SimpleXML.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/util/Util.h>
-#include <dcpp/system/File.h>
-#include <dcpp/version.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/core/version.h>
 #include <dcpp/hub/AdcHub.h>
 #include <dcpp/user/CID.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/search/SearchManager.h>
-#include <dcpp/text/StringTokenizer.h>
+#include <dcpp/util/text/StringTokenizer.h>
 #include <dcpp/transfer/TransferRate.h>
 
 #include <cstdlib>

@@ -21,20 +21,20 @@
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/ConnectionManager.h>
-#include <dcpp/transfer/Download.h>
-#include <dcpp/system/FileReader.h>
-#include <dcpp/transfer/FinishedManager.h>
+#include <dcpp/transfer/download/Download.h>
+#include <dcpp/core/io/FileReader.h>
+#include <dcpp/modules/FinishedManager.h>
 #include <dcpp/hash/HashManager.h>
-#include <dcpp/logging/LogManager.h>
-#include <dcpp/base/ScopedFunctor.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/core/classes/ScopedFunctor.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/search/SearchResult.h>
-#include <dcpp/hash/SFVReader.h>
+#include <dcpp/core/io/SFVReader.h>
 #include <dcpp/share/ShareManager.h>
-#include <dcpp/text/SimpleXML.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/connection/UserConnection.h>
-#include <dcpp/version.h>
-#include <dcpp/storage/ZUtils.h>
+#include <dcpp/core/version.h>
+#include <dcpp/core/io/compress/ZUtils.h>
 
 #ifdef ff
 #undef ff

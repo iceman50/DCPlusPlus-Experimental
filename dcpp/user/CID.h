@@ -23,7 +23,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include <dcpp/text/Encoder.h>
+#include <dcpp/hash/value/Encoder.h>
 
 namespace dcpp {
 

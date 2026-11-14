@@ -29,21 +29,21 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/hash/HashManagerListener.h>
 #include <dcpp/queue/QueueManagerListener.h>
 
-#include <dcpp/base/Exception.h>
-#include <dcpp/system/CriticalSection.h>
-#include <dcpp/text/StringSearch.h>
-#include <dcpp/base/Singleton.h>
-#include <dcpp/hash/BloomFilter.h>
-#include <dcpp/base/FastAlloc.h>
-#include <dcpp/hash/MerkleTree.h>
-#include <dcpp/base/Pointer.h>
-#include <dcpp/text/StringMatch.h>
+#include <dcpp/core/classes/Exception.h>
+#include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/util/text/StringSearch.h>
+#include <dcpp/core/Singleton.h>
+#include <dcpp/core/classes/BloomFilter.h>
+#include <dcpp/core/classes/FastAlloc.h>
+#include <dcpp/hash/value/MerkleTree.h>
+#include <dcpp/core/classes/Pointer.h>
+#include <dcpp/util/text/StringMatch.h>
 
 namespace dcpp {
 

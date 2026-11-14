@@ -7,7 +7,7 @@
 #include <mutex>
 #include <thread>
 
-#include <dcpp/base/Speaker.h>
+#include <dcpp/core/Speaker.h>
 
 using namespace dcpp;
 using namespace std::chrono_literals;

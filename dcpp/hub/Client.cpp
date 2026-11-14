@@ -19,11 +19,11 @@
 #include "stdinc.h"
 #include <dcpp/hub/Client.h>
 
-#include <dcpp/net/BufferedSocket.h>
+#include <dcpp/connection/socket/BufferedSocket.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connectivity/ConnectivityManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
-#include <dcpp/system/TimerManager.h>
+#include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/user/UserMatchManager.h>
 #include <dcpp/plugins/PluginManager.h>
 

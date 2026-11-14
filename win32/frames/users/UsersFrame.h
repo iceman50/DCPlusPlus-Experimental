@@ -24,11 +24,11 @@
 #include <unordered_map>
 #include <dcpp/favorites/FavoriteManagerListener.h>
 #include <dcpp/queue/QueueManagerListener.h>
-#include <dcpp/transfer/UploadManagerListener.h>
+#include <dcpp/transfer/upload/UploadManagerListener.h>
 
-#include <win32/controls/ListFilter.h>
-#include <win32/frames/base/StaticFrame.h>
-#include <win32/frames/users/UserInfoBase.h>
+#include <win32/components/ListFilter.h>
+#include <win32/frames/StaticFrame.h>
+#include <win32/UserInfoBase.h>
 
 class UsersFrame :
 	public StaticFrame<UsersFrame>,
