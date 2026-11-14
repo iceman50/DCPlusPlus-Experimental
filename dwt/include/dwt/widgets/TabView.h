@@ -117,6 +117,9 @@ public:
 	void setTabText(ContainerPtr w, const tstring& text);
 	tstring getTabText(ContainerPtr w) const;
 
+	/// Resize existing tabs without recreating their pages; uses Seed::widthConfig units.
+	void setWidthConfig(unsigned width);
+
 	void onTitleChanged(const TitleChangedFunction& f) {
 		titleChangedFunction = f;
 	}

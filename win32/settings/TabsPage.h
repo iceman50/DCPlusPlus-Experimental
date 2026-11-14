@@ -41,6 +41,7 @@ private:
 	TablePtr options;
 
 	void createPreview();
+	void updateWidth();
 };
 
 #endif // !defined(DCPLUSPLUS_WIN32_TABS_PAGE_H)

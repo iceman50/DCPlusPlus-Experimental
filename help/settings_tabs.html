@@ -12,8 +12,10 @@ Tabs appear right below toolbar icons; they give you quick access to currently o
 <p cshelp="IDH_SETTINGS_TABS_DRAW" id="tabstyle">
 <b>Let DC++ draw tabs</b>: Select this option to let DC++ draw tabs, which allows it to add more
 customization (such as a close button, different colors and fonts, etc). (default)<br/>
-<b>Use standard Windows tabs</b>: Select this option to use standard Windows tabs - DC++ won't be able to
-customize them.<br/>
+<b>Use standard Windows tabs</b>: Select this option to use native Windows tab sizing and drawing.<br/>
+Dark mode and custom interface colors use DC++'s tab renderer for both choices, so the drawing
+difference is visible only with native Windows appearance. The choice still determines how tab
+width is measured: pixels for DC++ tabs, or a title-length limit for standard Windows tabs.<br/>
 <i>DC++ needs to be restarted for this setting to take effect.</i>
 </p>
 <h2>Second and third sets of choices</h2>
@@ -21,7 +23,10 @@ customize them.<br/>
 Several modes are exposed here with various differences; select the one you prefer.<br/>
 One particular difference is that in tab style mode, multiline tabs re-organize so that the
 selected tab is always at the bottom. That isn't the case in button style mode.<br/>
-<i>DC++ needs to be restarted for this setting to take effect.</i>
+Default theme and Browser theme select Windows visual styles for DC++-drawn tabs. They do not
+change the tab colors or shape in dark mode or when custom interface colors are active, and
+may look the same when Windows does not provide a separate browser tab theme.<br/>
+<i>DC++ needs to be restarted for these style settings to take effect.</i>
 </p>
 <h2>Tab width</h2>
 <p cshelp="IDH_SETTINGS_TAB_WIDTH">
@@ -29,12 +34,16 @@ Use this slider to define the width occupied by each tab. Move to the left for a
 to the right for a higher width.<br/>
 When the title of a tab exceeds the available width, it will be cut accordingly and appended with
 &quot;...&quot;.<br/>
-<i>DC++ needs to be restarted for this setting to take effect.</i>
+The preview and open tabs resize as you move the slider. Click OK to keep the width or Cancel to
+restore the saved width; no restart is needed. If you also change the tab style, the open tabs
+keep their current style until restart.<br/>
+For standard Windows tabs this slider limits the title length rather than setting a fixed pixel
+width. At the far left there is no title-length limit.
 </p>
 <h2>Preview</h2>
 <p cshelp="IDH_SETTINGS_TAB_PREVIEW">
-This fake tab control shows how the main tab control would display after a restart of DC++, were
-the settings defined above be validated.
+This sample tab control shows the selected style and width with the current interface appearance.
+Width changes also preview on the main tab strip immediately; style changes require a restart.
 </p>
 <h2>Tab highlight on content change</h2>
 <dl style="margin-left: 40px;">

@@ -554,6 +554,28 @@ tstring TabView::formatTitle(tstring title) {
 	return util::escapeMenu(title);
 }
 
+void TabView::setWidthConfig(unsigned width) {
+	const bool ownerDraw = hasStyle(TCS_OWNERDRAWFIXED);
+	width = ownerDraw ? std::max(100u, width) : (width <= 3 ? 0 : width);
+	if(widthConfig == width) return;
+	widthConfig = width;
+	if(ownerDraw) {
+		TabCtrl_SetMinTabWidth(handle(), scale(static_cast<int>(widthConfig)));
+	} else {
+		// Rebuild from the full label so widening restores previously truncated text.
+		for(size_t i = 0; i < size(); ++i) {
+			auto info = getTabInfo(static_cast<int>(i));
+			setText(static_cast<unsigned>(i), formatTitle(getTabText(info->w)));
+		}
+	}
+	// Geometry (including the number of rows) can change while the mouse is down.
+	closeRect = Rectangle();
+	highlightClose = false;
+	closeAuthorized = false;
+	layout();
+	BaseType::redraw();
+}
+
 void TabView::layout() {
 	Rectangle tmp = getUsableArea(true);
 	if(!(tmp == clientSize)) {

@@ -1513,6 +1513,10 @@ void MainWindow::handleSettings() {
 
 		refreshPluginMenu();
 	}
+	// Commit the live width preview on OK, or restore the saved width on Cancel.
+	// Style changes still take effect at startup; use the running strip's style.
+	const auto tabWidth = std::clamp(SETTING(TAB_WIDTH), 100, 1000);
+	tabs->setWidthConfig(tabs->hasStyle(TCS_OWNERDRAWFIXED) ? tabWidth : (tabWidth - 100) / 9);
 	reloadThemes();
 }
 

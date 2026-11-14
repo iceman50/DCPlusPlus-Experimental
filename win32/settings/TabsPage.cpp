@@ -20,6 +20,8 @@
 #include <win32/util/ControlSeeds.h>
 #include <win32/util/IconManager.h>
 #include <win32/settings/TabsPage.h>
+#include <win32/MainWindow.h>
+#include <win32/util/UiServices.h>
 
 #include <dcpp/settings/SettingsManager.h>
 
@@ -66,7 +68,7 @@ options(0)
 		GridPtr cur = grid->addChild(Grid::Seed(1, 3));
 
 		auto cp = [this] { createPreview(); };
-		GroupBoxPtr group = cur->addChild(GroupBox::Seed());
+		GroupBoxPtr group = cur->addChild(GroupBox::Seed(T_("Drawing (restart required)")));
 		group->setHelpId(IDH_SETTINGS_TABS_DRAW);
 		GridPtr cur2 = group->addChild(Grid::Seed(2, 1));
 		dcppDraw = cur2->addChild(RadioButton::Seed(T_("Let DC++ draw tabs")));
@@ -80,7 +82,7 @@ options(0)
 		else
 			button->setChecked();
 
-		group = cur->addChild(GroupBox::Seed());
+		group = cur->addChild(GroupBox::Seed(T_("Style (restart required)")));
 		group->setHelpId(IDH_SETTINGS_TABS_STYLE);
 		cur2 = group->addChild(Grid::Seed(2, 1));
 		button = cur2->addChild(RadioButton::Seed(T_("Tab style")));
@@ -92,7 +94,7 @@ options(0)
 		else
 			button->setChecked();
 
-		themeGroup = cur->addChild(GroupBox::Seed());
+		themeGroup = cur->addChild(GroupBox::Seed(T_("Theme (restart required)")));
 		themeGroup->setHelpId(IDH_SETTINGS_TABS_STYLE);
 		cur2 = themeGroup->addChild(Grid::Seed(2, 1));
 		button = cur2->addChild(RadioButton::Seed(T_("Default theme")));
@@ -120,7 +122,7 @@ options(0)
 		tabWidth = cur->addChild(Slider::Seed());
 		tabWidth->setRange(100, 1000);
 		tabWidth->setPosition(SETTING(TAB_WIDTH));
-		tabWidth->onScrollHorz([this] { createPreview(); });
+		tabWidth->onScrollHorz([this] { updateWidth(); });
 	}
 
 	{
@@ -160,9 +162,9 @@ void TabsPage::write() {
 }
 
 void TabsPage::createPreview() {
-	auto previous = *previewGrid->getChildren<TabView>().first;
-	if(previous)
-		previous->close();
+	auto children = previewGrid->getChildren<TabView>();
+	if(children.first != children.second)
+		(*children.first)->close();
 
 	TabView::Seed seed = ControlSeeds::tabs;
 	seed.style &= ~TCS_TOOLTIPS;
@@ -199,4 +201,16 @@ void TabsPage::createPreview() {
 	tabs->mark(highlighted);
 
 	previewGrid->layout();
+}
+
+void TabsPage::updateWidth() {
+	auto apply = [this](TabViewPtr tabs) {
+		if(!tabs) return;
+		const auto width = tabWidth->getPosition();
+		// The live strip may still use a different style until the next restart.
+		tabs->setWidthConfig(tabs->hasStyle(TCS_OWNERDRAWFIXED) ? width : (width - 100) / 9);
+	};
+	auto children = previewGrid->getChildren<TabView>();
+	if(children.first != children.second) apply(*children.first);
+	if(UiServices::mainWindow) apply(UiServices::mainWindow->getTabView());
 }
