@@ -328,6 +328,8 @@ private:
 	Point iconSize;
 
 	FontPtr font;
+	FontPtr applicationFont;
+	bool inheritsApplicationFont = true;
 	FontPtr boldFont; // for default items
 	FontPtr titleFont; // Menu title font
 

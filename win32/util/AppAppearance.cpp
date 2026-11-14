@@ -39,14 +39,23 @@ COLORREF textColor = 0, bgColor = 0;
 
 namespace {
 dwt::Appearance::Palette themePalette() {
+	const bool light = SETTING(THEME_MODE) == SettingsManager::THEME_LIGHT ||
+		(SETTING(THEME_MODE) == SettingsManager::THEME_SYSTEM &&
+			!dwt::Application::instance().getAppearance().isSystemDark());
+	auto color = [light](SettingsManager::IntSetting setting, int systemColor) {
+		// Light mode selects the Windows palette even after a custom theme has
+		// populated every stored color. Keep those settings for returning to Dark.
+		return light ? ::GetSysColor(systemColor) :
+			static_cast<COLORREF>(SettingsManager::getInstance()->get(setting));
+	};
 	return {
-		static_cast<COLORREF>(SETTING(THEME_BACKGROUND_COLOR)),
-		static_cast<COLORREF>(SETTING(THEME_SURFACE_COLOR)),
-		static_cast<COLORREF>(SETTING(THEME_TEXT_COLOR)),
-		static_cast<COLORREF>(SETTING(THEME_DISABLED_TEXT_COLOR)),
-		static_cast<COLORREF>(SETTING(THEME_BORDER_COLOR)),
-		static_cast<COLORREF>(SETTING(THEME_ACCENT_COLOR)),
-		static_cast<COLORREF>(SETTING(THEME_HIGHLIGHT_TEXT_COLOR))
+		color(SettingsManager::THEME_BACKGROUND_COLOR, COLOR_BTNFACE),
+		color(SettingsManager::THEME_SURFACE_COLOR, COLOR_WINDOW),
+		color(SettingsManager::THEME_TEXT_COLOR, COLOR_BTNTEXT),
+		color(SettingsManager::THEME_DISABLED_TEXT_COLOR, COLOR_GRAYTEXT),
+		color(SettingsManager::THEME_BORDER_COLOR, COLOR_3DSHADOW),
+		color(SettingsManager::THEME_ACCENT_COLOR, COLOR_HIGHLIGHT),
+		color(SettingsManager::THEME_HIGHLIGHT_TEXT_COLOR, COLOR_HIGHLIGHTTEXT)
 	};
 }
 
@@ -71,7 +80,18 @@ BOOL CALLBACK updateWindowColors(HWND hwnd, LPARAM) {
 }
 
 void updateApplicationColors() {
-	const auto& appearance = dwt::Application::instance().getAppearance();
+	auto& appearance = dwt::Application::instance().getAppearance();
+	// Resolve the active palette again when Windows switches light/dark mode.
+	// The nested notification sees the new palette and needs no further update.
+	const auto desired = themePalette();
+	const auto& active = appearance.getPalette();
+	if(!appearance.isHighContrast() && (desired.background != active.background ||
+		desired.surface != active.surface || desired.text != active.text ||
+		desired.disabledText != active.disabledText || desired.border != active.border ||
+		desired.accent != active.accent || desired.highlightText != active.highlightText)) {
+		appearance.configure(themeMode(), desired);
+		return;
+	}
 	IconManager::setDarkMode(appearance.isDark());
 	textColor = appearance.isHighContrast() ?
 		::GetSysColor(COLOR_WINDOWTEXT) :

@@ -44,6 +44,7 @@
 #include <dwt/util/check.h>
 #include <dwt/util/StringUtils.h>
 #include <dwt/dwt_vsstyle.h>
+#include <dwt/dwt_vssym32.h>
 
 #include <algorithm>
 #include <memory>
@@ -173,6 +174,7 @@ void Menu::updateAppearance() {
 	}
 
 	colors.update(*appearance);
+	if(inheritsApplicationFont && applicationFont != appearance->getFont()) setFont(nullptr);
 	if(appearance->isManual()) {
 		theme.unload();
 		backgroundBrush = new Brush(colors.background);
@@ -182,7 +184,8 @@ void Menu::updateAppearance() {
 	}
 	/* SetMenuItemInfo may synchronously repaint an attached menu bar. Prepare
 	 * every resource used by that paint before changing the owner-draw state. */
-	setOwnerDrawn(requestedOwnerDrawn || appearance->isManual());
+	setOwnerDrawn(requestedOwnerDrawn || appearance->isManual() ||
+		(appearance->getFont() && !appearance->isHighContrast()));
 	applyBackground();
 
 	if(getParent() && getParent()->handle() &&
@@ -400,7 +403,7 @@ Menu* Menu::appendPopup(const tstring& text, const IconPtr& icon, bool subTitle)
 	// create the sub-menu
 	std::unique_ptr<Menu> sub(new Menu(getParent()));
 	sub->parentMenu = this;
-	Seed seed(requestedOwnerDrawn, iconSize, font);
+	Seed seed(requestedOwnerDrawn, iconSize, inheritsApplicationFont ? FontPtr() : font);
 	seed.commandMessages = commandMessages;
 	sub->create(seed);
 
@@ -459,10 +462,14 @@ Menu::~Menu() {
 }
 
 void Menu::setFont(FontPtr newFont) {
+	const auto& appAppearance = Application::instance().getAppearance();
+	inheritsApplicationFont = !newFont || newFont == appAppearance.getFont();
+	applicationFont = inheritsApplicationFont ? appAppearance.getFont() : FontPtr();
+	if(inheritsApplicationFont) newFont = appAppearance.getFontForDpi(getParent()->getDpi());
 	this->font = newFont ? newFont : new Font(Font::DefaultGui);
 	titleFont = boldFont = this->font->makeBold();
 	for(auto& i: itsChildren) {
-		i->setFont(this->font);
+		i->setFont(inheritsApplicationFont ? FontPtr() : this->font);
 	}
 }
 
@@ -786,7 +793,7 @@ bool Menu::handlePainting(DRAWITEMSTRUCT& drawInfo, ItemDataWrapper& wrapper) {
 			if(getRootMenu()->popup) // menus not in the menu bar may get cropped
 				drawTextFormat |= DT_WORD_ELLIPSIS;
 
-			if(theme) {
+			if(theme && !Application::instance().getAppearance().getFont()) {
 				theme.drawText(canvas, part, state, text, drawTextFormat, textRect);
 				if(!accelerator.empty())
 					theme.drawText(canvas, part, state, accelerator, drawAccelFormat, textRect);
@@ -794,11 +801,16 @@ bool Menu::handlePainting(DRAWITEMSTRUCT& drawInfo, ItemDataWrapper& wrapper) {
 			} else {
 				auto bkMode(canvas.setBkMode(true));
 
-				canvas.setTextColor(
+				auto textColor =
 					isGrayed ? colors.gray :
 					wrapper.isTitle ? colors.titleText :
 					highlight ? colors.highlightText :
-					colors.text);
+					colors.text;
+				if(theme) {
+					const auto nativeColor = theme.getColor(part, state, TMT_TEXTCOLOR);
+					if(nativeColor != NaC) textColor = nativeColor;
+				}
+				canvas.setTextColor(textColor);
 
 				canvas.drawText(text, textRect, drawTextFormat);
 				if(!accelerator.empty())

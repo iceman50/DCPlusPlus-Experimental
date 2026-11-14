@@ -122,10 +122,15 @@ public:
 
 	Mode getMode() const { return mode; }
 	Rendering getRendering() const { return rendering; }
+	/** Default typography for controls, menus and application-drawn captions. */
+	void setFont(const FontPtr& font, unsigned sourceDpi);
+	const FontPtr& getFont() const { return font; }
+	FontPtr getFontForDpi(unsigned dpi) const;
 	/** Application preference, independent of imported palettes. Updates open dialogs. */
 	void setDialogBorders(bool enabled);
 	bool getDialogBorders() const { return dialogBorders; }
 	bool isDark() const { return dark; }
+	bool isSystemDark() const { return systemDark; }
 	bool isHighContrast() const { return highContrast; }
 	bool isManual() const { return !highContrast && (dark || rendering == Rendering::CustomPalette); }
 	unsigned getGeneration() const { return generation; }
@@ -198,6 +203,8 @@ private:
 	CallbackList callbacks;
 	BrushPtr backgroundBrush;
 	BrushPtr surfaceBrush;
+	FontPtr font;
+	unsigned fontDpi = 96;
 };
 
 }

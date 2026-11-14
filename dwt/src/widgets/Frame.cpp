@@ -122,8 +122,10 @@ void Frame::appearanceChanged() {
 	BaseType::appearanceChanged();
 	updateCaptionAppearance();
 	if(manualFrame && clientFrame) {
+		const auto previousHeight = clientFrame->height();
 		clientFrame->refresh();
 		refreshClientFrame();
+		if(previousHeight != clientFrame->height()) ::PostMessage(handle(), frameLayoutMessage(), 0, 0);
 	}
 }
 
@@ -150,7 +152,12 @@ bool Frame::handleMessage(const MSG& msg, LRESULT& result) {
 			return true;
 		case WM_NCACTIVATE:
 			if(clientFrame) clientFrame->handleFrameMessage(msg, result);
-			if(getDialogBorderWidth()) redrawWindow(RDW_INVALIDATE | RDW_ERASE);
+			if(getDialogBorderWidth()) {
+				// Activation changes only the outline; repainting the whole dialog
+				// here needlessly invalidates every settings page behind the caption.
+				UpdateCanvas canvas(this);
+				paintDialogBorder(canvas.handle());
+			}
 			result = TRUE;
 			return true;
 		case WM_ERASEBKGND:
@@ -275,7 +282,10 @@ void Frame::updateCaptionAppearance() {
 	const auto style = static_cast<DWORD>(::GetWindowLongPtr(handle(), GWL_STYLE));
 	const auto exStyle = static_cast<DWORD>(::GetWindowLongPtr(handle(), GWL_EXSTYLE));
 	// Child frames and intentionally captionless windows retain their own layout.
-	const bool manual = frameRendering == FrameRendering::Automatic && isManualAppearance() && !(style & WS_CHILD) && (manualFrame || (style & WS_CAPTION) == WS_CAPTION);
+	// A global font needs our caption even when controls use Windows light styles.
+	const bool styledFont = getAppearance().getFont() && !getAppearance().isHighContrast() &&
+		getAppearancePolicy() != AppearancePolicy::Native;
+	const bool manual = frameRendering == FrameRendering::Automatic && (isManualAppearance() || styledFont) && !(style & WS_CHILD) && (manualFrame || (style & WS_CAPTION) == WS_CAPTION);
 	changingFrame = true;
 	updateNativeFrameAppearance();
 	if(manual == manualFrame) {

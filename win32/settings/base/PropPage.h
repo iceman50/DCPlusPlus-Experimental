@@ -90,10 +90,9 @@ protected:
 	void handleBrowseFile(TextBoxPtr box, int setting);
 
 	GridPtr grid;
-
-private:
 	virtual dwt::Point getPreferredSize();
 
+private:
 	void handleListHelpId(TablePtr list, unsigned& id);
 
 	unordered_map<TablePtr, const ListItem*> lists;

@@ -14,8 +14,11 @@
 	Select an item to edit its font, text color, background and text effects. Changes remain in
 	the settings draft until you click OK; Cancel discards them.</p>
 	<h2>Mode and theme files</h2>
-	<p>Choose Follow Windows, Light or Dark. The interface palette is used in Dark mode; Windows
-	high contrast takes precedence for interface colors. Select a theme to load its complete appearance.
+	<p>Choose Follow Windows, Light or Dark. Light always uses Windows light controls and interface colors,
+	even when a custom theme was previously selected. Dark uses the saved custom interface palette;
+	switching modes preserves it. Follow Windows selects between these palettes with the Windows
+	appearance preference. The global font remains active in every mode. Windows high contrast
+	takes precedence for interface colors. Select a theme to load its complete appearance.
 	Existing palette-only themes receive distinct transfer and chat colors suited to their background.</p>
 	<p>For a light custom palette, select Paper, Arctic Day, Sage, Sandstone or Lavender.
 	These presets use the custom palette renderer, so the Mode selector remains on Dark even
@@ -32,7 +35,10 @@
 	<h2>General</h2>
 	<h3>Global application style</h3>
 	<p cshelp="IDH_SETTINGS_STYLES_GLOBAL">
-	The style used throughout all DC++ windows.
+	The default font used throughout DC++, including title bars, menu headings and popup menus,
+	dialog controls, tooltips, tabs and status bars. Font changes also update open windows.
+	Changing the global text color updates the interface palette's primary text color as well.
+	Individual content styles and interface palette overrides can still be customized separately.
 	</p>
 
 	<h2 id="transfercolors">Transfers</h2>

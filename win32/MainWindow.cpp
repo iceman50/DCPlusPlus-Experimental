@@ -1409,22 +1409,6 @@ MainWindow::~MainWindow() {
 	dwt::Application::instance().removeFilter(filterIter);
 }
 
-namespace {
-
-BOOL CALLBACK updateFont(HWND hwnd, LPARAM prevFont) {
-	dwt::Control* widget = dwt::hwnd_cast<dwt::Control*>(hwnd);
-	if(widget && widget->getFont()->handle() == reinterpret_cast<HFONT>(prevFont)) {
-		widget->setFont(UiFonts::font);
-		widget->layout();
-		if(dynamic_cast<dwt::Grid*>(widget->getParent())) {
-			widget->getParent()->layout();
-		}
-	}
-	return TRUE;
-}
-
-} // unnamed namespace
-
 void MainWindow::handleSettings() {
 	// this may be called directly from the tray icon when the main window is still hidden
 	if(isIconic())
@@ -1535,11 +1519,7 @@ void MainWindow::handleSettings() {
 void MainWindow::refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont) {
 	dwt::Appearance::UpdateScope update(dwt::Application::instance().getAppearance());
 	if(SETTING(MAIN_FONT) != previousFont) {
-		auto previous = UiFonts::font;
 		UiServices::initFont();
-		::EnumChildWindows(handle(), updateFont, reinterpret_cast<LPARAM>(previous->handle()));
-		mainMenu->setFont(UiFonts::font);
-		::DrawMenuBar(handle());
 	}
 	if(SETTING(UPLOAD_FONT) != previousUploadFont) UiFonts::updateUploadFont();
 	if(SETTING(DOWNLOAD_FONT) != previousDownloadFont) UiFonts::updateDownloadFont();

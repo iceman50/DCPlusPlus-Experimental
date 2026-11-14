@@ -153,6 +153,7 @@ void ToolTip::onGetTip(F f) {
 }
 
 void ToolTip::appearanceChanged() {
+	refreshApplicationFont();
 	const auto& appearance = getAppearance();
 	COLORREF background;
 	COLORREF foreground;

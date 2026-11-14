@@ -30,6 +30,7 @@
 #include <dcpp/core/version.h>
 #include <win32/MainWindow.h>
 #include <dwt/widgets/MessageBox.h>
+#include <dwt/util/GDI.h>
 
 namespace UiServices {
 
@@ -54,6 +55,8 @@ void initFont() {
 	UiFonts::updateFont(UiFonts::font, SettingsManager::MAIN_FONT);
 
 	ControlSeeds::init();
+	dwt::Application::instance().getAppearance().setFont(UiFonts::font,
+		static_cast<unsigned>(96 * dwt::util::dpiFactor()));
 }
 
 void setStaticWindowState(const string& id, bool open) {

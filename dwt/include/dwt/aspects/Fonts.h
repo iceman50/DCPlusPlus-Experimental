@@ -38,6 +38,7 @@
 #define DWT_aspects_Fonts_h
 
 #include "../resources/Font.h"
+#include "../Application.h"
 #include "../CanvasClasses.h"
 
 namespace dwt { namespace aspects {
@@ -68,6 +69,10 @@ public:
 
 	/// Sets the font used by the Widget
 	void setFont(FontPtr newFont) {
+		const auto& appearance = Application::instance().getAppearance();
+		inheritsApplicationFont = !newFont || newFont == appearance.getFont();
+		applicationFont = inheritsApplicationFont ? appearance.getFont() : FontPtr();
+		if(inheritsApplicationFont) newFont = appearance.getFontForDpi(W().getDpi());
 		this->font = newFont ? newFont : new Font(Font::DefaultGui);
 		dpiFont = this->font->getLogFont();
 		dpiFontSource = W().getDpi();
@@ -78,6 +83,18 @@ public:
 			dpiCallbackRegistered = true;
 		}
 		W().setFontImpl();
+	}
+
+	/// Refresh inherited fonts without overwriting explicit content styles.
+	void refreshApplicationFont() {
+		if(inheritsApplicationFont && applicationFont != Application::instance().getAppearance().getFont()) {
+			const bool updating = applicationFont != nullptr;
+			setFont(nullptr);
+			if(updating) {
+				W().layout();
+				if(W().getParent()) W().getParent()->layout();
+			}
+		}
 	}
 
 	/// Returns the font used by the Widget
@@ -95,7 +112,7 @@ protected:
 
 private:
 	void recreateFont(unsigned dpi) {
-		if(!font || !dpiFontSource || dpi == dpiFontSource) {
+		if(!font || !dpiFontSource) {
 			return;
 		}
 
@@ -110,6 +127,8 @@ private:
 
 	// Keep a reference around so it doesn't get deleted
 	FontPtr font;
+	FontPtr applicationFont;
+	bool inheritsApplicationFont = true;
 	LOGFONT dpiFont = {};
 	unsigned dpiFontSource = 0;
 	bool dpiCallbackRegistered = false;

@@ -107,7 +107,9 @@ void ClientFrame::releaseFrameInput() {
 
 void ClientFrame::refresh() {
 	NONCLIENTMETRICS metrics = { sizeof(NONCLIENTMETRICS) };
-	if(owner->getSystemParameters(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics)) {
+	if(auto font = getAppearance().getFontForDpi(owner->getDpi())) {
+		captionFont = menuFont = font;
+	} else if(owner->getSystemParameters(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics)) {
 		captionFont = new Font(owner->hasExStyle(WS_EX_TOOLWINDOW) ? metrics.lfSmCaptionFont : metrics.lfCaptionFont);
 		menuFont = new Font(metrics.lfMenuFont);
 	} else {
@@ -115,6 +117,10 @@ void ClientFrame::refresh() {
 		menuFont = captionFont;
 	}
 	captionHeight = std::max(owner->scale(28), owner->getSystemMetric(owner->hasExStyle(WS_EX_TOOLWINDOW) ? SM_CYSMCAPTION : SM_CYCAPTION));
+	UpdateCanvas canvas(this);
+	auto selectFont = canvas.select(*captionFont);
+	captionHeight = std::max<long>(captionHeight, canvas.getTextExtent(_T("Mg")).y + owner->scale(8));
+	if(systemMenu) systemMenu->setFont(menuFont);
 	active = ::GetActiveWindow() == owner->handle();
 	layout();
 	redrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN);

@@ -127,9 +127,9 @@ showGen(0)
 			preview->setTextLimit(128 * 1024);
 			preview->setAccessibleName(T_("Live chat appearance preview"));
 			preview->setHelpId(IDH_SETTINGS_STYLES_PREVIEW);
-			cur->row(0).size = cur->scale(160);
+			cur->row(0).size = cur->scale(80);
 			cur->row(1).mode = GridInfo::FILL;
-			cur->row(1).size = cur->scale(160);
+			cur->row(1).size = cur->scale(80);
 			cur->row(1).align = GridInfo::STRETCH;
 		}
 
@@ -212,7 +212,10 @@ showGen(0)
 		{ N_("Selection and accent"), SettingsManager::THEME_ACCENT_COLOR },
 		{ N_("Selected text"), SettingsManager::THEME_HIGHLIGHT_TEXT_COLOR }
 	};
-	for(const auto& color : palette) add(Text::toT(_(color.first)), IDH_STYLESPAGE, GROUP_INTERFACE, -1, -1, color.second);
+	for(const auto& color : palette) {
+		auto data = add(Text::toT(_(color.first)), IDH_STYLESPAGE, GROUP_INTERFACE, -1, -1, color.second);
+		if(color.second == SettingsManager::THEME_TEXT_COLOR) interfaceTextData = data;
+	}
 
 	globalData = add(T_("Global application style"), IDH_SETTINGS_STYLES_GLOBAL, GROUP_GENERAL,
 		SettingsManager::MAIN_FONT, SettingsManager::TEXT_COLOR, SettingsManager::BACKGROUND_COLOR);
@@ -270,6 +273,28 @@ showGen(0)
 }
 
 ThemePage::~ThemePage() {
+}
+
+dwt::Point ThemePage::getPreferredSize() {
+	if(table && font) {
+		// FILL cells only report their explicit minimum, not their children's
+		// preferred sizes. Propagate these minima so the settings host can scroll
+		// the complete editor instead of clipping its controls below the preview.
+		auto fontGroup = font->getParent();
+		static_cast<Grid*>(fontGroup->getParent())->column(0).size = fontGroup->getPreferredSize().x;
+		auto content = static_cast<Grid*>(table->getParent());
+		long width = 0;
+		auto children = content->getChildren<dwt::Control>();
+		for(auto child = children.first; child != children.second; ++child)
+			width = std::max(width, (*child)->getPreferredSize().x);
+		content->column(0).size = width;
+		grid->row(1).size = content->getParent()->getPreferredSize().y;
+		children = grid->getChildren<dwt::Control>();
+		for(auto child = children.first; child != children.second; ++child)
+			width = std::max(width, (*child)->getPreferredSize().x);
+		grid->column(0).size = width;
+	}
+	return PropPage::getPreferredSize();
 }
 
 void ThemePage::layout() {
@@ -528,6 +553,7 @@ void ThemePage::handleCustomTextColor() {
 	if(data->customTextColor) {
 		data->textColor = getTextColor(data);
 	}
+	updateGlobalTextColor(data);
 	update(data);
 	handleSelectionChanged();
 }
@@ -537,8 +563,18 @@ void ThemePage::handleTextColor() {
 	auto color = colorDialog(getTextColor(data));
 	if(color >= 0) {
 		data->textColor = color;
+		updateGlobalTextColor(data);
 	}
 	update(data);
+}
+
+void ThemePage::updateGlobalTextColor(Data* data) {
+	if(data != globalData || !interfaceTextData) return;
+	// A global text edit includes chrome; the palette row remains available as
+	// an explicit override, and loading a preset preserves its authored colors.
+	interfaceTextData->customBgColor = true;
+	interfaceTextData->bgColor = globalData->getTextColor();
+	table->update(interfaceTextData);
 }
 
 void ThemePage::handleCustomBgColor() {

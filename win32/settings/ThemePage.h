@@ -32,6 +32,7 @@ public:
 	virtual ~ThemePage();
 
 	virtual void layout();
+	dwt::Point getPreferredSize() override;
 	virtual void write();
 
 	void updateUserMatches(std::vector<UserMatch>& userMatches);
@@ -128,6 +129,8 @@ private:
 	};
 
 	Data* globalData;
+	Data* interfaceTextData = nullptr;
+	void updateGlobalTextColor(Data* data);
 
 	typedef TypedTable<Data> Table;
 	Table* table;

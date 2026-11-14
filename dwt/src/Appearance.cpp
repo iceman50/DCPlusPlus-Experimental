@@ -35,6 +35,7 @@
 #include <dwt/CanvasClasses.h>
 #include <dwt/Widget.h>
 #include <dwt/resources/Brush.h>
+#include <dwt/resources/Font.h>
 #include <dwt/resources/Pen.h>
 #include <dwt/widgets/Composite.h>
 #include <dwt/widgets/Control.h>
@@ -619,6 +620,21 @@ bool Appearance::isColorSchemeMessage(const MSG& msg) const {
 		::lstrcmpi(section, _T("Accessibility")) == 0;
 }
 
+void Appearance::setFont(const FontPtr& value, unsigned sourceDpi) {
+	if(font == value && fontDpi == sourceDpi) return;
+	font = value;
+	fontDpi = sourceDpi ? sourceDpi : 96;
+	changed();
+}
+
+FontPtr Appearance::getFontForDpi(unsigned dpi) const {
+	if(!font || !dpi || dpi == fontDpi) return font;
+	auto value = font->getLogFont();
+	value.lfHeight = ::MulDiv(value.lfHeight, dpi, fontDpi);
+	value.lfWidth = ::MulDiv(value.lfWidth, dpi, fontDpi);
+	return new Font(value);
+}
+
 void Appearance::applyAll() {
 	if(applying) {
 		return;
@@ -670,6 +686,9 @@ void Appearance::apply(Widget* widget) {
 		return;
 	}
 	widget->appearanceGeneration = generation;
+	if(widget->appearancePolicy != AppearancePolicy::Native) {
+		if(auto control = dynamic_cast<Control*>(widget)) control->refreshApplicationFont();
+	}
 	widget->appearanceChanged();
 	if(widget->appearancePolicy == AppearancePolicy::Native) {
 		destroyScrollDecorations(widget->handle());
