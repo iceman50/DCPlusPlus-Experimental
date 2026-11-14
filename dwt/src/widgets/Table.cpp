@@ -31,6 +31,7 @@
 */
 
 #include <dwt/widgets/Table.h>
+#include "TouchScrolling.h"
 
 #include <algorithm>
 
@@ -78,6 +79,7 @@ void Table::create( const Seed & cs )
 	setFont(cs.font);
 	if(cs.lvStyle != 0)
 		setTableStyle(cs.lvStyle);
+	detail::enableTableTouchScrolling(*this);
 	onDpiResourcesChanged([this](const DpiResourceEvent& event) {
 		if(itsNormalImageList) {
 			setNormalImageList(itsNormalImageList->resized(

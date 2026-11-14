@@ -41,6 +41,7 @@
 #include <dwt/util/win32/ApiHelpers.h>
 #include <dwt/util/win32/AccessibilityProvider.h>
 #include <dwt/util/win32/Dpi.h>
+#include <dwt/util/win32/Version.h>
 
 namespace dwt {
 
@@ -54,6 +55,8 @@ UINT finalizeAppearanceMessage() {
 
 bool isAppearanceLifecycleMessage(UINT message) {
 	switch(message) {
+	case WM_GESTURE:
+		return util::win32::ensureVersion(util::win32::EIGHT_ONE);
 	case WM_DESTROY:
 	case WM_SHOWWINDOW:
 	case WM_STYLECHANGED:

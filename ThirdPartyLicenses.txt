@@ -12,9 +12,19 @@ Licenses contained in this file:
 --- libmaxminddb and GeoLite2 ---
 
 This product includes GeoLite2 data created by MaxMind, available from
-https://www.maxmind.com. Production databases are downloaded with the user's
-MaxMind account and are not bundled in the distribution. Database terms:
-https://www.maxmind.com/en/geolite2/eula
+https://www.maxmind.com. Portable releases may include an unmodified GeoLite2
+Country database snapshot. Database updates are available through the user's
+MaxMind account. The database is governed by the GeoLite End User License
+Agreement, incorporating Creative Commons Attribution-ShareAlike 4.0:
+https://www.maxmind.com/en/geolite/eula
+https://creativecommons.org/licenses/by-sa/4.0/
+Use current data and replace/destroy superseded copies within 30 days after an
+update is released, as required by the GeoLite agreement. Do not use this data
+to identify a household, individual, or street address. See the portable
+package's GeoLite2-NOTICE.txt for the bundled database build date.
+
+The following Apache license applies to the libmaxminddb library, not to the
+GeoLite2 database:
 
 Copyright 2013-2026 MaxMind, Inc.
 

@@ -38,6 +38,7 @@
 #include <dwt/resources/Pen.h>
 #include <dwt/widgets/Composite.h>
 #include <dwt/widgets/Control.h>
+#include <dwt/util/win32/Version.h>
 
 #include <algorithm>
 
@@ -726,6 +727,12 @@ bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) 
 	switch(msg.message) {
 	case WM_DESTROY:
 		destroyScrollDecorations(msg.hwnd);
+		break;
+	case WM_GESTURE:
+		if(util::win32::ensureVersion(util::win32::EIGHT_ONE)) {
+			// Defer until the native control has also processed unhandled gestures.
+			scheduleScrollDecorationRefresh(msg.hwnd, false);
+		}
 		break;
 	case WM_SHOWWINDOW:
 	case WM_STYLECHANGED:

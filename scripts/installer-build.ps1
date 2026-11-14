@@ -127,6 +127,14 @@ $iconPacksDirectory = Join-Path $repoRoot "IconPacks"
 
 Assert-RequiredFile -Path $strippedExecutable -Description "Stripped release executable"
 Assert-RequiredFile -Path $debugSymbols -Description "Release PDB"
+$versionLine = Select-String -LiteralPath (Join-Path $repoRoot "dcpp\core\version.h") -Pattern '^\s*#define\s+VERSIONSTRING\s+"([^"]+)"' | Select-Object -First 1
+if($null -eq $versionLine) {
+	throw "Unable to determine the application version."
+}
+$version = $versionLine.Matches[0].Groups[1].Value
+if([System.Diagnostics.FileVersionInfo]::GetVersionInfo($strippedExecutable).ProductVersion -ne $version) {
+	throw "Release executable version does not match version.h; rebuild before packaging."
+}
 Assert-RequiredFile -Path (Join-Path $repoRoot "changelog-bfe.txt") -Description "BFE changelog"
 if(-not (Test-Path -LiteralPath $themesDirectory -PathType Container)) {
 	throw "Themes directory was not found: $themesDirectory"
@@ -175,7 +183,7 @@ Write-EnglishCatalog -StringsPath (Join-Path $stageDirectory "Strings.xml") -Sta
 
 Push-Location -LiteralPath $stageDirectory
 try {
-	& $makensis /V4 "DCPlusPlus.nsi"
+	& $makensis /V4 "/DAPP_VERSION=$version" "DCPlusPlus.nsi"
 	if($LASTEXITCODE -ne 0) {
 		throw "NSIS failed with exit code $LASTEXITCODE."
 	}
@@ -185,11 +193,6 @@ try {
 
 $rawInstaller = Join-Path $stageDirectory "DCPlusPlus-xxx.exe"
 Assert-RequiredFile -Path $rawInstaller -Description "Compiled installer"
-$versionLine = Select-String -LiteralPath (Join-Path $repoRoot "dcpp\core\version.h") -Pattern '^\s*#define\s+VERSIONSTRING\s+"([^"]+)"' | Select-Object -First 1
-if($null -eq $versionLine) {
-	throw "Unable to determine the application version."
-}
-$version = $versionLine.Matches[0].Groups[1].Value
 $revision = (& git -C $repoRoot rev-parse --short HEAD).Trim()
 if($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($revision)) {
 	throw "Unable to determine the Git revision."

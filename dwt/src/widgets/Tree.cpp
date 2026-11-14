@@ -31,6 +31,7 @@
 */
 
 #include <dwt/widgets/Tree.h>
+#include "TouchScrolling.h"
 
 #include <algorithm>
 
@@ -71,6 +72,9 @@ void Tree::create( const Seed & cs )
 
 	BaseType::create(mySeed);
 	tree = WidgetCreator<TreeView>::create(this, treeSeed);
+	// Native tree scrolling already handles gestures; configure its input HWND,
+	// not the outer composite, and preserve its default gesture processing.
+	detail::configureTouchPanning(*tree);
 	/* The composite owns item colors and custom drawing, while the embedded
 	TreeView still needs framework chrome such as scroll decorations. */
 	tree->setAppearancePolicy(AppearancePolicy::FrameworkChrome);
