@@ -1,3 +1,9 @@
+== 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
+* Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)
+* Improve radio-button edges and native filename dropdown rendering; add direct magnet downloads, destination selection and remembered magnet actions (iceman50)
+* Fix oversized theme selectors, match custom checkbox glyphs to Windows, and theme scrollbars in native dialogs and toolbar customization (iceman50)
+* Clear stale dialog border trails during resizing, with live pixel regression coverage for horizontal, vertical and diagonal resizing (iceman50)
+
 == 11-14-2026 - 0.8842-RC2 !!!Experimental!!! ==
 * Resize open tabs live from the Tabs settings width slider; preserve selection, custom labels and page layout, save with OK and restore the saved width with Cancel (iceman50)
 * Clarify which tab styles require a restart and how dark/custom appearance overrides the Windows and browser tab drawing choices (iceman50)

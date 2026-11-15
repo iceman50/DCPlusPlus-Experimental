@@ -398,6 +398,8 @@ function New-DistPackage {
 	try {
 		Copy-Item -LiteralPath $exePath -Destination (Join-Path $stageDir "DCPlusPlus.exe") -Force
 		Copy-Item -LiteralPath $pdbPath -Destination (Join-Path $stageDir "DCPlusPlus.pdb") -Force
+		Copy-Item -LiteralPath (Join-Path $RepoRoot "dcppboot.xml") -Destination $stageDir
+		foreach($notice in @("License.txt", "ThirdPartyLicenses.txt")) { Copy-Item -LiteralPath (Join-Path $RepoRoot $notice) -Destination $stageDir }
 		Copy-Item -LiteralPath $changelogPath -Destination (Join-Path $stageDir "changelog-bfe.txt") -Force
 		Copy-Item -LiteralPath $themesPath -Destination (Join-Path $stageDir "Themes") -Recurse -Force
 		Copy-Item -LiteralPath $emoticonPath -Destination (Join-Path $stageDir "Emoticons") -Recurse -Force
