@@ -40,6 +40,7 @@
 #include <dwt/util/win32/Dpi.h>
 #include <dwt/util/win32/Dwm.h>
 #include <dwt/util/win32/NonClientPaint.h>
+#include "../../widgets/AppearanceDraw.h"
 
 #include <algorithm>
 #include <array>
@@ -73,7 +74,11 @@ struct SharedAppearance {
 	explicit SharedAppearance(const Appearance::Palette& palette_, bool preserveDialogClientPainting_,
 		const NativeDialogAppearance::OwnerDrawHandler& ownerDraw_) :
 		references(0), palette(palette_), background(palette.background), surface(palette.surface),
-		preserveDialogClientPainting(preserveDialogClientPainting_), ownerDraw(ownerDraw_) { }
+		preserveDialogClientPainting(preserveDialogClientPainting_), ownerDraw(ownerDraw_) {
+		// Native windows can outlive the modal appearance scope. Own their palette
+		// and scrollbar renderer until the last subclass has been destroyed.
+		scrollbars.configure(Appearance::Mode::Dark, palette);
+	}
 
 	void retain() {
 		::InterlockedIncrement(&references);
@@ -87,6 +92,7 @@ struct SharedAppearance {
 
 	volatile LONG references;
 	Appearance::Palette palette;
+	Appearance scrollbars;
 	Brush background;
 	Brush surface;
 	bool preserveDialogClientPainting;
@@ -114,6 +120,7 @@ struct NativeWindowData {
 	bool captionActive;
 	bool trackingCaptionMouse;
 	bool nativeNonClientHover = false;
+	bool refreshingScrollbars = false;
 	bool manualNonClient;
 };
 
@@ -826,7 +833,7 @@ void drawButton(HWND window, Canvas& canvas, NativeWindowData& data) {
 		const auto dpi = getDpi(window);
 		const long minimumSize = scale(9, dpi);
 		const long size = std::max(minimumSize, std::min<long>(
-			scale(radio ? 13 : 15, dpi),
+			scale(13, dpi),
 			std::max(minimumSize, bounds.height() - scale(radio ? 2 : 4, dpi))));
 		const bool right = (style & BS_LEFTTEXT) != 0;
 		Rectangle glyph(right ? bounds.right() - size - 1 : bounds.left() + 1,
@@ -834,7 +841,8 @@ void drawButton(HWND window, Canvas& canvas, NativeWindowData& data) {
 			size, size);
 		const auto checkState = static_cast<UINT>(
 			::SendMessage(window, BM_GETCHECK, 0, 0));
-		drawCheck(canvas, glyph, radio, checkState != BST_UNCHECKED, checkState == BST_INDETERMINATE, disabled, pressed, data.hot, palette);
+		if(radio || !appearance_detail::drawThemedCheckBox(canvas, glyph, checkState, disabled, pressed, data.hot))
+			drawCheck(canvas, glyph, radio, checkState != BST_UNCHECKED, checkState == BST_INDETERMINATE, disabled, pressed, data.hot, palette);
 		const long gap = scale(7, dpi);
 		Rectangle textBounds(right ? bounds.left() : glyph.right() + gap,
 			bounds.top(), right ? std::max(0L, glyph.left() - gap - bounds.left()) :
@@ -1317,6 +1325,8 @@ void configureNativeControl(HWND window, NativeWindowData& data) {
 	}
 }
 
+void refreshNativeScrollbars(HWND window);
+
 void applyWindow(HWND window, SharedAppearance* appearance) {
 	if(!window || !::IsWindow(window) || getWindowData(window)) {
 		return;
@@ -1338,6 +1348,7 @@ void applyWindow(HWND window, SharedAppearance* appearance) {
 		return;
 	}
 	configureNativeControl(window, *data);
+	refreshNativeScrollbars(window);
 }
 
 LRESULT colorControl(NativeWindowData& data, UINT message, HDC canvas) {
@@ -1489,7 +1500,7 @@ bool handleCaptionInput(HWND window, NativeWindowData& data, UINT message, WPARA
 	return false;
 }
 
-LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR refData)
+LRESULT nativeWindowProcImpl(HWND window, UINT message, WPARAM wParam, LPARAM lParam, DWORD_PTR refData)
 {
 	auto data = reinterpret_cast<NativeWindowData*>(refData);
 	if(!data) {
@@ -1697,6 +1708,8 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 
 	case WM_NCDESTROY:
 		{
+			data->refreshingScrollbars = true;
+			Appearance::clearScrollbars(window);
 			if(data->manualNonClient) {
 				dwm::setNonClientRendering(window, DWMNCRP_USEWINDOWSTYLE);
 			}
@@ -1709,6 +1722,56 @@ LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
 	}
 
 	return ::DefSubclassProc(window, message, wParam, lParam);
+}
+
+void refreshNativeScrollbars(HWND window) {
+	auto data = getWindowData(window);
+	if(!data || data->refreshingScrollbars) return;
+	switch(data->control) {
+	case NativeControl::ListBox:
+	case NativeControl::Edit:
+	case NativeControl::ListView:
+	case NativeControl::TreeView:
+		data->refreshingScrollbars = true;
+		data->appearance->scrollbars.refreshScrollbars(window);
+		if(getWindowData(window) == data) data->refreshingScrollbars = false;
+		break;
+	default: break;
+	}
+}
+
+LRESULT CALLBACK nativeWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR refData) {
+	const auto result = nativeWindowProcImpl(window, message, wParam, lParam, refData);
+	if(message == WM_NCDESTROY || !getWindowData(window)) return result;
+	// Run after USER32 has updated scroll ranges, visibility and geometry.
+	switch(message) {
+	case WM_WINDOWPOSCHANGED:
+	case WM_SHOWWINDOW:
+		::EnumChildWindows(window, [](HWND child, LPARAM) -> BOOL {
+			refreshNativeScrollbars(child);
+			return TRUE;
+		}, 0);
+		[[fallthrough]];
+	case WM_SIZE:
+	case WM_STYLECHANGED:
+	case WM_DPICHANGED:
+	case WM_PAINT:
+	case WM_NCPAINT:
+	case WM_ENABLE:
+	case WM_SETFONT:
+	case WM_VSCROLL:
+	case WM_HSCROLL:
+	case WM_MOUSEWHEEL:
+	case WM_MOUSEHWHEEL:
+	case WM_KEYDOWN:
+	case WM_NCMOUSEMOVE:
+	case WM_NCLBUTTONDOWN:
+	case WM_NCLBUTTONUP:
+		refreshNativeScrollbars(window);
+		break;
+	default: break;
+	}
+	return result;
 }
 
 }

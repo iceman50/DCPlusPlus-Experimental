@@ -15,6 +15,8 @@ bool stableHover;
 HWND hoverButton;
 struct PaintCounts { unsigned dialog = 0, button = 0; };
 unsigned listCount;
+unsigned scrollLists;
+bool correctScrollbars;
 UINT_PTR timer;
 
 LRESULT CALLBACK countPaints(HWND window, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR data) {
@@ -129,6 +131,21 @@ BOOL CALLBACK inspectDialog(HWND window, LPARAM) {
 	if(std::wstring(name) != L"#32770") return TRUE;
 	KillTimer(nullptr, timer);
 	foundDialog = true;
+	// Inspect while on screen: off-screen lists correctly hide their overlays.
+	EnumChildWindows(window, [](HWND child, LPARAM) -> BOOL {
+		wchar_t name[128] {};
+		GetClassName(child, name, 128);
+		if(std::wstring(name) != L"ListBox") return TRUE;
+		SCROLLBARINFO info { sizeof(info) };
+		if(!GetScrollBarInfo(child, OBJID_VSCROLL, &info) ||
+			(info.rgstate[0] & (STATE_SYSTEM_INVISIBLE | STATE_SYSTEM_OFFSCREEN))) return TRUE;
+		++scrollLists;
+		UpdateWindow(child);
+		const auto overlay = reinterpret_cast<HWND>(GetProp(child, L"dwt.Appearance.VerticalScrollDecoration"));
+		if(manualPalette) correctScrollbars = correctScrollbars && overlay && IsWindowVisible(overlay);
+		else correctScrollbars = correctScrollbars && !overlay;
+		return TRUE;
+	}, 0);
 	SetWindowPos(window, nullptr, -32000, -32000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 	auto dc = GetDC(window);
 	auto brush = reinterpret_cast<HBRUSH>(SendMessage(window, WM_CTLCOLORDLG, reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(window)));
@@ -161,6 +178,8 @@ int dwtMain(dwt::Application& app) {
 		toolbar->setNormalImageList(images);
 		toolbar->addButton("first", 0, L"First button", true, 0, [] { });
 		toolbar->addButton("second", 0, L"Second button", true, 0, [] { });
+		for(int i = 0; i < 40; ++i)
+			toolbar->addButton("extra" + std::to_string(i), 0, L"Extra toolbar button", true, 0, [] { });
 		toolbar->setLayout({ "first" });
 		toolbar->resize(dwt::Rectangle(0, 0, 580, 35));
 		ShowWindow(window->handle(), SW_SHOWNOACTIVATE);
@@ -184,6 +203,8 @@ int dwtMain(dwt::Application& app) {
 				stableHover = true;
 				hoverButton = nullptr;
 				listCount = 0;
+				scrollLists = 0;
+				correctScrollbars = true;
 				timer = SetTimer(nullptr, 0, 100, inspectTimer);
 				check(timer != 0, "Cannot observe toolbar customization");
 				if(doubleClick) toolbar->sendMessage(WM_LBUTTONDBLCLK, MK_LBUTTON, MAKELPARAM(500, 15));
@@ -192,6 +213,7 @@ int dwtMain(dwt::Application& app) {
 				check(foundDialog, "Customize did not open the native dialog");
 				check(correctBackground, "Customize dialog did not inherit the dark palette");
 				check(listCount == 2, "Customize dialog lost its button lists");
+				check(scrollLists > 0 && correctScrollbars, "Customize list scrollbars did not follow the dialog palette");
 				check(correctRows, "Customize list rows retained system background/selection colors");
 				check(correctText, "Customize list labels did not inherit text colors");
 				check(foundIcon, "Customize list lost toolbar icons");

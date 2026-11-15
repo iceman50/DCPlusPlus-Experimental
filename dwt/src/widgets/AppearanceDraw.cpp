@@ -30,6 +30,8 @@
 */
 
 #include "AppearanceDraw.h"
+#include <dwt/util/win32/UxTheme.h>
+#include <dwt/dwt_vsstyle.h>
 
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Font.h>
@@ -254,6 +256,8 @@ void drawButtonImage(Canvas& canvas, const ButtonImage& image, const Rectangle& 
 
 void drawSmallCheck(Canvas& canvas, const Rectangle& box, bool checked, bool indeterminate, bool disabled, const Appearance::Palette& colors)
 {
+	if(drawThemedCheckBox(canvas, box, indeterminate ? BST_INDETERMINATE :
+		checked ? BST_CHECKED : BST_UNCHECKED, disabled, false, false)) return;
 	auto background = checked ? colors.accent : colors.surface;
 	auto border = checked ? colors.accent : colors.border;
 	if(disabled) {
@@ -285,6 +289,23 @@ void drawSmallCheck(Canvas& canvas, const Rectangle& box, bool checked, bool ind
 	}
 }
 
+}
+
+bool drawThemedCheckBox(Canvas& canvas, const Rectangle& bounds, UINT checkState,
+	bool disabled, bool pressed, bool hot) {
+	namespace theme = util::win32::uxtheme;
+	if(!theme::isAppThemed()) return false;
+	// A native dialog may disable visual styles on its individual controls.
+	// Opening the application theme preserves the same glyph as table state images.
+	auto handle = theme::openThemeData(nullptr, L"Button");
+	if(!handle) return false;
+	const int base = checkState == BST_INDETERMINATE ? CBS_MIXEDNORMAL :
+		checkState == BST_CHECKED ? CBS_CHECKEDNORMAL : CBS_UNCHECKEDNORMAL;
+	const int state = base + (disabled ? 3 : pressed ? 2 : hot ? 1 : 0);
+	const RECT rect = bounds;
+	const auto result = theme::drawThemeBackground(handle, canvas.handle(), BP_CHECKBOX, state, &rect, nullptr);
+	theme::closeThemeData(handle);
+	return SUCCEEDED(result);
 }
 
 LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette& configured)
@@ -330,65 +351,67 @@ LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette
 	if((check || radio) && !pushLike) {
 		const long glyphMargin = button.scale(radio ? 2 : 4);
 		const long glyphSize = std::max(8L, std::min<long>(
-			button.scale(radio ? 13 : 15),
+			button.scale(13),
 			std::max(8L, bounds.height() - glyphMargin)));
 		const bool rightGlyph = (style & BS_LEFTTEXT) != 0;
 		Rectangle glyph(rightGlyph ? bounds.right() - glyphSize - 1 :
 			bounds.left() + 1, bounds.top() + std::max(0L,
 				(bounds.height() - glyphSize) / 2), glyphSize, glyphSize);
-		auto fill = radio ? colors.surface : checked ? colors.accent : colors.surface;
-		auto border = checked ? colors.accent : colors.border;
-		if(pressed) {
-			const auto pressedSurface = Appearance::blend(colors.surface, colors.accent, 38);
-			fill = radio || !checked ? pressedSurface : Appearance::blend(colors.accent, RGB(0, 0, 0), 45);
-			if(radio && checked) border = Appearance::blend(colors.accent, RGB(0, 0, 0), 45);
-		} else if(hot) {
-			const auto hotSurface = Appearance::blend(colors.surface, colors.accent, 18);
-			fill = radio || !checked ? hotSurface : Appearance::blend(colors.accent, RGB(0, 0, 0), 25);
-			border = Appearance::blend(border, colors.accent, 110);
-		}
-		if(disabled) {
-			fill = Appearance::blend(fill, colors.background, 120);
-			border = Appearance::blend(border, colors.background, 90);
-		}
+		if(radio || !drawThemedCheckBox(canvas, glyph, checkState, disabled, pressed, hot)) {
+			auto fill = radio ? colors.surface : checked ? colors.accent : colors.surface;
+			auto border = checked ? colors.accent : colors.border;
+			if(pressed) {
+				const auto pressedSurface = Appearance::blend(colors.surface, colors.accent, 38);
+				fill = radio || !checked ? pressedSurface : Appearance::blend(colors.accent, RGB(0, 0, 0), 45);
+				if(radio && checked) border = Appearance::blend(colors.accent, RGB(0, 0, 0), 45);
+			} else if(hot) {
+				const auto hotSurface = Appearance::blend(colors.surface, colors.accent, 18);
+				fill = radio || !checked ? hotSurface : Appearance::blend(colors.accent, RGB(0, 0, 0), 25);
+				border = Appearance::blend(border, colors.accent, 110);
+			}
+			if(disabled) {
+				fill = Appearance::blend(fill, colors.background, 120);
+				border = Appearance::blend(border, colors.background, 90);
+			}
 
-		if(radio) {
-			Brush brush(fill);
-			Pen pen(border, Pen::Solid, 1);
-			auto selectBrush = canvas.select(brush);
-			auto selectPen = canvas.select(pen);
-			canvas.ellipse(glyph);
-		} else {
-			drawSurface(canvas, glyph, fill, border);
-		}
-
-		if(checked) {
-			const auto checkMark = disabled ? Appearance::blend(colors.highlightText, fill, 105) : colors.highlightText;
-			const auto mark = radio ? border : checkMark;
-			Brush markBrush(mark);
-			Pen markPen(mark, Pen::Solid, std::max(1, button.scale(radio ? 1 : 2)));
-			auto selectMarkBrush = canvas.select(markBrush);
-			auto selectMarkPen = canvas.select(markPen);
 			if(radio) {
-				const long inset = std::max(3L, glyphSize / 3);
-				canvas.ellipse(Rectangle(glyph.left() + inset,
-					glyph.top() + inset,
-					std::max(1L, glyph.width() - inset * 2),
-					std::max(1L, glyph.height() - inset * 2)));
-			} else if(checkState == BST_INDETERMINATE) {
-				canvas.line(Point(glyph.left() + glyphSize / 4,
-					glyph.top() + glyphSize / 2),
-					Point(glyph.right() - glyphSize / 4,
-						glyph.top() + glyphSize / 2));
+				Brush brush(fill);
+				Pen pen(border, Pen::Solid, 1);
+				auto selectBrush = canvas.select(brush);
+				auto selectPen = canvas.select(pen);
+				canvas.ellipse(glyph);
 			} else {
-				canvas.line(Point(glyph.left() + glyphSize / 4,
-					glyph.top() + glyphSize / 2),
-					Point(glyph.left() + glyphSize * 2 / 5,
-						glyph.bottom() - glyphSize / 4));
-				canvas.line(Point(glyph.left() + glyphSize * 2 / 5,
-					glyph.bottom() - glyphSize / 4),
-					Point(glyph.right() - glyphSize / 5,
-						glyph.top() + glyphSize / 4));
+				drawSurface(canvas, glyph, fill, border);
+			}
+
+			if(checked) {
+				const auto checkMark = disabled ? Appearance::blend(colors.highlightText, fill, 105) : colors.highlightText;
+				const auto mark = radio ? border : checkMark;
+				Brush markBrush(mark);
+				Pen markPen(mark, Pen::Solid, std::max(1, button.scale(radio ? 1 : 2)));
+				auto selectMarkBrush = canvas.select(markBrush);
+				auto selectMarkPen = canvas.select(markPen);
+				if(radio) {
+					const long inset = std::max(3L, glyphSize / 3);
+					canvas.ellipse(Rectangle(glyph.left() + inset,
+						glyph.top() + inset,
+						std::max(1L, glyph.width() - inset * 2),
+						std::max(1L, glyph.height() - inset * 2)));
+				} else if(checkState == BST_INDETERMINATE) {
+					canvas.line(Point(glyph.left() + glyphSize / 4,
+						glyph.top() + glyphSize / 2),
+						Point(glyph.right() - glyphSize / 4,
+							glyph.top() + glyphSize / 2));
+				} else {
+					canvas.line(Point(glyph.left() + glyphSize / 4,
+						glyph.top() + glyphSize / 2),
+						Point(glyph.left() + glyphSize * 2 / 5,
+							glyph.bottom() - glyphSize / 4));
+					canvas.line(Point(glyph.left() + glyphSize * 2 / 5,
+						glyph.bottom() - glyphSize / 4),
+						Point(glyph.right() - glyphSize / 5,
+							glyph.top() + glyphSize / 4));
+				}
 			}
 		}
 

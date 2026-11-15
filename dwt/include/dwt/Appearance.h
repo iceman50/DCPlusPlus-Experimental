@@ -163,6 +163,11 @@ public:
 	/** Reapply the current appearance to all completely constructed widgets. */
 	void applyAll();
 
+	/** Share the scrollbar renderer with native dialog controls. The caller keeps
+	 * this appearance alive and clears decorations before destroying the host. */
+	void refreshScrollbars(HWND host);
+	static void clearScrollbars(HWND host);
+
 	/** Observe appearance changes. The iterator remains valid until removed. */
 	CallbackIter onChanged(const Callback& callback);
 	void removeChanged(const CallbackIter& callback);

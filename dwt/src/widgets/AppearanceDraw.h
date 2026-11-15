@@ -50,6 +50,10 @@ class ToolBar;
  * the underlying Windows control; these functions replace painting only. */
 namespace appearance_detail {
 
+/** Use the same Windows glyph as native table checkboxes, retaining custom backgrounds. */
+bool drawThemedCheckBox(Canvas& canvas, const Rectangle& bounds, UINT checkState,
+	bool disabled, bool pressed, bool hot);
+
 LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette& palette);
 LRESULT drawHeader(Header& header, NMCUSTOMDRAW& data, const Appearance::Palette& palette);
 LRESULT drawToolBar(ToolBar& toolbar, NMTBCUSTOMDRAW& data, const Appearance::Palette& palette);

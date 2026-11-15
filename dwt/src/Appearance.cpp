@@ -551,6 +551,14 @@ Appearance::~Appearance() {
 	}
 }
 
+void Appearance::refreshScrollbars(HWND host) {
+	syncScrollDecorations(host, this);
+}
+
+void Appearance::clearScrollbars(HWND host) {
+	destroyScrollDecorations(host);
+}
+
 void Appearance::configure(Mode mode_, const Palette& palette) {
 	configure(mode_, palette, Rendering::Automatic);
 }

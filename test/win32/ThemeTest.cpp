@@ -556,6 +556,17 @@ int dwtMain(dwt::Application& app) {
 			if(dynamic_cast<dwt::RichTextBox*>(widget)) foundPreview = true;
 		}
 		check(preset && foundPreview, "Theme editor is missing its preset selector or RichEdit preview");
+		// Long preview text must wrap/scroll within the editor, not widen the
+		// entire settings page (and the theme dropdown) to its unwrapped length.
+		for(auto child : children) {
+			auto preview = dynamic_cast<dwt::RichTextBox*>(dwt::hwnd_cast<dwt::Control*>(child));
+			if(!preview) continue;
+			const auto original = preview->getText();
+			const auto width = page->getPreferredSize().x;
+			preview->setText(dwt::tstring(2048, L'W'));
+			check(page->getPreferredSize().x == width, "Preview text widened the theme settings page");
+			preview->setText(original);
+		}
 		ShowWindow(dialog.handle(), SW_SHOWNOACTIVATE);
 		settleSettingsMessages();
 		const auto editorFont = SETTING(MAIN_FONT);
@@ -568,6 +579,11 @@ int dwtMain(dwt::Application& app) {
 					dialog.resize(dwt::Rectangle(-32000, -32000, size.x, size.y));
 					settleSettingsMessages();
 					checkThemeControlsReachable(page);
+					auto selector = dwt::hwnd_cast<dwt::ComboBox*>(preset);
+					check(selector->getWindowSize().x == selector->getPreferredSize().x,
+						"Theme selector stretched to the width of the scrollable editor");
+					check(SendMessage(preset, CB_GETDROPPEDWIDTH, 0, 0) <= selector->getPreferredSize().x + selector->scale(4),
+						"Theme dropdown is wider than its content-sized selector");
 				}
 			}
 		}

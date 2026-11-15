@@ -81,13 +81,15 @@ showGen(0)
 	auto header = grid->addChild(Grid::Seed(2, 1));
 	header->column(0).mode = GridInfo::FILL;
 	auto choices = header->addChild(Grid::Seed(1, 4));
-	choices->column(3).mode = GridInfo::FILL;
+	// Keep the selector at its content width even when the editor scrolls horizontally.
+	choices->column(3).align = GridInfo::TOP_LEFT;
 	choices->addChild(Label::Seed(T_("Mode")));
 	themeMode = choices->addChild(ControlSeeds::Dialog::comboBox);
 	for(const auto& name : { T_("Follow Windows"), T_("Light"), T_("Dark") }) themeMode->addValue(name);
 	themeMode->setSelected(std::clamp(SETTING(THEME_MODE), 0, 2));
 	choices->addChild(Label::Seed(T_("Theme")));
 	themePreset = choices->addChild(ControlSeeds::Dialog::comboBox);
+	themePreset->sendMessage(CB_SETMINVISIBLE, 12);
 	themePreset->onSelectionChanged([this] {
 		const auto selected = themePreset->getSelected();
 		if(!loading && selected >= 0 && static_cast<size_t>(selected) < presets.size()) applyTheme(presets[selected]);
@@ -285,8 +287,12 @@ dwt::Point ThemePage::getPreferredSize() {
 		auto content = static_cast<Grid*>(table->getParent());
 		long width = 0;
 		auto children = content->getChildren<dwt::Control>();
-		for(auto child = children.first; child != children.second; ++child)
-			width = std::max(width, (*child)->getPreferredSize().x);
+		for(auto child = children.first; child != children.second; ++child) {
+			// These views fill the available width. RichEdit's preferred width
+			// measures its entire sample text and must not become the page minimum.
+			if(*child != table && *child != preview)
+				width = std::max(width, (*child)->getPreferredSize().x);
+		}
 		content->column(0).size = width;
 		grid->row(1).size = content->getParent()->getPreferredSize().y;
 		children = grid->getChildren<dwt::Control>();
