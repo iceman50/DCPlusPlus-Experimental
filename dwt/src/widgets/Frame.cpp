@@ -139,7 +139,11 @@ bool Frame::handleMessage(const MSG& msg, LRESULT& result) {
 				MONITORINFO monitor = { sizeof(MONITORINFO) };
 				if(::GetMonitorInfo(::MonitorFromRect(&params->rgrc[0], MONITOR_DEFAULTTONEAREST), &monitor)) params->rgrc[0] = monitor.rcWork;
 			}
-			result = 0;
+			// Dialog outlines are painted inside the client area. Preserving that
+			// area on resize leaves the old right/bottom edges behind as trails.
+			// Repaint custom dialogs on size changes; keep normal window copying
+			// for other frames and the required zero result for the RECT form.
+			result = msg.wParam && (edgeStyle & WS_EX_DLGMODALFRAME) ? WVR_REDRAW : 0;
 			return true;
 		case WM_NCPAINT:
 			refreshClientFrame();

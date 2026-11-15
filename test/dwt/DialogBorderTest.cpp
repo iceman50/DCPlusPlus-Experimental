@@ -23,12 +23,43 @@ public:
 			layout();
 			return true;
 		});
+		onSized([this](const dwt::SizedEvent&) { layout(); });
 	}
 	void layout() override {
 		if(content) content->resize(getContentRect());
 	}
 	dwt::TextBox* content = nullptr;
 };
+
+void checkResizeRepaint(Dialog& dialog, COLORREF background) {
+	// Inspect real pixels after resizing. WM_PRINT forces a full repaint and
+	// would hide stale edges; off-screen windows may not receive any painting.
+	MONITORINFO monitor { sizeof(MONITORINFO) };
+	check(GetMonitorInfo(MonitorFromPoint(POINT { 0, 0 }, MONITOR_DEFAULTTOPRIMARY), &monitor) != FALSE,
+		"Could not locate the desktop for resize repaint testing");
+	SetWindowPos(dialog.handle(), HWND_TOP, monitor.rcWork.left + 20, monitor.rcWork.top + 20,
+		0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+	pump();
+	for(const auto delta : { dwt::Point(1, 0), dwt::Point(0, 1), dwt::Point(1, 1) }) {
+		for(int step = 0; step < 8; ++step) {
+			const auto before = dialog.getClientSize();
+			const auto border = dialog.getDialogBorderWidth();
+			auto bounds = dialog.getWindowRect();
+			bounds.size += delta;
+			dialog.resize(bounds);
+			pump();
+			UpdateWindow(dialog.handle());
+			auto dc = GetDC(dialog.handle());
+			const bool rightClean = !delta.x || GetPixel(dc, before.x - border, before.y / 2) == background;
+			const bool bottomClean = !delta.y || GetPixel(dc, before.x / 2, before.y - border) == background;
+			ReleaseDC(dialog.handle(), dc);
+			check(rightClean, "Growing a dialog preserved its old right border");
+			check(bottomClean, "Growing a dialog preserved its old bottom border");
+		}
+	}
+	SetWindowPos(dialog.handle(), nullptr, -32000, -32000, 0, 0,
+		SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
 
 void checkBorder(Dialog& dialog, COLORREF color) {
 	const auto size = dialog.getClientSize();
@@ -110,6 +141,7 @@ int dwtMain(dwt::Application& app) {
 			pump();
 			SendMessage(dialog.handle(), WM_NCACTIVATE, TRUE, 0);
 			checkBorder(dialog, palette.border);
+			checkResizeRepaint(dialog, palette.background);
 			dialog.addRemoveStyle(WS_THICKFRAME, false);
 			dialog.setFrameRendering(dwt::Frame::FrameRendering::Native);
 			pump();
@@ -126,7 +158,7 @@ int dwtMain(dwt::Application& app) {
 			DestroyWindow(dialog.handle());
 		}
 		DestroyWindow(owner->handle());
-		std::puts("Dialog borders passed: all four edges, child clipping, DPI notifications, caption hit testing, activation, toggling, resizing, theme and native-frame transitions.");
+		std::puts("Dialog borders passed: all four edges, child clipping, DPI notifications, caption hit testing, activation, toggling, live resize pixels, theme and native-frame transitions.");
 		return 0;
 	} catch(const std::exception& e) {
 		std::fprintf(stderr, "%s\n", e.what());
