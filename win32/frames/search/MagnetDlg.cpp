@@ -19,153 +19,106 @@
 #include "stdafx.h"
 #include <win32/util/ControlSeeds.h>
 #include <win32/util/IconManager.h>
-#include <win32/components/DialogControls.h>
-#include <win32/util/LinkActions.h>
 #include <win32/frames/search/MagnetDlg.h>
-
+#include <dcpp/settings/SettingsManager.h>
+#include <dcpp/core/header/format.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
-#include <dwt/widgets/RadioButton.h>
-
+#include <dwt/widgets/CheckBox.h>
+#include <dwt/widgets/SaveDialog.h>
 #include <win32/resource.h>
 
 using dwt::Grid;
 using dwt::GridInfo;
 using dwt::Label;
-using dwt::RadioButton;
 
-MagnetDlg::MagnetDlg(dwt::Widget* parent, const tstring& aHash, const tstring& aFileName, const tstring& aKeySearch) :
-dwt::ModalDialog(parent),
-grid(0),
-//queue(0),
-search(0),
-//doNothing(0),
-//remember(0),
-mHash(aHash),
-mFileName(aFileName),
-mKeySearch(aKeySearch)
-{
+MagnetDlg::MagnetDlg(dwt::Widget* parent, const Magnet::Metadata& metadata_, const string& target_) :
+	GridDialog(parent, 560), metadata(metadata_), target(target_) {
 	onInitDialog([this] { return handleInitDialog(); });
 }
 
-MagnetDlg::~MagnetDlg() {
-}
-
-int MagnetDlg::run() {
-	create(dwt::Point(460, 180));
-	return show();
-}
-
 bool MagnetDlg::handleInitDialog() {
-	grid = addChild(Grid::Seed(3, 1));
+	grid = addChild(Grid::Seed(6, 1));
 	grid->column(0).mode = GridInfo::FILL;
-	grid->row(0).mode = GridInfo::FILL;
-	grid->row(0).align = GridInfo::STRETCH;
+	grid->setSpacing(8);
+	const auto wrappedLabel = [this](size_t row, const tstring& text) {
+		auto label = grid->addChild(Label::Seed(text));
+		auto dc = ::GetDC(label->handle());
+		auto previous = ::SelectObject(dc, label->getFont()->handle());
+		RECT bounds { 0, 0, std::max(1L, getContentRect().width() - 2 * static_cast<long>(grid->getSpacing())), 0 };
+		::DrawText(dc, text.c_str(), static_cast<int>(text.size()), &bounds, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+		::SelectObject(dc, previous);
+		::ReleaseDC(label->handle(), dc);
+		grid->row(row).mode = GridInfo::STATIC;
+		grid->row(row).align = GridInfo::STRETCH;
+		grid->row(row).size = bounds.bottom - bounds.top;
+	};
+	wrappedLabel(0, metadata.hash.empty() ?
+		T_("This magnet link contains search keywords. Search connected hubs for matching files.") :
+		T_("Search for this file or add it to the download queue. Downloads start when a matching source is found."));
 
-	{
-		auto cur = grid->addChild(Grid::Seed(1, 2));
-		cur->column(1).mode = GridInfo::FILL;
-		cur->row(0).mode = GridInfo::FILL;
-		cur->row(0).align = GridInfo::STRETCH;
-		cur->setSpacing(10);
+	auto details = grid->addChild(Grid::Seed(3, 2));
+	details->column(1).mode = GridInfo::FILL;
+	auto readOnly = ControlSeeds::Dialog::textBox;
+	readOnly.style |= ES_READONLY;
+	details->addChild(Label::Seed(T_("Filename:")));
+	details->addChild(readOnly)->setText(metadata.name.empty() ? T_("Not supplied") : Text::toT(metadata.name));
+	details->addChild(Label::Seed(metadata.hash.empty() ? T_("Search keywords:") : T_("File hash:")));
+	details->addChild(readOnly)->setText(Text::toT(metadata.hash.empty() ? metadata.key : metadata.hash));
+	details->addChild(Label::Seed(T_("Size:")));
+	details->addChild(readOnly)->setText(metadata.size < 0 ? T_("Unknown") :
+		str(TF_("%1% (%2% bytes)") % Text::toT(Util::formatBytes(metadata.size)) % metadata.size));
 
-		cur->addChild(Grid::Seed(1, 1))->addChild(Label::Seed(IconManager::load(IDI_MAGNET, 32)));
+	auto location = grid->addChild(Grid::Seed(1, 3));
+	location->column(1).mode = GridInfo::FILL;
+	location->addChild(Label::Seed(T_("Save as:")));
+	destination = location->addChild(ControlSeeds::Dialog::textBox);
+	destination->setText(Text::toT(target));
+	destination->setEnabled(metadata.canDownload());
+	auto browse = location->addChild(Button::Seed(T_("Browse...")));
+	browse->setEnabled(metadata.canDownload());
+	browse->onClicked([this] {
+		auto path = destination->getText();
+		if(dwt::SaveDialog(this).setTitle(T_("Download magnet file"))
+			.setAllowOverwrite(false).addFilter(T_("All files"), _T("*.*")).open(path)) destination->setText(path);
+	});
+	wrappedLabel(3, (metadata.canDownload() ?
+		T_("Connect to a hub to find sources. Further source searches follow your download queue settings.") :
+		T_("Downloading requires a file hash and size. Search to find the missing information.")) +
+		_T("\n") + T_("Remembered downloads use the default download directory."));
+	remember = grid->addChild(dwt::CheckBox::Seed(T_("Remember this action")));
 
-		cur->addChild(Label::Seed(T_("DC++ has detected a MAGNET link with a file hash that can be searched for on the Direct Connect network.  What would you like to do?")));
-	}
+	auto actions = grid->addChild(Grid::Seed(1, 3));
+	actions->column(0).mode = GridInfo::FILL;
+	actions->column(0).align = GridInfo::BOTTOM_RIGHT;
+	auto searchSeed = Button::Seed(T_("Search"));
+	searchSeed.style |= BS_DEFPUSHBUTTON;
+	searchSeed.menuHandle = reinterpret_cast<HMENU>(IDOK);
+	auto search = actions->addChild(searchSeed);
+	search->onClicked([this] { choose(Action::Search); });
+	auto download = actions->addChild(Button::Seed(T_("Download")));
+	download->setEnabled(metadata.canDownload());
+	download->onClicked([this] { choose(Action::Download); });
+	auto cancelSeed = Button::Seed(T_("Cancel"));
+	cancelSeed.menuHandle = reinterpret_cast<HMENU>(IDCANCEL);
+	actions->addChild(cancelSeed)->onClicked([this] { endDialog(IDCANCEL); });
 
-	{
-		auto cur = grid->addChild(Grid::Seed(2, 2));
-		cur->column(0).align = GridInfo::BOTTOM_RIGHT;
-		cur->column(1).mode = GridInfo::FILL;
-
-		auto seed = ControlSeeds::Dialog::textBox;
-		seed.style |= ES_READONLY;
-
-		if (!mHash.empty()) {
-			cur->addChild(Label::Seed(T_("File Hash:")));
-			cur->addChild(seed)->setText(mHash);
-		}
-		else if (!mKeySearch.empty())
-		{
-			cur->addChild(Label::Seed(T_("Key Search:")));
-			cur->addChild(seed)->setText(mKeySearch);
-		}
-
-		cur->addChild(Label::Seed(T_("Filename:")));
-		cur->addChild(seed)->setText(mFileName);
-	}
-
-	{
-		auto bottom = grid->addChild(Grid::Seed(1, 2));
-		bottom->column(1).mode = GridInfo::FILL;
-		bottom->column(1).align = GridInfo::BOTTOM_RIGHT;
-
-		//GridPtr cur = bottom->addChild(Grid::Seed(4, 1));
-		auto cur = bottom->addChild(Grid::Seed(2, 1));
-
-		//queue = cur->addChild(RadioButton::Seed(T_("Add this file to your download queue")));
-		//queue->onClicked(std::bind(&MagnetDlg::handleRadioButtonClicked, this, queue));
-
-		search = cur->addChild(RadioButton::Seed(T_("Start a search for this file")));
-		search->setChecked();
-		//search->onClicked(std::bind(&MagnetDlg::handleRadioButtonClicked, this, search));
-
-		//doNothing = cur->addChild(CheckBox::Seed(T_("Do nothing")));
-		//doNothing->onClicked(std::bind(&MagnetDlg::handleRadioButtonClicked, this, doNothing));
-		cur->addChild(RadioButton::Seed(T_("Do nothing")));
-
-		//remember = cur->addChild(CheckBox::Seed(T_("Do the same action next time without asking")));
-
-		DialogControls::addDlgButtons(bottom->addChild(Grid::Seed(2, 1)),
-			[this] { handleOKClicked(); },
-			[this] { endDialog(IDCANCEL); });
-	}
-
-	setText(T_("MAGNET Link detected"));
+	setText(T_("Magnet link"));
 	setSmallIcon(IconManager::load(IDI_MAGNET, 16));
 	setLargeIcon(IconManager::load(IDI_MAGNET, 32));
-
 	layout();
 	centerWindow();
-
+	search->setFocus();
 	return false;
 }
 
-//void MagnetDlg::handleRadioButtonClicked(RadioButtonPtr radioButton) {
-	//if(radioButton == queue || radioButton == search)
-		//remember->setEnabled(true);
-	//else if(radioButton == doNothing) {
-		//if(remember->getChecked())
-			//remember->setChecked(false);
-		//remember->setEnabled(false);
-	//}
-//}
-
-void MagnetDlg::handleOKClicked() {
-	//if(remember->getChecked()) {
-	//	SettingsManager::getInstance()->set(SettingsManager::MAGNET_ASK,  false);
-	//	if(queue->getChecked())
-	//		SettingsManager::getInstance()->set(SettingsManager::MAGNET_ACTION, SettingsManager::MAGNET_AUTO_DOWNLOAD);
-	//	else if(search->getChecked())
-	//		SettingsManager::getInstance()->set(SettingsManager::MAGNET_ACTION, SettingsManager::MAGNET_AUTO_SEARCH);
-	//}
-
-	if(search->getChecked()) {
-		if (!mHash.empty()) {
-			TTHValue tmphash(Text::fromT(mHash));
-			LinkActions::searchHash(tmphash);
-		}else if (!mKeySearch.empty()) {
-			LinkActions::searchAny(mKeySearch);
-		}
-	} //else if(queue->getChecked()) {
-		// FIXME: Write this code when the queue is more tth-centric
-	//}
-
+void MagnetDlg::choose(Action selected) {
+	if(selected == Action::Download && (!metadata.canDownload() || destination->getText().empty())) {
+		destination->setFocus();
+		return;
+	}
+	action = selected;
+	target = Text::fromT(destination->getText());
+	remembered = remember->getChecked();
 	endDialog(IDOK);
-}
-
-void MagnetDlg::layout() {
-	const auto content = getContentRect();
-	grid->resize(dwt::Rectangle(content.left() + 3, content.top() + 3, content.width() - 6, content.height() - 6));
 }

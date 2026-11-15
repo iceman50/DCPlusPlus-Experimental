@@ -31,6 +31,7 @@ public:
 
 private:
 	ItemList items;
+	ComboBoxPtr magnetAction;
 
 	void handleConfigHubLists();
 	void handleResetHubLists();

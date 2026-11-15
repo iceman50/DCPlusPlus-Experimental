@@ -203,8 +203,8 @@ void chatAndLinks() {
 	check(Magnet::parseUri(magnet, parsedHash, parsedName, key) && parsedHash == hash && parsedName == "a file & name.txt",
 		"Generated magnet did not preserve hash and escaped filename");
 	check(magnet.find("&xl=123") != std::string::npos, "Generated magnet lost file size");
-	check(LinkActions::makeMagnet(TTHValue(hash), "empty", 0).find("&xl=") == std::string::npos,
-		"Zero size magnet format changed");
+	check(LinkActions::makeMagnet(TTHValue(hash), "empty", 0).find("&xl=0") != std::string::npos,
+		"Empty-file magnet lost its explicit zero size");
 	check(LinkActions::checkTTH(dwt::tstring(39, L'A')) && !LinkActions::checkTTH(dwt::tstring(39, L'0')) &&
 		!LinkActions::checkTTH(dwt::tstring(38, L'A')), "TTH validation changed");
 	check(!LinkActions::parseLink(L"https://example.invalid/", false), "Disabled external links were handled");

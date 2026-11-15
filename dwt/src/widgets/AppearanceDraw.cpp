@@ -308,6 +308,49 @@ bool drawThemedCheckBox(Canvas& canvas, const Rectangle& bounds, UINT checkState
 	return SUCCEEDED(result);
 }
 
+void drawRadioGlyph(Canvas& canvas, const Rectangle& bounds, COLORREF background,
+	COLORREF fill, COLORREF border, bool checked) {
+	const int width = bounds.width(), height = bounds.height();
+	if(width <= 0 || height <= 0) return;
+	const double diameter = std::min(width, height);
+	const double radius = diameter / 2;
+	const double inner = radius - std::max(1.0, diameter / 13);
+	const double dot = checked ? diameter * 0.19 : 0;
+	// Integrate coverage within each pixel so both the ring and the dot stay
+	// round and concentric at fractional DPI sizes. Blend against the actual
+	// control background, avoiding light fringes on dark/custom palettes.
+	constexpr int samples = 8, count = samples * samples;
+	std::vector<DWORD> pixels(width * height);
+	for(int y = 0; y < height; ++y) for(int x = 0; x < width; ++x) {
+		int edgeSamples = 0, fillSamples = 0;
+		for(int sy = 0; sy < samples; ++sy) for(int sx = 0; sx < samples; ++sx) {
+			const double dx = x + (sx + 0.5) / samples - width / 2.0;
+			const double dy = y + (sy + 0.5) / samples - height / 2.0;
+			const double distance = dx * dx + dy * dy;
+			if(distance < radius * radius) {
+				if(distance >= inner * inner || (checked && distance < dot * dot)) ++edgeSamples;
+				else ++fillSamples;
+			}
+		}
+		const int backgroundSamples = count - edgeSamples - fillSamples;
+		const auto channel = [&](unsigned shift) {
+			return (((background >> shift) & 255) * backgroundSamples +
+				((fill >> shift) & 255) * fillSamples +
+				((border >> shift) & 255) * edgeSamples + count / 2) / count;
+		};
+		pixels[y * width + x] = (channel(0) << 16) | (channel(8) << 8) | channel(16);
+	}
+	BITMAPINFO info {};
+	info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	info.bmiHeader.biWidth = width;
+	info.bmiHeader.biHeight = -height;
+	info.bmiHeader.biPlanes = 1;
+	info.bmiHeader.biBitCount = 32;
+	info.bmiHeader.biCompression = BI_RGB;
+	::SetDIBitsToDevice(canvas.handle(), bounds.left(), bounds.top(), width, height,
+		0, 0, 0, height, pixels.data(), &info, DIB_RGB_COLORS);
+}
+
 LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette& configured)
 {
 	if(data.dwDrawStage != CDDS_PREPAINT || !data.hdc) {
@@ -375,29 +418,18 @@ LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette
 			}
 
 			if(radio) {
-				Brush brush(fill);
-				Pen pen(border, Pen::Solid, 1);
-				auto selectBrush = canvas.select(brush);
-				auto selectPen = canvas.select(pen);
-				canvas.ellipse(glyph);
+				drawRadioGlyph(canvas, glyph, backdropColor, fill, border, checked);
 			} else {
 				drawSurface(canvas, glyph, fill, border);
 			}
 
-			if(checked) {
+			if(checked && !radio) {
 				const auto checkMark = disabled ? Appearance::blend(colors.highlightText, fill, 105) : colors.highlightText;
-				const auto mark = radio ? border : checkMark;
-				Brush markBrush(mark);
-				Pen markPen(mark, Pen::Solid, std::max(1, button.scale(radio ? 1 : 2)));
+				Brush markBrush(checkMark);
+				Pen markPen(checkMark, Pen::Solid, std::max(1, button.scale(2)));
 				auto selectMarkBrush = canvas.select(markBrush);
 				auto selectMarkPen = canvas.select(markPen);
-				if(radio) {
-					const long inset = std::max(3L, glyphSize / 3);
-					canvas.ellipse(Rectangle(glyph.left() + inset,
-						glyph.top() + inset,
-						std::max(1L, glyph.width() - inset * 2),
-						std::max(1L, glyph.height() - inset * 2)));
-				} else if(checkState == BST_INDETERMINATE) {
+				if(checkState == BST_INDETERMINATE) {
 					canvas.line(Point(glyph.left() + glyphSize / 4,
 						glyph.top() + glyphSize / 2),
 						Point(glyph.right() - glyphSize / 4,

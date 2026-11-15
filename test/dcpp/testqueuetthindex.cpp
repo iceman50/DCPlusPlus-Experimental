@@ -28,6 +28,7 @@
 #include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
+#include <dcpp/search/SearchResult.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/core/io/stream/Streams.h>
@@ -160,6 +161,63 @@ private:
 	string configPath;
 };
 
+}
+
+TEST_F(QueueTTHIndexTest, magnet_queue_survives_restart_and_accepts_only_matching_sources)
+{
+	// This fixture shares its config/list directory; retain XML during restart.
+	SettingsManager::getInstance()->set(SettingsManager::KEEP_LISTS, true);
+	auto queue = QueueManager::getInstance();
+	const auto path = target("magnet.bin");
+	const auto hash = makeTTH(42);
+	queue->addMagnet(path, 4096, hash);
+	queue->lockedOperation([&](const QueueItem::StringMap& items) {
+		ASSERT_EQ(1U, items.size());
+		EXPECT_TRUE(items.begin()->second->getSources().empty());
+	});
+	queue->saveQueue();
+	QueueManager::deleteInstance();
+	QueueManager::newInstance();
+	queue = QueueManager::getInstance();
+	queue->loadQueue([](float) { });
+	ASSERT_EQ(4096, queue->getSize(path));
+	SettingsManager::getInstance()->set(SettingsManager::AUTO_SEARCH_AUTO_MATCH, false);
+	const HintedUser source(makeUser(7), "adc://magnet.example.invalid");
+	const auto result = [&](int64_t size, const TTHValue& tth) {
+		SearchResultPtr sr(new SearchResult(source, SearchResult::TYPE_FILE, 1, 1, size,
+			"magnet.bin", "Test hub", "127.0.0.1", tth, "magnet", Style()));
+		SearchManager::getInstance()->fire(SearchManagerListener::SR(), sr);
+	};
+	result(4095, hash);
+	result(4096, makeTTH(43));
+	queue->lockedOperation([&](const QueueItem::StringMap& items) {
+		EXPECT_TRUE(items.begin()->second->getSources().empty());
+	});
+	result(4096, hash);
+	queue->lockedOperation([&](const QueueItem::StringMap& items) {
+		EXPECT_TRUE(items.begin()->second->isSource(source.user));
+	});
+}
+
+TEST_F(QueueTTHIndexTest, magnet_queue_validates_size_duplicates_and_existing_files)
+{
+	auto queue = QueueManager::getInstance();
+	const auto hash = makeTTH(42);
+	EXPECT_THROW(queue->addMagnet(target("unknown.bin"), -1, hash), Exception);
+	EXPECT_THROW(queue->addMagnet(target("empty.bin"), 0, hash), Exception);
+	EXPECT_THROW(queue->addMagnet(target("invalid.bin"), 42, TTHValue()), Exception);
+	queue->addMagnet(target("first.bin"), 4096, hash);
+	EXPECT_THROW(queue->addMagnet(target("first.bin"), 4097, hash), Exception);
+	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_QUEUED, true);
+	EXPECT_THROW(queue->addMagnet(target("second.bin"), 4096, hash), Exception);
+	{ File file(target("exists.bin"), File::WRITE, File::CREATE); file.write("keep"); }
+	EXPECT_THROW(queue->addMagnet(target("exists.bin"), 4096, hash), Exception);
+	EXPECT_EQ("keep", File(target("exists.bin"), File::READ, File::OPEN).read());
+	TigerTree empty;
+	empty.finalize();
+	SettingsManager::getInstance()->set(SettingsManager::SKIP_ZERO_BYTE, false);
+	queue->addMagnet(target("empty.bin"), 0, empty.getRoot());
+	EXPECT_EQ(0, File::getSize(target("empty.bin")));
 }
 
 TEST_F(QueueTTHIndexTest, preserves_duplicate_tths_across_add_remove_and_move)

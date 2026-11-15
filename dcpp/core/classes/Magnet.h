@@ -22,12 +22,20 @@
 #include <dcpp/forward.h>
 
 #include <string>
+#include <cstdint>
 
 namespace dcpp {
 
 using std::string;
 
 struct Magnet {
+	struct Metadata {
+		string hash, name, key;
+		int64_t size = -1; // Missing size is distinct from an empty file.
+		bool canDownload() const { return !hash.empty() && size >= 0; }
+		string suggestedName() const;
+	};
+	static bool parseUri(const string& uri, Metadata& result);
 	static bool parseUri(const string& uri, string& hash, string& name, string& key);
 };
 

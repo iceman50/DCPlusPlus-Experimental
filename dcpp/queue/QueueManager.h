@@ -90,6 +90,8 @@ public:
 	/** Add a file to the queue. */
 	void add(const string& aTarget, int64_t aSize, const TTHValue& root, const HintedUser& aUser,
 		int aFlags = 0, bool addBad = true);
+	/** Queue known magnet metadata without inventing a source user. */
+	void addMagnet(const string& target, int64_t size, const TTHValue& root);
 
 	/** Add a user's filelist to the queue. */
 	void addList(const HintedUser& HintedUser, int aFlags, const string& aInitialDir = Util::emptyString);
@@ -294,6 +296,8 @@ private:
 	static string checkTarget(const string& aTarget, bool checkExsistence);
 	/** Add a source to an existing queue item */
 	bool addSource(QueueItem* qi, const HintedUser& aUser, Flags::MaskType addBad);
+	void addFile(const string& target, int64_t size, const TTHValue& root,
+		const HintedUser& user, int flags, bool addBad);
 
 	void processList(const string& name, const HintedUser& user, int flags);
 	void processPartialList(const string& xml, const HintedUser& user, int flags, const string& requestedPath, bool recursive);

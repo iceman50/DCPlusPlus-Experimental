@@ -27,6 +27,7 @@
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/MessageBox.h>
+#include <dwt/widgets/ComboBox.h>
 
 #include <win32/resource.h>
 #include <win32/frames/hublist/HubListsDlg.h>
@@ -37,7 +38,7 @@ using dwt::Label;
 using dwt::Spinner;
 
 DownloadPage::DownloadPage(dwt::Widget* parent) :
-PropPage(parent, 3, 1)
+PropPage(parent, 4, 1)
 {
 	setHelpId(IDH_DOWNLOADPAGE);
 
@@ -130,6 +131,18 @@ PropPage(parent, 3, 1)
 		box->setHelpId(IDH_SETTINGS_DOWNLOAD_PROXY);
 	}
 
+	{
+		auto cur = grid->addChild(GroupBox::Seed(T_("Magnet links")))->addChild(Grid::Seed(2, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		magnetAction = cur->addChild(ControlSeeds::Dialog::comboBox);
+		magnetAction->addValue(T_("Ask each time"));
+		magnetAction->addValue(T_("Always search"));
+		magnetAction->addValue(T_("Always download complete links"));
+		const auto action = SETTING(MAGNET_ACTION);
+		magnetAction->setSelected(SETTING(MAGNET_ASK) ? 0 :
+			action == SettingsManager::MAGNET_AUTO_SEARCH ? 1 : action == SettingsManager::MAGNET_AUTO_DOWNLOAD ? 2 : 0);
+		cur->addChild(Label::Seed(T_("Incomplete links still ask. Downloads use the default directory.")));
+	}
 	PropPage::read(items);
 }
 
@@ -138,6 +151,10 @@ DownloadPage::~DownloadPage() {
 
 void DownloadPage::write() {
 	PropPage::write(items);
+	const auto action = magnetAction->getSelected();
+	SettingsManager::getInstance()->set(SettingsManager::MAGNET_ASK, action <= 0);
+	if(action > 0) SettingsManager::getInstance()->set(SettingsManager::MAGNET_ACTION,
+		action == 2 ? SettingsManager::MAGNET_AUTO_DOWNLOAD : SettingsManager::MAGNET_AUTO_SEARCH);
 
 	const string& s = SETTING(DOWNLOAD_DIRECTORY);
 	if(s.length() > 0 && s[s.length() - 1] != '\\') {

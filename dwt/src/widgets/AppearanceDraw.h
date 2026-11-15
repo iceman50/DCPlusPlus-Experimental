@@ -54,6 +54,10 @@ namespace appearance_detail {
 bool drawThemedCheckBox(Canvas& canvas, const Rectangle& bounds, UINT checkState,
 	bool disabled, bool pressed, bool hot);
 
+/** Smooth palette-colored radio glyph, shared by toolkit and native dialogs. */
+void drawRadioGlyph(Canvas& canvas, const Rectangle& bounds, COLORREF background,
+	COLORREF fill, COLORREF border, bool checked);
+
 LRESULT drawButton(Button& button, NMCUSTOMDRAW& data, const Appearance::Palette& palette);
 LRESULT drawHeader(Header& header, NMCUSTOMDRAW& data, const Appearance::Palette& palette);
 LRESULT drawToolBar(ToolBar& toolbar, NMTBCUSTOMDRAW& data, const Appearance::Palette& palette);

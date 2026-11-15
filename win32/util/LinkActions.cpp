@@ -27,6 +27,7 @@
 #include <win32/util/ShellActions.h>
 #include <win32/forward.h>
 #include <dcpp/core/classes/Magnet.h>
+#include <dcpp/queue/QueueManager.h>
 #include <dcpp/util/text/StringTokenizer.h>
 #include <win32/MainWindow.h>
 #include <win32/frames/hub/HubFrame.h>
@@ -57,7 +58,7 @@ void copyMagnet(const TTHValue& aHash, const tstring& aFile, int64_t size) {
 
 string makeMagnet(const TTHValue& aHash, const string& aFile, int64_t size) {
 	string ret = "magnet:?xt=urn:tree:tiger:" + aHash.toBase32();
-	if(size > 0)
+	if(size >= 0)
 		ret += "&xl=" + std::to_string(size);
 	return ret + "&dn=" + Util::encodeURI(aFile);
 }
@@ -93,16 +94,51 @@ bool parseLink(const tstring& str, bool followExternal) {
 		return true;
 	}
 
-	if(host == "magnet") {
-		string hash, name, key;
-		if(Magnet::parseUri(Text::fromT(str), hash, name, key)) {
-			MagnetDlg(UiServices::mainWindow, Text::toT(hash), Text::toT(name), Text::toT(key)).run();
-		} else {
+	if(Util::strnicmp(url.c_str(), "magnet:", 7) == 0) {
+		Magnet::Metadata metadata;
+		if(!Magnet::parseUri(url, metadata)) {
 			dwt::MessageBox(UiServices::mainWindow).show(
-				T_("A MAGNET link was given to DC++, but it didn't contain a valid file hash for use on the Direct Connect network.  No action will be taken."),
+				T_("This magnet link has invalid file information or contains neither a supported file hash nor search keywords."),
 				T_("MAGNET Link detected"), dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONEXCLAMATION);
+			return true;
 		}
-		return true;
+		auto directory = SETTING(DOWNLOAD_DIRECTORY);
+		if(directory.empty()) directory = Util::getPath(Util::PATH_DOWNLOADS);
+		if(!directory.empty() && directory.back() != PATH_SEPARATOR) directory += PATH_SEPARATOR;
+		auto target = directory + metadata.suggestedName();
+		const auto stored = SETTING(MAGNET_ACTION);
+		bool ask = SETTING(MAGNET_ASK) ||
+			(stored != SettingsManager::MAGNET_AUTO_SEARCH && stored != SettingsManager::MAGNET_AUTO_DOWNLOAD) ||
+			(stored == SettingsManager::MAGNET_AUTO_DOWNLOAD && !metadata.canDownload());
+		auto action = stored == SettingsManager::MAGNET_AUTO_DOWNLOAD ? MagnetDlg::Action::Download : MagnetDlg::Action::Search;
+		bool remember = false;
+		for(;;) {
+			if(ask) {
+				MagnetDlg dialog(UiServices::mainWindow, metadata, target);
+				if(dialog.run() != IDOK) return true;
+				action = dialog.getAction();
+				target = dialog.getTarget();
+				remember = dialog.rememberChoice();
+			}
+			try {
+				if(action == MagnetDlg::Action::Download) {
+					QueueManager::getInstance()->addMagnet(target, metadata.size, TTHValue(metadata.hash));
+				} else if(action == MagnetDlg::Action::Search) {
+					if(!metadata.hash.empty()) searchHash(TTHValue(metadata.hash));
+					else searchAny(Text::toT(metadata.key));
+				} else return true;
+				if(remember) {
+					SettingsManager::getInstance()->set(SettingsManager::MAGNET_ASK, false);
+					SettingsManager::getInstance()->set(SettingsManager::MAGNET_ACTION,
+						action == MagnetDlg::Action::Download ? SettingsManager::MAGNET_AUTO_DOWNLOAD : SettingsManager::MAGNET_AUTO_SEARCH);
+				}
+				return true;
+			} catch(const Exception& e) {
+				dwt::MessageBox(UiServices::mainWindow).show(Text::toT(e.getError()), T_("Unable to open magnet link"),
+					dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONEXCLAMATION);
+				ask = true;
+			}
+		}
 	}
 
 	if(followExternal)

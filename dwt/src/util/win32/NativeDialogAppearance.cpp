@@ -58,6 +58,7 @@ enum class NativeControl {
 	Dialog,
 	Button,
 	ComboBox,
+	ComboBoxEx,
 	Edit,
 	Header,
 	Link,
@@ -175,6 +176,7 @@ NativeControl classify(HWND window) {
 	if(equals(name, _T("#32770"))) return NativeControl::Dialog;
 	if(equals(name, WC_BUTTON)) return NativeControl::Button;
 	if(equals(name, WC_COMBOBOX)) return NativeControl::ComboBox;
+	if(equals(name, WC_COMBOBOXEX)) return NativeControl::ComboBoxEx;
 	if(equals(name, WC_EDIT) || equals(name, _T("RichEdit20A")) ||
 		equals(name, _T("RichEdit20W")) || equals(name, _T("RICHEDIT50W"))) {
 		return NativeControl::Edit;
@@ -745,29 +747,19 @@ void drawCheck(Canvas& canvas, const Rectangle& box, bool radio, bool checked, b
 		border = Appearance::blend(border, palette.background, 90);
 	}
 	if(radio) {
-		Brush brush(fill);
-		Pen pen(border, Pen::Solid, 1);
-		auto selectBrush = canvas.select(brush);
-		auto selectPen = canvas.select(pen);
-		canvas.ellipse(box);
-	} else {
-		drawSurface(canvas, box, fill, border);
+		appearance_detail::drawRadioGlyph(canvas, box, palette.background, fill, border, checked);
+		return;
 	}
+	drawSurface(canvas, box, fill, border);
 	if(!checked) {
 		return;
 	}
 	const auto checkMark = disabled ? Appearance::blend(palette.highlightText, fill, 105) : palette.highlightText;
-	const auto mark = radio ? border : checkMark;
-	Pen pen(mark, Pen::Solid, radio ? std::max(1L, box.width() / 15) : std::max(1L, box.width() / 7));
-	Brush brush(mark);
+	Pen pen(checkMark, Pen::Solid, std::max(1L, box.width() / 7));
+	Brush brush(checkMark);
 	auto selectPen = canvas.select(pen);
 	auto selectBrush = canvas.select(brush);
-	if(radio) {
-		const long inset = std::max(3L, box.width() / 3);
-		canvas.ellipse(Rectangle(box.left() + inset, box.top() + inset,
-			std::max(1L, box.width() - inset * 2),
-			std::max(1L, box.height() - inset * 2)));
-	} else if(indeterminate) {
+	if(indeterminate) {
 		canvas.line(Point(box.left() + box.width() / 4,
 			box.top() + box.height() / 2),
 			Point(box.right() - box.width() / 4,
@@ -1500,6 +1492,53 @@ bool handleCaptionInput(HWND window, NativeWindowData& data, UINT message, WPARA
 	return false;
 }
 
+bool drawComboBoxExItem(HWND window, const DRAWITEMSTRUCT& item, const Appearance::Palette& palette) {
+	if(item.CtlType != ODT_COMBOBOX || !item.hDC || item.hwndItem !=
+		reinterpret_cast<HWND>(::SendMessage(window, CBEM_GETCOMBOCONTROL, 0, 0))) return false;
+	// ComboBoxEx owns the inner combo's rows. Its default drawing uses system
+	// colors even when the edit and popup have a custom palette.
+	const bool selected = (item.itemState & ODS_SELECTED) != 0;
+	const bool disabled = (item.itemState & ODS_DISABLED) != 0;
+	FreeCanvas canvas(item.hDC);
+	const auto background = selected ? palette.accent : palette.surface;
+	Brush brush(background);
+	canvas.fill(Rectangle(item.rcItem), brush);
+	if(item.itemID == static_cast<UINT>(-1)) return true;
+	std::vector<TCHAR> text(32768, 0);
+	COMBOBOXEXITEM entry {};
+	entry.mask = CBEIF_TEXT | CBEIF_IMAGE | CBEIF_SELECTEDIMAGE | CBEIF_OVERLAY | CBEIF_INDENT;
+	entry.iItem = item.itemID;
+	entry.pszText = text.data();
+	entry.cchTextMax = static_cast<int>(text.size());
+	entry.iImage = entry.iSelectedImage = -1;
+	if(!::SendMessage(window, CBEM_GETITEM, 0, reinterpret_cast<LPARAM>(&entry))) return true;
+	const auto dpi = getDpi(window);
+	RECT label = item.rcItem;
+	label.left += scale(3, dpi) + std::max(0, entry.iIndent) * scale(10, dpi);
+	label.right -= scale(3, dpi);
+	auto images = reinterpret_cast<HIMAGELIST>(::SendMessage(window, CBEM_GETIMAGELIST, 0, 0));
+	if(images) {
+		int width = 0, height = 0;
+		::ImageList_GetIconSize(images, &width, &height);
+		const int image = selected && entry.iSelectedImage >= 0 ? entry.iSelectedImage : entry.iImage;
+		if(image >= 0) ::ImageList_Draw(images, image, item.hDC, label.left,
+			label.top + (label.bottom - label.top - height) / 2,
+			ILD_TRANSPARENT | INDEXTOOVERLAYMASK(std::max(0, entry.iOverlay)));
+		label.left += width + scale(3, dpi);
+	}
+	auto font = windowFont(window);
+	auto selectFont = canvas.select(font);
+	auto transparent = canvas.setBkMode(true);
+	canvas.setTextColor(disabled ? palette.disabledText : selected ? palette.highlightText : palette.text);
+	unsigned format = DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS;
+	if(::GetWindowLongPtr(window, GWL_EXSTYLE) & WS_EX_RTLREADING) format |= DT_RTLREADING | DT_RIGHT;
+	Rectangle textBounds(label);
+	canvas.drawText(entry.pszText, textBounds, format);
+	if((item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT))
+		drawFocus(canvas, Rectangle(item.rcItem), palette.border);
+	return true;
+}
+
 LRESULT nativeWindowProcImpl(HWND window, UINT message, WPARAM wParam, LPARAM lParam, DWORD_PTR refData)
 {
 	auto data = reinterpret_cast<NativeWindowData*>(refData);
@@ -1517,6 +1556,10 @@ LRESULT nativeWindowProcImpl(HWND window, UINT message, WPARAM wParam, LPARAM lP
 	case WM_DRAWITEM:
 		if(lParam && data->appearance->ownerDraw &&
 			data->appearance->ownerDraw(*reinterpret_cast<const DRAWITEMSTRUCT*>(lParam))) {
+			return TRUE;
+		}
+		if(lParam && data->control == NativeControl::ComboBoxEx &&
+			drawComboBoxExItem(window, *reinterpret_cast<const DRAWITEMSTRUCT*>(lParam), data->appearance->palette)) {
 			return TRUE;
 		}
 		break;

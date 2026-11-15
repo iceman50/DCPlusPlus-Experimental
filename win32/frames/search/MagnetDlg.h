@@ -19,42 +19,26 @@
 #ifndef DCPLUSPLUS_WIN32_MAGNET_DLG_H
 #define DCPLUSPLUS_WIN32_MAGNET_DLG_H
 
-#include <dcpp/core/header/typedefs.h>
+#include <dcpp/core/classes/Magnet.h>
+#include <win32/dialog/GridDialog.h>
 
-#include <dwt/widgets/ModalDialog.h>
-
-#include <win32/forward.h>
-
-// (Modders) Enjoy my liberally commented out source code.  The plan is to enable the
-// magnet link add an entry to the download queue, with just the hash (if that is the
-// only information the magnet contains).  DC++ has to find sources for the file anyway,
-// and can take filename, size, etc. values from there.
-//                                                        - GargoyleMT
-
-class MagnetDlg : public dwt::ModalDialog
-{
+class MagnetDlg : public GridDialog {
 public:
-	MagnetDlg(dwt::Widget* parent, const tstring& aHash, const tstring& aFileName, const tstring& aKeySearch);
-	virtual ~MagnetDlg();
-
-	int run();
+	enum class Action { Cancel, Search, Download };
+	MagnetDlg(dwt::Widget* parent, const dcpp::Magnet::Metadata& metadata, const string& target);
+	Action getAction() const { return action; }
+	const string& getTarget() const { return target; }
+	bool rememberChoice() const { return remembered; }
 
 private:
-	GridPtr grid;
-	//RadioButtonPtr queue;
-	RadioButtonPtr search;
-	//RadioButtonPtr doNothing;
-	//CheckBoxPtr remember;
-
-	tstring mHash;
-	tstring mFileName;
-	tstring mKeySearch;
-
+	dcpp::Magnet::Metadata metadata;
+	string target;
+	Action action = Action::Cancel;
+	bool remembered = false;
+	TextBoxPtr destination = nullptr;
+	CheckBoxPtr remember = nullptr;
 	bool handleInitDialog();
-	//void handleRadioButtonClicked(RadioButtonPtr radioButton);
-	void handleOKClicked();
-
-	void layout();
+	void choose(Action selected);
 };
 
-#endif // !defined(DCPLUSPLUS_WIN32_MAGNET_DLG_H)
+#endif

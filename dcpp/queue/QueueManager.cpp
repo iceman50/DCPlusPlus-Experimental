@@ -584,10 +584,30 @@ string QueueManager::getListPath(const HintedUser& user) {
 void QueueManager::add(const string& aTarget, int64_t aSize, const TTHValue& root, const HintedUser& aUser,
 	int aFlags /* = 0 */, bool addBad /* = true */)
 {
+	if(!aUser.user) throw QueueException(_("A download source is required"));
+	addFile(aTarget, aSize, root, aUser, aFlags, addBad);
+}
+
+void QueueManager::addMagnet(const string& target, int64_t size, const TTHValue& root) {
+	if(size < 0 || !root) throw QueueException(_("The magnet link needs a valid file hash and size"));
+	if(size == 0) {
+		TigerTree empty;
+		empty.finalize();
+		if(root != empty.getRoot()) throw QueueException(_("The file hash does not match an empty file"));
+		if(SETTING(SKIP_ZERO_BYTE)) throw QueueException(_("Empty file downloads are disabled in settings"));
+	}
+	addFile(target, size, root, HintedUser(), 0, false);
+	if(size > 0) SearchManager::getInstance()->search(root.toBase32(), 0,
+		SearchManager::TYPE_TTH, SearchManager::SIZE_DONTCARE, "magnet");
+}
+
+void QueueManager::addFile(const string& aTarget, int64_t aSize, const TTHValue& root, const HintedUser& aUser,
+	int aFlags, bool addBad)
+{
 	bool wantConnection = true;
 
 	// Check that we're not downloading from ourselves...
-	if(aUser == ClientManager::getInstance()->getMe()) {
+	if(aUser.user && aUser == ClientManager::getInstance()->getMe()) {
 		throw QueueSelfException(_("You're trying to download from yourself!"));
 	}
 
@@ -634,7 +654,7 @@ void QueueManager::add(const string& aTarget, int64_t aSize, const TTHValue& roo
 				// If all existing queue items are for pending temporary downloads then add a new queue item or the source
 				bool sourceAdded = false, permanentExists = false;
 				for(auto& i: ql) {
-					if(!i->isSource(aUser)) {
+					if(aUser.user && !i->isSource(aUser)) {
 						try {
 							wantConnection = addSource(i, aUser, addBad ? QueueItem::Source::FLAG_MASK : 0);
 							sourceAdded = true;
@@ -694,13 +714,14 @@ void QueueManager::add(const string& aTarget, int64_t aSize, const TTHValue& roo
 			}
 		}
 
-		wantConnection = addSource(q, aUser, addBad ? QueueItem::Source::FLAG_MASK : 0);
+		if(aUser.user) wantConnection = addSource(q, aUser, addBad ? QueueItem::Source::FLAG_MASK : 0);
+		else setDirty();
 	}
 
 connect:
 	const bool smallSlot = (aFlags & QueueItem::FLAG_PARTIAL_LIST) != 0 ||
 		(!(aFlags & QueueItem::FLAG_USER_LIST) && aSize >= 0 && aSize < MCN::SMALL_FILE_LIMIT);
-	if((wantConnection || smallSlot) && aUser.user->isOnline())
+	if(aUser.user && (wantConnection || smallSlot) && aUser.user->isOnline())
 		ConnectionManager::getInstance()->getDownloadConnection(aUser, smallSlot);
 }
 
