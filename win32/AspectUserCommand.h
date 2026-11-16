@@ -43,6 +43,8 @@ public:
 		if(!userCommands.empty()) {
 			menu->appendSeparator();
 			auto cur = menu;
+			// Hub commands may only create or share popups after the client's own items.
+			const auto menuSize = menu->size();
 			for(size_t n = 0; n < userCommands.size(); ++n) {
 				UserCommand* uc = &userCommands[n];
 
@@ -54,6 +56,11 @@ public:
 					}
 
 				} else if(uc->isRaw() || uc->isChat()) {
+					if(uc->getDisplayName().size() > 16) {
+						// Hub-controlled nesting depth; deep popup chains are dangerous (L#2156457).
+						continue;
+					}
+
 					cur = menu;
 
 					for(auto i = uc->getDisplayName().begin(), iend = uc->getDisplayName().end(); i != iend; ++i) {
@@ -63,7 +70,7 @@ public:
 						} else {
 							bool found = false;
 							// Let's see if we find an existing item...
-							for(unsigned k = 0, n = static_cast<unsigned>(cur->size()); k < n; ++k) {
+							for(unsigned k = (cur == menu ? menuSize : 0), n = cur->size(); k < n; ++k) {
 								if(cur->isPopup(k) && Util::stricmp(cur->getText(k), name) == 0) {
 									found = true;
 									cur = cur->getChild(k);
