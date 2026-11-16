@@ -93,8 +93,7 @@ DC++ Experimental is licensed under the GNU General Public License v3 or later, 
 with OpenSSL. See [License.txt](License.txt). Bundled third-party components and their licenses are listed in
 [ThirdPartyLicenses.txt](ThirdPartyLicenses.txt).
 
-DC++ is copyright © 2001-2025 Jacek Sieka and the DC++ contributors. The modifications in this fork are copyright ©
-2026 iceman50.
+DC++ is copyright © 2001-2025 Jacek Sieka. The modifications in this fork are copyright © 2026 iceman50.
 
 ## AI assistance
 
