@@ -39,7 +39,7 @@ bool SFVReader::tryFile(const string& sfvFile, const string& fileName) {
 			string::size_type j = i + fileName.length() + 1;
 			if(j < sfv.length() - 8) {
 				// Check for at least one whitespace between filename and crc32 value...otherwise skip...
-				if(!isspace(sfv[j-1])) {
+				if(!isspace(static_cast<unsigned char>(sfv[j-1]))) {
 					i = j;
 					continue;
 				}
