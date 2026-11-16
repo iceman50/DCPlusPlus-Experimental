@@ -268,6 +268,22 @@ void DownloadManager::startData(UserConnection* aSource, int64_t start, int64_t 
 		QueueManager::getInstance()->removeSource(path, user, QueueItem::Source::FLAG_BAD_TREE, false);
 		return;
 	}
+	if(d->getType() == Transfer::TYPE_PARTIAL_LIST) {
+		// Partial lists are kept in memory, so refuse one larger than the limit before buffering it.
+		const auto limit = static_cast<int64_t>(std::max(1024, SETTING(MAX_RECEIVED_PARTIAL_LIST_BYTES)));
+		if(bytes > limit) {
+			const auto path = d->getPath();
+			const auto user = aSource->getUser();
+			const auto recursive = d->isSet(Download::FLAG_RECURSIVE);
+			failDownload(aSource, str(F_("Partial file list is larger than the received partial file list limit (%1%)") %
+				Util::formatBytes(limit)));
+			// A recursive list is fetched as a full list instead, which is saved to disk.
+			if(!recursive || !QueueManager::getInstance()->fallbackRecursiveList(path)) {
+				QueueManager::getInstance()->removeSource(path, user, QueueItem::Source::FLAG_FILE_NOT_AVAILABLE, false);
+			}
+			return;
+		}
+	}
 	if(d->getSize() == -1) {
 		if(bytes >= 0) {
 			d->setSize(bytes);

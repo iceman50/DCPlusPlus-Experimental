@@ -148,6 +148,7 @@ const string SettingsManager::settingTags[] =
 	"OutboxMaxEntries", "OutboxMaxMessageBytes", "OutboxExpiryDays",
 	"AdcMinSaltLength", "BBSMaxBoards",
 	"ArchiveMaxEntries", "ArchiveMaxFileBytes", "ArchiveMaxTotalBytes",
+	"MaxReceivedPartialListBytes",
 	"SENTRY",
 	// Bools
 	"AddFinishedInstantly", "AdlsBreakOnFirst",
@@ -310,6 +311,7 @@ SettingsManager::SettingsManager() {
 	setDefault(ARCHIVE_MAX_ENTRIES, 4096);
 	setDefault(ARCHIVE_MAX_FILE_BYTES, 16 * 1024 * 1024);
 	setDefault(ARCHIVE_MAX_TOTAL_BYTES, 128 * 1024 * 1024);
+	setDefault(MAX_RECEIVED_PARTIAL_LIST_BYTES, 384 * 1024 * 1024);
 	setDefault(THEME_BACKGROUND_COLOR, RGB(32, 32, 32));
 	setDefault(THEME_SURFACE_COLOR, RGB(45, 45, 48));
 	setDefault(THEME_TEXT_COLOR, RGB(241, 241, 241));

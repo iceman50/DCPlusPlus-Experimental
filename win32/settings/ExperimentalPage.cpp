@@ -390,7 +390,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 
 	{
 		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Protocol resource limits")));
-		auto cur = group->addChild(Grid::Seed(12, 1));
+		auto cur = group->addChild(Grid::Seed(13, 1));
 		cur->column(0).mode = GridInfo::FILL;
 		addIntItem(cur, T_("Queued protocol data limit"), SettingsManager::MAX_QUEUED_PROTOCOL_DATA,
 			IDH_SETTINGS_EXPERIMENTAL_MAX_QUEUED_PROTOCOL_DATA, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
@@ -414,6 +414,8 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_KEYS, T_("keys"), 1, UD_MAXVAL);
 		addIntItem(cur, T_("Generated partial file list limit"), SettingsManager::MAX_PARTIAL_LIST_BYTES,
 			IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
+		addIntItem(cur, T_("Received partial file list limit"), SettingsManager::MAX_RECEIVED_PARTIAL_LIST_BYTES,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_RECEIVED_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 		addIntItem(cur, T_("BBS boards per hub limit"), SettingsManager::BBS_MAX_BOARDS,
 			IDH_SETTINGS_EXPERIMENTAL_BBS_MAX_BOARDS, T_("boards"),
 			SettingsManager::BBS_MAX_BOARDS_MIN, SettingsManager::BBS_MAX_BOARDS_MAX);
@@ -582,6 +584,7 @@ void ExperimentalPage::write() {
 	clamp(SettingsManager::MAX_SUDP_PACKET, 32);
 	clamp(SettingsManager::MAX_SUDP_KEYS, 1);
 	clamp(SettingsManager::MAX_PARTIAL_LIST_BYTES, 1024);
+	clamp(SettingsManager::MAX_RECEIVED_PARTIAL_LIST_BYTES, 1024);
 	clampRange(SettingsManager::ADC_MIN_SALT_LENGTH,
 		SettingsManager::ADC_MIN_SALT_LENGTH_MIN, SettingsManager::ADC_MIN_SALT_LENGTH_MAX);
 	clampRange(SettingsManager::BBS_MAX_BOARDS,

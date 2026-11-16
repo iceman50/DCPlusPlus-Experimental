@@ -21,14 +21,16 @@
 #include <dcpp/connection/UserConnection.h>
 #include <dcpp/transfer/upload/UploadManager.h>
 #include <dcpp/plugins/PluginManager.h>
+#include <dcpp/transfer/download/DownloadManager.h>
+#include <dcpp/transfer/download/Download.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/connection/socket/BufferedSocket.h>
 #undef private
 
 #include <dcpp/connectivity/ConnectivityManager.h>
-#include <dcpp/transfer/download/DownloadManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/connection/http/HttpManager.h>
 #include <dcpp/events/LogManager.h>
-#include <dcpp/queue/QueueManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/user/UserMatchManager.h>
@@ -84,6 +86,7 @@ public:
 			peer->fire(UserConnectionListener::Failed(), peer.get(), string("Test shutdown"));
 		}
 		peers.clear();
+		BufferedSocket::waitShutdown();
 		manager->removeListener(this);
 		ConnectionManager::deleteInstance();
 		DownloadManager::deleteInstance();
@@ -638,4 +641,44 @@ TEST_F(ConnectionManagerTest, negotiates_zstd_independently_for_adc_and_nmdc) {
 #ifdef _WIN32
 	WSACleanup();
 #endif
+}
+
+TEST_F(ConnectionManagerTest, oversized_partial_lists_are_refused_before_buffering) {
+	const string hub = "dchub://one.example";
+	SettingsManager::getInstance()->set(SettingsManager::MAX_RECEIVED_PARTIAL_LIST_BYTES, 1024 * 1024);
+	auto qm = QueueManager::getInstance();
+	auto dm = DownloadManager::getInstance();
+
+	auto startList = [&](const UserPtr& u, int flags) {
+		qm->addList(HintedUser(u, hub), QueueItem::FLAG_PARTIAL_LIST | flags, "/Share/");
+		auto uc = peer(u, "token", false, false);
+		// Accepting the list would switch the socket to data mode; it is never connected.
+		uc->socket = BufferedSocket::getSocket(0);
+		uc->socket->setSocket(unique_ptr<Socket>(new Socket(Socket::TYPE_TCP)));
+		auto d = qm->getDownload(*uc);
+		EXPECT_TRUE(d && d->getType() == Transfer::TYPE_PARTIAL_LIST);
+		return std::make_pair(uc, d ? d->getPath() : string());
+	};
+
+	// A recursive list over the limit is fetched as a full list instead.
+	auto recursive = user(1);
+	auto first = startList(recursive, QueueItem::FLAG_RECURSIVE_LIST);
+	ASSERT_FALSE(first.second.empty());
+	dm->startData(first.first, 0, 2 * 1024 * 1024, false, true);
+	EXPECT_EQ(nullptr, first.first->getDownload());
+	auto item = qm->fileQueue.find(first.second);
+	ASSERT_TRUE(item);
+	EXPECT_FALSE(item->isSet(QueueItem::FLAG_PARTIAL_LIST));
+	EXPECT_FALSE(item->isSet(QueueItem::FLAG_RECURSIVE_LIST));
+	EXPECT_TRUE(item->isSet(QueueItem::FLAG_USER_LIST));
+	EXPECT_TRUE(item->isSource(recursive));
+
+	// A plain partial list over the limit is refused and not requested from that user again.
+	auto plain = user(2);
+	auto second = startList(plain, 0);
+	ASSERT_FALSE(second.second.empty());
+	dm->startData(second.first, 0, 1024 * 1024 + 1, false, false);
+	EXPECT_EQ(nullptr, second.first->getDownload());
+	auto plainItem = qm->fileQueue.find(second.second);
+	EXPECT_TRUE(!plainItem || !plainItem->isSource(plain));
 }
