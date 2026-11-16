@@ -186,4 +186,29 @@ TEST_F(AdcLoginTest, UnregisteredLoginDefersUpdatesAndReconnectSendsCompleteIden
 	}
 }
 
+TEST_F(AdcLoginTest, OnlyHubInfoMayReplaceFavoriteFailoverServers) {
+	FavoriteHubEntry entry;
+	entry.setServer("adc://login.example.invalid:411");
+	entry.setPassword("secret");
+	FavoriteManager::getInstance()->addFavorite(entry);
+
+	LoginHub hub;
+	hub.begin();
+	hub.acknowledge();
+	auto favorite = FavoriteManager::getInstance()->getFavoriteHubEntry("adc://login.example.invalid:411");
+	ASSERT_TRUE(favorite);
+	ASSERT_TRUE(favorite->getFailoverServers().empty());
+
+	// A user claiming to be a hub (CT32 or HU1) must not be able to redirect
+	// later automatic reconnects, which would answer GPA with the saved password.
+	const auto userCid = CID::generate().toBase32();
+	hub.emulateCommand("BINF EVIL ID" + userCid + " NIEvil CT32 FOadc://attacker.example.com:411");
+	hub.emulateCommand("BINF EVIL HU1 FOadcs://attacker.example.com:412");
+	EXPECT_TRUE(favorite->getFailoverServers().empty());
+
+	hub.emulateCommand("IINF CT32 NIHub FOadc://failover.example.com:411");
+	ASSERT_EQ(1u, favorite->getFailoverServers().size());
+	EXPECT_EQ("adc://failover.example.com:411", favorite->getFailoverServers().front());
+}
+
 } // namespace

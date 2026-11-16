@@ -245,7 +245,11 @@ void AdcHub::handle(AdcCommand::INF, AdcCommand& c) noexcept {
 
 	if(u->getIdentity().isHub()) {
 		setHubIdentity(u->getIdentity());
-		auto fav = FavoriteManager::getInstance()->getFavoriteHubEntry(getHubUrl());
+		// Persist failovers only from the hub's own IINF. CT/HU are ordinary INF
+		// fields that hubs may relay from users, and a saved failover receives the
+		// favorite's password on the next automatic reconnect.
+		auto fav = c.getType() == AdcCommand::TYPE_INFO && c.getFrom() == AdcCommand::HUB_SID ?
+			FavoriteManager::getInstance()->getFavoriteHubEntry(getHubUrl()) : FavoriteHubEntryPtr();
 		if(fav) {
 			string fo = u->getIdentity().get("FO");
 			if(!fo.empty()) {
