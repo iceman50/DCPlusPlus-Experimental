@@ -450,6 +450,22 @@ TEST_F(HashStoreTest, completed_empty_sqlite_store_does_not_import_later_legacy_
 	EXPECT_EQ(0, scalarInt(db, "SELECT COUNT(*) FROM trees"));
 }
 
+TEST_F(HashStoreTest, failed_sqlite_open_does_not_keep_the_file_locked) {
+	{
+		std::ofstream corrupt(path("not-a-database.sqlite3"), std::ios::binary | std::ios::trunc);
+		corrupt << string(4096, 'x');
+	}
+	try {
+		SQLiteDB db(path("not-a-database.sqlite3"));
+		FAIL() << "opening a non-database file should throw";
+	} catch(const SQLiteException& e) {
+		EXPECT_TRUE(e.isCorruption()) << e.getError();
+	}
+	// A leaked connection would keep the file open and make deletion fail on Windows.
+	std::error_code error;
+	EXPECT_TRUE(std::filesystem::remove(path("not-a-database.sqlite3"), error)) << error.message();
+}
+
 TEST(HashStoreMaintenanceWorkerTest, runs_scheduled_tasks_off_the_calling_thread) {
 	HashManager::HashStoreMaintenanceWorker worker;
 	std::promise<std::thread::id> result;

@@ -26,7 +26,20 @@
 
 namespace dcpp {
 
-STANDARD_EXCEPTION(SQLiteException);
+class SQLiteException : public Exception {
+public:
+	SQLiteException() : Exception() { }
+	/** resultCode is the primary SQLite result code, or SQLITE_ERROR for application-level failures. */
+	explicit SQLiteException(const string& aError, int aResultCode = SQLITE_ERROR) : Exception(aError), resultCode(aResultCode) { }
+	virtual ~SQLiteException() throw() { }
+
+	int getResultCode() const noexcept { return resultCode; }
+	/** True when SQLite reported that the file is not a database or is malformed. */
+	bool isCorruption() const noexcept { return resultCode == SQLITE_CORRUPT || resultCode == SQLITE_NOTADB; }
+
+private:
+	int resultCode = SQLITE_ERROR;
+};
 
 class SQLiteStatement;
 

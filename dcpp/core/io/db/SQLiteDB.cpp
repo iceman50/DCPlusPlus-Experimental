@@ -68,12 +68,19 @@ void SQLiteDB::open(const string& fileName, bool readOnly) {
 #else
 	const auto rc = sqlite3_open_v2(fileName.c_str(), &handle, flags, nullptr);
 #endif
+	// SQLite usually returns a handle even when opening fails, and configure() fails for files that
+	// are not databases. Close it on every failure: when open() runs from the constructor, the
+	// destructor never runs and the leaked handle would keep the file locked.
 	db = handle;
-	if (rc != SQLITE_OK) {
-		throwLastError("opening " + fileName);
+	try {
+		if (rc != SQLITE_OK) {
+			throwLastError("opening " + fileName);
+		}
+		configure();
+	} catch (...) {
+		close();
+		throw;
 	}
-
-	configure();
 }
 
 void SQLiteDB::close() noexcept {
@@ -137,7 +144,7 @@ void SQLiteDB::execute(const char* sql) {
 	if (rc != SQLITE_OK) {
 		string message = error ? string(error) : getError();
 		sqlite3_free(error);
-		throw SQLiteException(message);
+		throw SQLiteException(message, rc & 0xff);
 	}
 }
 
@@ -178,7 +185,7 @@ string SQLiteDB::getLibraryVersion() {
 }
 
 void SQLiteDB::throwLastError(const string& context) const {
-	throw SQLiteException(context + ": " + getError());
+	throw SQLiteException(context + ": " + getError(), db ? (sqlite3_errcode(db) & 0xff) : SQLITE_CANTOPEN);
 }
 
 SQLiteStatement::SQLiteStatement(sqlite3* aDb, sqlite3_stmt* aStmt) noexcept : db(aDb), stmt(aStmt) {
@@ -284,7 +291,7 @@ bool SQLiteStatement::columnIsNull(int column) const {
 
 void SQLiteStatement::check(int rc, const char* context) const {
 	if (rc != SQLITE_OK) {
-		throw SQLiteException(string(context) + ": " + errorMessage(db));
+		throw SQLiteException(string(context) + ": " + errorMessage(db), rc & 0xff);
 	}
 }
 
