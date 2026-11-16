@@ -465,6 +465,8 @@ private:
 	bool loadShareCache() noexcept;
 	/** Persist the current in-memory share tree as one transaction for the next startup. */
 	void saveShareCache() noexcept;
+	/** Write the share-cache snapshot to cacheFile; throws on failure. */
+	void writeShareCache(const string& cacheFile);
 	/** Create or upgrade the share-cache schema; destructive migrations should use a new schema version. */
 	void createShareCacheSchema(SQLiteDB& db);
 	/** Recursively write one directory subtree using stable parent ids for fast parent-ordered loading. */

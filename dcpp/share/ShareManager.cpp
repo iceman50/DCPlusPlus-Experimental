@@ -1972,7 +1972,43 @@ void ShareManager::saveShareCache() noexcept {
 	}
 
 	const auto cacheFile = getShareCacheFile();
-	try {
+	for(bool retried = false;; retried = true) {
+		try {
+			writeShareCache(cacheFile);
+			return;
+		} catch(const SQLiteException& e) {
+			// The cache is derived from a full scan, so a corrupt file is simply replaced. Other
+			// failures (locked, I/O) leave it alone.
+			if(!retried && e.isCorruption()) {
+				LogManager::getInstance()->message(str(F_("Replacing unreadable share cache %1%: %2%") %
+					Util::addBrackets(cacheFile) % e.getError()), LogMessage::SEV_WARNING, _("Share cache"));
+				bool removed = true;
+				for(const char* suffix: { "", "-wal", "-shm" }) {
+					try {
+						if(File::getSize(cacheFile + suffix) != -1) File::deleteFile(cacheFile + suffix);
+					} catch(const FileException&) {
+						removed = false;
+					}
+				}
+				if(removed) continue;
+			}
+			LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.getError()),
+				LogMessage::SEV_ERROR, _("Share cache"));
+			return;
+		} catch(const Exception& e) {
+			LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.getError()),
+				LogMessage::SEV_ERROR, _("Share cache"));
+			return;
+		} catch(const std::exception& e) {
+			LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.what()),
+				LogMessage::SEV_ERROR, _("Share cache"));
+			return;
+		}
+	}
+}
+
+void ShareManager::writeShareCache(const string& cacheFile) {
+	{
 		SQLiteDB db(cacheFile);
 		createShareCacheSchema(db);
 		// Rebuild the snapshot atomically so interrupted saves never become a
@@ -2014,12 +2050,6 @@ void ShareManager::saveShareCache() noexcept {
 		LogManager::getInstance()->message(str(F_("Saved share cache %1% (%2% directories, %3% files)") %
 			Util::addBrackets(cacheFile) % std::to_string(directoryCount) % std::to_string(fileCount)),
 			LogMessage::SEV_INFO, _("Share cache"));
-	} catch(const Exception& e) {
-		LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.getError()),
-			LogMessage::SEV_ERROR, _("Share cache"));
-	} catch(const std::exception& e) {
-		LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.what()),
-			LogMessage::SEV_ERROR, _("Share cache"));
 	}
 }
 

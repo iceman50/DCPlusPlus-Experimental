@@ -236,6 +236,22 @@ TEST_F(ShareCacheTest, round_trips_share_tree_and_indices) {
 	EXPECT_EQ(1700000200, file->getLastWrite());
 }
 
+TEST_F(ShareCacheTest, replaces_unreadable_cache_file_on_save) {
+	{
+		const string garbage(8192, 'x');
+		std::ofstream corrupt(configPath + "ShareCache.sqlite3", std::ios::binary | std::ios::trunc);
+		corrupt.write(garbage.data(), static_cast<std::streamsize>(garbage.size()));
+	}
+	populateShare();
+	EXPECT_FALSE(ShareManager::getInstance()->loadShareCache());
+
+	// The cache is derived data: saving must recover instead of failing on every later save.
+	ShareManager::getInstance()->saveShareCache();
+	clearLoadedShare();
+	ASSERT_TRUE(ShareManager::getInstance()->loadShareCache());
+	EXPECT_EQ(ShareManager::getInstance()->getSharedFiles(), 1U);
+}
+
 #ifdef _WIN32
 
 TEST_F(ShareCacheTest, preserves_long_unicode_file_paths) {
