@@ -39,7 +39,14 @@ public:
 	SimpleXML(const SimpleXML&) = delete;
 	SimpleXML& operator=(const SimpleXML&) = delete;
 
-	SimpleXML() : root("BOGUSROOT", Util::emptyString, NULL), current(&root), found(false) {
+	enum Flags {
+		// Reject values that SimpleXMLReader would refuse to load back
+		FLAG_CHECK_VALUE_SIZE = 0x01,
+		// Truncate such values (on a UTF-8 boundary) instead of throwing
+		FLAG_TRUNCATE_VALUE = FLAG_CHECK_VALUE_SIZE << 1,
+	};
+
+	explicit SimpleXML(int aFlags = 0) : root("BOGUSROOT", Util::emptyString, NULL), current(&root), found(false), flags(aFlags) {
 		resetCurrentChild();
 	}
 	~SimpleXML() { }
@@ -256,6 +263,23 @@ private:
 	}
 
 	bool found;
+
+	const int flags;
+
+	string checkData(const string& data) const {
+		if(!(flags & FLAG_CHECK_VALUE_SIZE) || data.size() <= SimpleXMLReader::MAX_SAFE_VALUE_SIZE) {
+			return data;
+		}
+		if(!(flags & FLAG_TRUNCATE_VALUE)) {
+			throw SimpleXMLException("Too long data value");
+		}
+		// Never split a UTF-8 sequence: the reader rejects malformed UTF-8.
+		auto length = SimpleXMLReader::MAX_SAFE_VALUE_SIZE;
+		while(length > 0 && (static_cast<unsigned char>(data[length]) & 0xC0) == 0x80) {
+			--length;
+		}
+		return data.substr(0, length);
+	}
 };
 
 } // namespace dcpp

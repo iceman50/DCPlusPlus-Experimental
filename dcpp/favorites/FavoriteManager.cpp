@@ -386,7 +386,7 @@ void FavoriteManager::save() {
 
 	Lock l(cs);
 	try {
-		SimpleXML xml;
+		SimpleXML xml(SimpleXML::FLAG_CHECK_VALUE_SIZE | SimpleXML::FLAG_TRUNCATE_VALUE);
 
 		xml.addTag("Favorites");
 		xml.stepIn();

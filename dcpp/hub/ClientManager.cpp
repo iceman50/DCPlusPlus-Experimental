@@ -704,7 +704,7 @@ void ClientManager::loadUsers() {
 
 void ClientManager::saveUsers() const {
 	try {
-		SimpleXML xml;
+		SimpleXML xml(SimpleXML::FLAG_CHECK_VALUE_SIZE | SimpleXML::FLAG_TRUNCATE_VALUE);
 		xml.addTag("Users");
 		xml.stepIn();
 

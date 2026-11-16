@@ -60,6 +60,9 @@ public:
 	};
 
 	SimpleXMLReader(CallBack* callback, int aFlags = 0);
+
+	/** Longest decoded attribute or tag value that parse() is guaranteed to accept. */
+	static constexpr size_t MAX_SAFE_VALUE_SIZE = 64*1024 - 1;
 	virtual ~SimpleXMLReader() { }
 
 	void parse(InputStream& is, size_t maxSize = 0);

@@ -781,7 +781,7 @@ void SettingsManager::load(string const& aFileName)
 
 void SettingsManager::save(string const& aFileName) {
 
-	SimpleXML xml;
+	SimpleXML xml(SimpleXML::FLAG_CHECK_VALUE_SIZE | SimpleXML::FLAG_TRUNCATE_VALUE);
 	xml.addTag("DCPlusPlus");
 	xml.stepIn();
 	xml.addTag("Settings");

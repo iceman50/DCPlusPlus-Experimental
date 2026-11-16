@@ -164,7 +164,7 @@ void SimpleXML::addTag(const string& aName, const string& aData /* = "" */) {
 	if(current == &root && !current->children.empty()) {
 		throw SimpleXMLException("Only one root tag allowed");
 	} else {
-		current->children.push_back(new Tag(aName, aData, current));
+		current->children.push_back(new Tag(aName, checkData(aData), current));
 		currentChild = current->children.end() - 1;
 	}
 }
@@ -176,20 +176,20 @@ void SimpleXML::addChildTag(const string& aName, const string& aData /* = "" */)
 
 	checkChildSelected();
 	auto parent = *currentChild;
-	parent->children.push_back(new Tag(aName, aData, parent));
+	parent->children.push_back(new Tag(aName, checkData(aData), parent));
 }
 
 void SimpleXML::addAttrib(const string& aName, const string& aData) {
 	if(current == &root)
 		throw SimpleXMLException("No tag is currently selected");
 
-	current->attribs.emplace_back(aName, aData);
+	current->attribs.emplace_back(aName, checkData(aData));
 }
 
 void SimpleXML::addChildAttrib(const string& aName, const string& aData) {
 	checkChildSelected();
 
-	(*currentChild)->attribs.emplace_back(aName, aData);
+	(*currentChild)->attribs.emplace_back(aName, checkData(aData));
 }
 
 void SimpleXML::fromXML(const string& aXML, int aFlags) {

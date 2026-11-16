@@ -181,3 +181,35 @@ TEST(testxml, test_selected_child_children)
 	loaded.resetCurrentChild();
 	ASSERT_TRUE(loaded.findChild("Users"));
 }
+
+namespace {
+std::string roundTrip(const std::string& value) {
+	SimpleXML xml(SimpleXML::FLAG_CHECK_VALUE_SIZE | SimpleXML::FLAG_TRUNCATE_VALUE);
+	xml.addTag("Settings", value);
+	xml.addChildAttrib("Value", value);
+
+	SimpleXML loaded;
+	loaded.fromXML(xml.toXML());
+	EXPECT_TRUE(loaded.findChild("Settings"));
+	EXPECT_EQ(loaded.getChildData(), loaded.getChildAttrib("Value"));
+	return loaded.getChildData();
+}
+}
+
+// Saved settings must always be loadable again; an oversized value used to make
+// the whole file unreadable, resetting every setting and the client's CID.
+TEST(testxml, test_saved_values_are_loadable)
+{
+	const auto limit = SimpleXMLReader::MAX_SAFE_VALUE_SIZE;
+	EXPECT_EQ(limit, roundTrip(std::string(70000, 'x')).size());
+	EXPECT_EQ(limit, roundTrip(std::string(limit, '&')).size());
+	EXPECT_EQ(limit, roundTrip(std::string(limit - 1, 'x') + "&").size());
+
+	// A two-byte character straddling the limit is dropped, not split.
+	const auto split = roundTrip(std::string(limit - 1, 'x') + "\xc3\xa9" "tail");
+	EXPECT_EQ(limit - 1, split.size());
+	EXPECT_TRUE(Text::validateUtf8(split));
+
+	SimpleXML strict(SimpleXML::FLAG_CHECK_VALUE_SIZE);
+	EXPECT_THROW(strict.addTag("Settings", std::string(limit + 1, 'x')), SimpleXMLException);
+}
