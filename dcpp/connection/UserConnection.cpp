@@ -176,13 +176,13 @@ void UserConnection::connect(const string& aServer, const string& aPort, const s
 	socket = BufferedSocket::getSocket(0);
 	socket->addListener(this);
 
-	// @see UserConnection::accept, additionally opt to treat connections in both directions identically to avoid unforseen issues
-	/*string expKP;
+	// Keep the user we are connecting to, so the INF handler rejects a peer that answers with
+	// another user's CID. Without it, any user could send a connection request and then claim
+	// to be someone else: take over their private chat, upload slot or download source.
+	// Keyprints are still checked after INF for both directions (@see UserConnection::accept).
 	if(user) {
-		// TODO: verify that this KeyPrint was mediated by a trusted hub?
-		expKP = ClientManager::getInstance()->getField(user->getCID(), hubUrl, "KP");
 		setUser(user);
-	}*/
+	}
 
 	socket->connect(aServer, aPort, localPort, natRole, secure, true, true);
 }

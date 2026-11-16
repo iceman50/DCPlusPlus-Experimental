@@ -52,6 +52,11 @@ public:
 class ConnectionManagerTest : public ::testing::Test, public ConnectionManagerListener {
 public:
 	void SetUp() override {
+#ifdef _WIN32
+		// Some tests give connections a placeholder socket.
+		WSADATA data;
+		ASSERT_EQ(0, WSAStartup(MAKEWORD(2, 2), &data));
+#endif
 		const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
 		configPath = (std::filesystem::temp_directory_path() /
 			("dcpp-connection-test-" + std::to_string(ticks))).string() + PATH_SEPARATOR;
@@ -107,6 +112,9 @@ public:
 		LogManager::deleteInstance();
 		SettingsManager::deleteInstance();
 		std::filesystem::remove_all(configPath);
+#ifdef _WIN32
+		WSACleanup();
+#endif
 	}
 
 	UserPtr user(uint8_t id) {
@@ -681,4 +689,41 @@ TEST_F(ConnectionManagerTest, oversized_partial_lists_are_refused_before_bufferi
 	EXPECT_EQ(nullptr, second.first->getDownload());
 	auto plainItem = qm->fileQueue.find(second.second);
 	EXPECT_TRUE(!plainItem || !plainItem->isSource(plain));
+}
+
+TEST_F(ConnectionManagerTest, outgoing_adc_connections_accept_only_the_requested_peer) {
+	PluginManager::newInstance(); // sending the refusal runs the outgoing-data hook
+	// The REQUIRE_TLS refusal would otherwise end this plain test connection before the identity check.
+	SettingsManager::getInstance()->set(SettingsManager::REQUIRE_TLS, false);
+	const string hub = "dchub://one.example";
+	auto requested = user(1), claimed = user(2);
+	online(claimed, hub);
+	auto& peerUser = online(requested, hub);
+	peerUser.getIdentity().setIp4("127.0.0.1");
+	hubs.back()->ip = "127.0.0.1";
+
+	// The requested user asks us to connect; the socket goes to a closed local port.
+	manager->adcConnect(peerUser, "9", "token-1", false);
+	UserConnection* uc = nullptr;
+	{
+		Lock l(manager->cs);
+		ASSERT_EQ(1U, manager->userConnections.size());
+		uc = manager->userConnections.back();
+	}
+	peers.emplace_back(uc);
+	EXPECT_EQ(requested, uc->getUser());
+
+	// Answering with another user's CID must not turn the connection into theirs.
+	uc->setState(UserConnection::STATE_INF);
+	manager->on(AdcCommand::INF(), uc, AdcCommand(AdcCommand::CMD_INF).addParam("ID", claimed->getCID().toBase32()));
+	EXPECT_EQ(requested, uc->getUser());
+	EXPECT_FALSE(uc->isSet(UserConnection::FLAG_ASSOCIATED));
+	{
+		Lock l(manager->cs);
+		EXPECT_TRUE(manager->userConnections.empty());
+		EXPECT_TRUE(manager->cqis[CONNECTION_TYPE_UPLOAD].empty());
+	}
+	peers.clear();
+	BufferedSocket::waitShutdown();
+	PluginManager::deleteInstance();
 }
