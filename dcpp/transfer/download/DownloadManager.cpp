@@ -260,6 +260,14 @@ void DownloadManager::startData(UserConnection* aSource, int64_t start, int64_t 
 		failDownload(aSource, _("Response does not match request"));
 		return;
 	}
+	if(d->getType() == Transfer::TYPE_TREE && !Download::isValidTreeSize(d->getTigerTree().getFileSize(), bytes)) {
+		// Refuse before anything is buffered, and stop asking this source for the tree.
+		const auto path = d->getPath();
+		const auto user = aSource->getUser();
+		failDownload(aSource, _("Invalid tree size"));
+		QueueManager::getInstance()->removeSource(path, user, QueueItem::Source::FLAG_BAD_TREE, false);
+		return;
+	}
 	if(d->getSize() == -1) {
 		if(bytes >= 0) {
 			d->setSize(bytes);

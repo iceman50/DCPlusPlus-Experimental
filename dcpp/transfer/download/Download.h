@@ -73,6 +73,13 @@ public:
 	 */
 	bool hasValidFileListSignature() const;
 
+	/**
+	 * Whether a peer may send a Tiger tree of treeBytes for a file of fileSize bytes. A tree holds
+	 * one leaf per block of at least 1 KiB, so anything larger can only exhaust memory: compressed
+	 * transfers can expand repeated leaves thousands of times.
+	 */
+	static bool isValidTreeSize(int64_t fileSize, int64_t treeBytes) noexcept;
+
 	/** @internal */
 	TigerTree& getTigerTree() { return tt; }
 	const string& getPFS() const { return pfs; }

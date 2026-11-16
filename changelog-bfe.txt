@@ -15,6 +15,7 @@
 * Show the Protocol resource limits group on the Experimental Protocol limits tab again; it had been hidden since the Hub authentication group was added. The tab now scrolls on its own like the Interface tab (iceman50)
 * Decode NMDC nicks and text with the hub's encoding only, in hub lines, search results and direct connections. Previously any hub line that happened to be valid UTF-8 was read as UTF-8, so on a CP1251 hub a user could log in with the UTF-8 bytes of another user's nick and take over that user's list entry, chat name, private messages and replies (L#2174633) (iceman50)
 * Add a default encoding for NMDC hubs under Experimental > Protocol limits. Favorite hubs without their own encoding follow it, including favorites that older versions saved with the Windows default. A hub set to 65001 (UTF-8) now decodes reliably and shows invalid bytes as replacement characters. NMDC hubs that use UTF-8 must now be set to UTF-8 here or in the favorite hub properties (iceman50)
+* Refuse Tiger tree downloads larger than one leaf per KiB of the file and stop requesting the tree from that source. A peer could otherwise declare an arbitrary tree size and send a small compressed stream of repeated leaves that expanded to gigabytes of memory (about 12,000:1 with Zstandard) (iceman50)
 
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)

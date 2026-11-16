@@ -268,6 +268,15 @@ void Download::close()
 	output.reset();
 }
 
+bool Download::isValidTreeSize(int64_t fileSize, int64_t treeBytes) noexcept {
+	constexpr int64_t leafBytes = TigerTree::BYTES;
+	constexpr int64_t minBlockSize = TigerTree::BASE_BLOCK_SIZE;
+	if(fileSize <= 0 || treeBytes <= 0 || treeBytes % leafBytes != 0)
+		return false;
+	const auto maxLeaves = fileSize / minBlockSize + (fileSize % minBlockSize != 0 ? 1 : 0);
+	return treeBytes / leafBytes <= maxLeaves;
+}
+
 bool Download::hasValidFileListSignature() const {
 	if(getType() != TYPE_FULL_LIST || tempTarget.empty()) {
 		return true;

@@ -139,3 +139,20 @@ TEST_F(ZstdNegotiationTest, full_list_retains_frame_and_counts_decoded_bytes) {
 	EXPECT_EQ(compressed, File(path + ".xml.zst", File::READ, File::OPEN).read());
 	std::filesystem::remove(path + ".xml.zst");
 }
+
+TEST(ZstdStreams, tree_downloads_are_limited_to_one_leaf_per_kibibyte) {
+	// One 24-byte leaf per started 1 KiB block is the largest valid tree.
+	EXPECT_TRUE(Download::isValidTreeSize(1024, 24));
+	EXPECT_FALSE(Download::isValidTreeSize(1024, 48));
+	EXPECT_TRUE(Download::isValidTreeSize(1025, 48));
+	EXPECT_TRUE(Download::isValidTreeSize(1024 * 1024, 1024 * 24));
+	EXPECT_TRUE(Download::isValidTreeSize(1024 * 1024, 16 * 24));
+	EXPECT_FALSE(Download::isValidTreeSize(1024 * 1024, 1025 * 24));
+	// A 1 MiB file cannot justify the gigabytes a compressed stream of repeated leaves expands to.
+	EXPECT_FALSE(Download::isValidTreeSize(1024 * 1024, int64_t(1) << 30));
+	EXPECT_TRUE(Download::isValidTreeSize(int64_t(1) << 40, (int64_t(1) << 30) * 24));
+	EXPECT_FALSE(Download::isValidTreeSize(1024 * 1024, 0));
+	EXPECT_FALSE(Download::isValidTreeSize(1024 * 1024, 25));
+	EXPECT_FALSE(Download::isValidTreeSize(1024 * 1024, -24));
+	EXPECT_FALSE(Download::isValidTreeSize(0, 24));
+}
