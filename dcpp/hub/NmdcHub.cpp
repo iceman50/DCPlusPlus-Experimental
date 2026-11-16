@@ -287,6 +287,10 @@ void NmdcHub::onLine(const string& aLine, int statusFlags) noexcept {
 		return;
 
 	if(aLine[0] != '$') {
+		// Stop reconnecting when the hub says we are banned during login.
+		if(state != STATE_NORMAL && Util::findSubString(aLine, "banned") != string::npos) {
+			setAutoReconnect(false);
+		}
 		string line = toUtf8(aLine);
 		auto fireStatus = [this, statusFlags](const string& text, int extraFlags = ClientListener::FLAG_NORMAL) {
 			auto display = sanitizeStatusMessage(unescape(text));

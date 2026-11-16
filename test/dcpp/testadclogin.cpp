@@ -7,6 +7,7 @@
 // Drive the real login handlers and capture their outgoing commands without a hub.
 #define private public
 #include <dcpp/hub/AdcHub.h>
+#include <dcpp/hub/NmdcHub.h>
 #include <dcpp/connection/socket/BufferedSocket.h>
 #undef private
 
@@ -243,6 +244,26 @@ TEST_F(AdcLoginTest, ShortPasswordChallengeIsRefusedUnlessConfigured) {
 		hub.password("test-password");
 		EXPECT_TRUE(sentPassword(hub));
 	}
+}
+
+class LoginNmdcHub : public NmdcHub {
+public:
+	LoginNmdcHub() : NmdcHub("dchub://login.example.invalid:411") { }
+	void setLoggedIn(bool loggedIn) { state = loggedIn ? STATE_NORMAL : STATE_IDENTIFY; }
+};
+
+TEST_F(AdcLoginTest, NmdcBanDuringLoginDisablesAutoReconnect) {
+	LoginNmdcHub hub;
+	hub.setAutoReconnect(true);
+	hub.setLoggedIn(false);
+	hub.emulateCommand("You are BANNED from this hub");
+	EXPECT_FALSE(hub.getAutoReconnect());
+
+	// After login, hub messages mentioning bans must not change reconnect behaviour.
+	hub.setAutoReconnect(true);
+	hub.setLoggedIn(true);
+	hub.emulateCommand("Reminder: users who spam get banned");
+	EXPECT_TRUE(hub.getAutoReconnect());
 }
 
 } // namespace
