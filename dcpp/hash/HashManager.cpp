@@ -1041,11 +1041,71 @@ bool HashManager::HashStore::migrateLegacy() {
 }
 
 void HashManager::HashStore::load(function<void (float)> progressF) {
+	for(bool retried = false;; retried = true) {
+		try {
+			loadStore(progressF);
+			return;
+		} catch (const SQLiteException& e) {
+			fileIndex.clear();
+			treeIndex.clear();
+			// Only SQLite's own corruption verdicts justify replacing the file. Busy, locked or
+			// I/O failures (for example another running instance) must leave it in place.
+			if(!retried && e.isCorruption() && setAsideUnreadableDb(e.getError())) {
+				continue;
+			}
+			LogManager::getInstance()->message(str(F_("Error loading hash data: %1%") % e.getError()),
+				LogMessage::SEV_ERROR, _("Hash database"));
+			return;
+		} catch (const Exception& e) {
+			LogManager::getInstance()->message(str(F_("Error loading hash data: %1%") % e.getError()),
+				LogMessage::SEV_ERROR, _("Hash database"));
+			fileIndex.clear();
+			treeIndex.clear();
+			return;
+		}
+	}
+}
+
+bool HashManager::HashStore::setAsideUnreadableDb(const string& reason) {
+	resetStatements();
+	writeTransaction.reset();
+	db.close();
+
+	const auto dbFile = getDbFile();
+	const auto stamp = Util::formatTime("%Y%m%d-%H%M%S", time(nullptr));
+	string suffix = ".corrupt-" + stamp;
+	for(int n = 2; File::getSize(dbFile + suffix) != -1; ++n) {
+		suffix = ".corrupt-" + stamp + "-" + std::to_string(n);
+	}
+
 	try {
+		File::renameFile(dbFile, dbFile + suffix);
+	} catch (const FileException& e) {
+		LogManager::getInstance()->message(str(F_("The hash database %1% is unreadable (%2%) and could not be renamed: %3%") %
+			dbFile % reason % e.getError()), LogMessage::SEV_ERROR, _("Hash database"));
+		return false;
+	}
+	// The write-ahead log belongs to the unreadable database; never replay it into a new one.
+	for(const char* sidecar: { "-wal", "-shm" }) {
+		if(File::getSize(dbFile + sidecar) != -1) {
+			try {
+				File::renameFile(dbFile + sidecar, dbFile + sidecar + suffix);
+			} catch (const FileException&) {
+				try { File::deleteFile(dbFile + sidecar); } catch (const FileException&) { }
+			}
+		}
+	}
+
+	LogManager::getInstance()->message(str(F_("The hash database was unreadable (%1%). It was renamed to %2% and a new one was created; files will be rehashed as needed.") %
+		reason % (dbFile + suffix)), LogMessage::SEV_WARNING, _("Hash database"));
+	return true;
+}
+
+void HashManager::HashStore::loadStore(function<void (float)> progressF) {
+	{
 		openDb();
 		if(SETTING(HASH_DB_VERIFY_STARTUP) && !verify(false)) {
-			LogManager::getInstance()->message(_("Hash database verification failed during startup; DC++ will rehash files as needed"),
-				LogMessage::SEV_WARNING, _("Hash database"));
+			throw SQLiteException(_("startup verification failed"), SQLITE_CORRUPT);
 		}
 		if(hasDbData()) {
 			// Existing SQLite rows always win over legacy files. The metadata marker is backfilled for
@@ -1075,11 +1135,6 @@ void HashManager::HashStore::load(function<void (float)> progressF) {
 				progressF(1);
 			}
 		}
-	} catch (const Exception& e) {
-		LogManager::getInstance()->message(str(F_("Error loading hash data: %1%") % e.getError()),
-			LogMessage::SEV_ERROR, _("Hash database"));
-		fileIndex.clear();
-		treeIndex.clear();
 	}
 }
 

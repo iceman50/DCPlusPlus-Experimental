@@ -303,6 +303,10 @@ private:
 
 		/** Open the SQLite hash database and create or migrate the schema before use. */
 		void openDb();
+		/** Load the database, importing legacy XML/DAT files once when it has no data yet. */
+		void loadStore(function<void (float)> progressF);
+		/** Rename an unreadable database (and its WAL/SHM files) aside so a new one can be created. */
+		bool setAsideUnreadableDb(const string& reason);
 		/** Create all current SQLite hash-store tables and then apply versioned migrations. */
 		void createSchema();
 		/** Return SQLite PRAGMA user_version for deciding which compatibility migrations are needed. */

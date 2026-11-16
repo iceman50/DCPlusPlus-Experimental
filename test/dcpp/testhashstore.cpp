@@ -450,6 +450,43 @@ TEST_F(HashStoreTest, completed_empty_sqlite_store_does_not_import_later_legacy_
 	EXPECT_EQ(0, scalarInt(db, "SELECT COUNT(*) FROM trees"));
 }
 
+TEST_F(HashStoreTest, unreadable_sqlite_store_is_set_aside_and_replaced) {
+	const string garbage(8192, 'x');
+	{
+		std::ofstream corrupt(path("HashStore.sqlite3"), std::ios::binary | std::ios::trunc);
+		corrupt.write(garbage.data(), static_cast<std::streamsize>(garbage.size()));
+	}
+
+	const auto fileName = path("rehashed-file.bin");
+	const uint32_t timeStamp = 24680;
+	const auto tree = makeTree(4097);
+	{
+		HashManager::HashStore store;
+		store.load([](float) {});
+		store.addFile(fileName, timeStamp, tree, true);
+	}
+
+	// New hashes must persist instead of failing against the unreadable file forever.
+	{
+		HashManager::HashStore store;
+		store.load([](float) {});
+		auto root = store.getTTH(fileName, tree.getFileSize(), timeStamp);
+		ASSERT_TRUE(root);
+		EXPECT_EQ(tree.getRoot(), *root);
+	}
+
+	// The unreadable file is kept for inspection rather than deleted.
+	size_t preserved = 0;
+	for(const auto& entry: std::filesystem::directory_iterator(configPath)) {
+		const auto name = entry.path().filename().string();
+		if(name.rfind("HashStore.sqlite3.corrupt-", 0) == 0) {
+			++preserved;
+			EXPECT_EQ(garbage.size(), std::filesystem::file_size(entry.path()));
+		}
+	}
+	EXPECT_EQ(1u, preserved);
+}
+
 TEST_F(HashStoreTest, failed_sqlite_open_does_not_keep_the_file_locked) {
 	{
 		std::ofstream corrupt(path("not-a-database.sqlite3"), std::ios::binary | std::ios::trunc);
@@ -464,6 +501,20 @@ TEST_F(HashStoreTest, failed_sqlite_open_does_not_keep_the_file_locked) {
 	// A leaked connection would keep the file open and make deletion fail on Windows.
 	std::error_code error;
 	EXPECT_TRUE(std::filesystem::remove(path("not-a-database.sqlite3"), error)) << error.message();
+}
+
+TEST_F(HashStoreTest, store_failing_for_other_reasons_is_left_in_place) {
+	// Not corruption: SQLite cannot open a directory. Such stores (like one locked by another
+	// running instance) must never be renamed or replaced.
+	std::filesystem::create_directory(path("HashStore.sqlite3"));
+	{
+		HashManager::HashStore store;
+		store.load([](float) {});
+	}
+	EXPECT_TRUE(std::filesystem::is_directory(path("HashStore.sqlite3")));
+	for(const auto& entry: std::filesystem::directory_iterator(configPath)) {
+		EXPECT_EQ(string::npos, entry.path().filename().string().find(".corrupt-"));
+	}
 }
 
 TEST(HashStoreMaintenanceWorkerTest, runs_scheduled_tasks_off_the_calling_thread) {
