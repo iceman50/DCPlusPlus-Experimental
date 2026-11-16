@@ -333,6 +333,16 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 	}
 
 	{
+		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Hub authentication")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_ADC_MIN_SALT_LENGTH);
+		auto cur = group->addChild(Grid::Seed(1, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Minimum ADC password challenge length"), SettingsManager::ADC_MIN_SALT_LENGTH,
+			IDH_SETTINGS_EXPERIMENTAL_ADC_MIN_SALT_LENGTH, T_("characters"),
+			SettingsManager::ADC_MIN_SALT_LENGTH_MIN, SettingsManager::ADC_MIN_SALT_LENGTH_MAX);
+	}
+
+	{
 		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Protocol resource limits")));
 		auto cur = group->addChild(Grid::Seed(11, 1));
 		cur->column(0).mode = GridInfo::FILL;
@@ -507,6 +517,8 @@ void ExperimentalPage::write() {
 	clamp(SettingsManager::MAX_SUDP_PACKET, 32);
 	clamp(SettingsManager::MAX_SUDP_KEYS, 1);
 	clamp(SettingsManager::MAX_PARTIAL_LIST_BYTES, 1024);
+	clampRange(SettingsManager::ADC_MIN_SALT_LENGTH,
+		SettingsManager::ADC_MIN_SALT_LENGTH_MIN, SettingsManager::ADC_MIN_SALT_LENGTH_MAX);
 	clamp(SettingsManager::CHAT_LINK_MAX_LENGTH, 1);
 	clamp(SettingsManager::RICH_TEXT_MAX_SIZE, 1024);
 	const auto systemLogItems = settings->get(SettingsManager::MAX_SYSTEM_LOG_ITEMS);

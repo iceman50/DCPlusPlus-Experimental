@@ -150,9 +150,14 @@ public:
 		THEME_DISABLED_TEXT_COLOR, THEME_BORDER_COLOR, THEME_ACCENT_COLOR,
 		THEME_HIGHLIGHT_TEXT_COLOR,
 		OUTBOX_MAX_ENTRIES, OUTBOX_MAX_MESSAGE_BYTES, OUTBOX_EXPIRY_DAYS,
+		ADC_MIN_SALT_LENGTH,
 
 		INT_LAST };
 
+	// ADC password challenge (GPA salt) length in Base32 characters. Upstream DC++
+	// requires 10 (6 bytes); the ADC specification's 24 bytes encode to 39.
+	static constexpr int ADC_MIN_SALT_LENGTH_MIN = 2;
+	static constexpr int ADC_MIN_SALT_LENGTH_MAX = 39;
 	static constexpr int CCPM_RECONNECT_DELAY_MIN = 1;
 	static constexpr int CCPM_RECONNECT_DELAY_MAX = 3600;
 	static constexpr int CCPM_STABLE_CONNECTION_TIME_MIN = 1;

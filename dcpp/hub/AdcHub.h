@@ -75,6 +75,8 @@ public:
 	};
 
 	static ProtocolMode resolveProtocolMode(const string& protocol, bool requireTls, bool tlsAvailable) noexcept;
+	/** Shortest GPA salt, in Base32 characters, that receives a password response. */
+	static size_t getMinimumSaltLength() noexcept;
 
 	static const string CLIENT_PROTOCOL;
 	static const string SECURE_CLIENT_PROTOCOL;

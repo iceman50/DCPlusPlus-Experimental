@@ -468,8 +468,19 @@ void AdcHub::handle(AdcCommand::GPA, AdcCommand& c) noexcept {
 	{
 		return;
 	}
-	salt = c.getParam(0);
 	passwordResponseSent = false;
+	const auto minimum = getMinimumSaltLength();
+	if(c.getParam(0).size() < minimum) {
+		// A short salt lets the hub (or whoever answers for it) precompute password
+		// hashes. Refuse instead of leaving the login waiting for a response.
+		salt.clear();
+		setAutoReconnect(false);
+		fire(ClientListener::StatusMessage(), this, str(F_("The hub sent a %1%-character password challenge; at least %2% are required, so the password was not sent. "
+			"The minimum can be changed in Settings > Experimental > Protocol limits.") % c.getParam(0).size() % minimum));
+		disconnect(false);
+		return;
+	}
+	salt = c.getParam(0);
 
 	fire(ClientListener::GetPassword(), this);
 }
@@ -1301,7 +1312,7 @@ void AdcHub::sendSearch(AdcCommand& c) {
 void AdcHub::password(const string& pwd) {
 	if(state != STATE_VERIFY)
 		return;
-	if(!salt.empty()) {
+	if(salt.size() >= getMinimumSaltLength()) {
 		const size_t saltBytes = salt.size() * 5 / 8;
 		if(saltBytes == 0) {
 			return;
@@ -1345,6 +1356,11 @@ pair<bool, bool> AdcHub::getAdvertisedConnectivity(bool hubUsesIPv6, bool ipv4En
 	// HBRI may validate them, but support for HBRI is not a prerequisite for the
 	// standard ADC I4/I6 and TCP4/TCP6 fields.
 	return { !hubUsesIPv6 || ipv4Enabled, hubUsesIPv6 || ipv6Enabled };
+}
+
+size_t AdcHub::getMinimumSaltLength() noexcept {
+	return static_cast<size_t>(std::clamp(SETTING(ADC_MIN_SALT_LENGTH),
+		SettingsManager::ADC_MIN_SALT_LENGTH_MIN, SettingsManager::ADC_MIN_SALT_LENGTH_MAX));
 }
 
 AdcHub::ProtocolMode AdcHub::resolveProtocolMode(const string& protocol, bool requireTls, bool tlsAvailable) noexcept {

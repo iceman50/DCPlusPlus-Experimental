@@ -211,4 +211,38 @@ TEST_F(AdcLoginTest, OnlyHubInfoMayReplaceFavoriteFailoverServers) {
 	EXPECT_EQ("adc://failover.example.com:411", favorite->getFailoverServers().front());
 }
 
+TEST_F(AdcLoginTest, ShortPasswordChallengeIsRefusedUnlessConfigured) {
+	auto sentPassword = [](const LoginHub& hub) {
+		return std::any_of(hub.outgoing.begin(), hub.outgoing.end(), [](const string& line) {
+			return line.compare(0, 5, "HPAS ") == 0;
+		});
+	};
+
+	// Default: upstream DC++ 0.884 minimum of 10 Base32 characters.
+	{
+		LoginHub hub;
+		hub.begin();
+		hub.emulateCommand("IGPA AAAAAA");
+		hub.password("test-password");
+		EXPECT_FALSE(sentPassword(hub));
+		EXPECT_FALSE(hub.getAutoReconnect());
+	}
+	{
+		LoginHub hub;
+		hub.begin();
+		hub.emulateCommand("IGPA AAAAAAAAAA");
+		hub.password("test-password");
+		EXPECT_TRUE(sentPassword(hub));
+	}
+
+	SettingsManager::getInstance()->set(SettingsManager::ADC_MIN_SALT_LENGTH, 2);
+	{
+		LoginHub hub;
+		hub.begin();
+		hub.emulateCommand("IGPA AAAAAA");
+		hub.password("test-password");
+		EXPECT_TRUE(sentPassword(hub));
+	}
+}
+
 } // namespace
