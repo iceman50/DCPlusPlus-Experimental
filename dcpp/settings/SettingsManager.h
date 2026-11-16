@@ -151,6 +151,7 @@ public:
 		THEME_HIGHLIGHT_TEXT_COLOR,
 		OUTBOX_MAX_ENTRIES, OUTBOX_MAX_MESSAGE_BYTES, OUTBOX_EXPIRY_DAYS,
 		ADC_MIN_SALT_LENGTH, BBS_MAX_BOARDS,
+		ARCHIVE_MAX_ENTRIES, ARCHIVE_MAX_FILE_BYTES, ARCHIVE_MAX_TOTAL_BYTES,
 
 		INT_LAST };
 
@@ -160,6 +161,10 @@ public:
 	static constexpr int ADC_MIN_SALT_LENGTH_MAX = 39;
 	static constexpr int BBS_MAX_BOARDS_MIN = 1;
 	static constexpr int BBS_MAX_BOARDS_MAX = 1000;
+	// Package (.dcemo) extraction limits; the byte limits are stored in bytes and edited in KiB.
+	static constexpr int ARCHIVE_MAX_ENTRIES_MIN = 1;
+	static constexpr int ARCHIVE_MAX_ENTRIES_MAX = 65535;
+	static constexpr int ARCHIVE_MAX_BYTES_MIN = 1024;
 	static constexpr int CCPM_RECONNECT_DELAY_MIN = 1;
 	static constexpr int CCPM_RECONNECT_DELAY_MAX = 3600;
 	static constexpr int CCPM_STABLE_CONNECTION_TIME_MIN = 1;

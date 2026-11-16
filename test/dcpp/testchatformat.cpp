@@ -136,6 +136,27 @@ TEST_F(testchatformat, distributed_emoticon_packages_load)
 	}
 }
 
+TEST_F(testchatformat, emoticon_package_extraction_uses_configured_limits)
+{
+	const string path = "Emoticons/candy-pop.dcemo";
+	auto settings = SettingsManager::getInstance();
+	ASSERT_EQ(size_t(12), EmoticonManager::previewPackage(path).items.size());
+
+	settings->set(SettingsManager::ARCHIVE_MAX_ENTRIES, 1);
+	EXPECT_THROW(EmoticonManager::previewPackage(path), Exception);
+	settings->unset(SettingsManager::ARCHIVE_MAX_ENTRIES);
+
+	settings->set(SettingsManager::ARCHIVE_MAX_FILE_BYTES, 1024);
+	EXPECT_THROW(EmoticonManager::previewPackage(path), Exception);
+	settings->unset(SettingsManager::ARCHIVE_MAX_FILE_BYTES);
+
+	settings->set(SettingsManager::ARCHIVE_MAX_TOTAL_BYTES, 4096);
+	EXPECT_THROW(EmoticonManager::previewPackage(path), Exception);
+	settings->unset(SettingsManager::ARCHIVE_MAX_TOTAL_BYTES);
+
+	EXPECT_EQ(size_t(12), EmoticonManager::previewPackage(path).items.size());
+}
+
 TEST_F(testchatformat, selected_emoticon_package_can_be_exported_as_custom_copy)
 {
 	const auto source = string("Emoticons/candy-pop.dcemo");

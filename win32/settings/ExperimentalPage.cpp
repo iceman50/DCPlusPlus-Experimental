@@ -373,7 +373,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			SettingsManager::BBS_MAX_BOARDS_MIN, SettingsManager::BBS_MAX_BOARDS_MAX);
 	}
 
-	auto themeGrid = tabs->addPage(T_("Interface"), 6)->content();
+	auto themeGrid = tabs->addPage(T_("Interface"), 7)->content();
 
 	auto borders = themeGrid->addChild(CheckBox::Seed(T_("Show borders around themed dialogs")));
 	borders->setHelpId(IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS);
@@ -425,6 +425,20 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		addIntItem(cur, T_("Maximum System Log items"), SettingsManager::MAX_SYSTEM_LOG_ITEMS,
 			IDH_SETTINGS_EXPERIMENTAL_MAX_SYSTEM_LOG_ITEMS, T_("messages"),
 			LogManager::MIN_HISTORY_ITEMS, LogManager::MAX_HISTORY_ITEMS);
+	}
+
+	{
+		auto group = themeGrid->addChild(GroupBox::Seed(T_("Emoticon package extraction limits")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_ENTRIES);
+		auto cur = group->addChild(Grid::Seed(3, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		addIntItem(cur, T_("Maximum package entries"), SettingsManager::ARCHIVE_MAX_ENTRIES,
+			IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_ENTRIES, T_("entries"),
+			SettingsManager::ARCHIVE_MAX_ENTRIES_MIN, SettingsManager::ARCHIVE_MAX_ENTRIES_MAX);
+		addIntItem(cur, T_("Maximum extracted file size"), SettingsManager::ARCHIVE_MAX_FILE_BYTES,
+			IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_FILE_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
+		addIntItem(cur, T_("Maximum total extracted size"), SettingsManager::ARCHIVE_MAX_TOTAL_BYTES,
+			IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_TOTAL_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 	}
 
 	{
@@ -524,6 +538,10 @@ void ExperimentalPage::write() {
 		SettingsManager::ADC_MIN_SALT_LENGTH_MIN, SettingsManager::ADC_MIN_SALT_LENGTH_MAX);
 	clampRange(SettingsManager::BBS_MAX_BOARDS,
 		SettingsManager::BBS_MAX_BOARDS_MIN, SettingsManager::BBS_MAX_BOARDS_MAX);
+	clampRange(SettingsManager::ARCHIVE_MAX_ENTRIES,
+		SettingsManager::ARCHIVE_MAX_ENTRIES_MIN, SettingsManager::ARCHIVE_MAX_ENTRIES_MAX);
+	clamp(SettingsManager::ARCHIVE_MAX_FILE_BYTES, SettingsManager::ARCHIVE_MAX_BYTES_MIN);
+	clamp(SettingsManager::ARCHIVE_MAX_TOTAL_BYTES, SettingsManager::ARCHIVE_MAX_BYTES_MIN);
 	clamp(SettingsManager::CHAT_LINK_MAX_LENGTH, 1);
 	clamp(SettingsManager::RICH_TEXT_MAX_SIZE, 1024);
 	const auto systemLogItems = settings->get(SettingsManager::MAX_SYSTEM_LOG_ITEMS);

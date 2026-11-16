@@ -129,7 +129,11 @@ namespace {
 
 		const auto directory = Util::getTempPath() + (preview ? "dcemo-preview-" : "dcemo-") +
 			std::to_string(std::hash<string>{}(path)) + PATH_SEPARATOR_STR;
-		Archive(path).extract(directory);
+		Archive(path).extract(directory,
+			static_cast<size_t>(std::clamp(SETTING(ARCHIVE_MAX_ENTRIES),
+				SettingsManager::ARCHIVE_MAX_ENTRIES_MIN, SettingsManager::ARCHIVE_MAX_ENTRIES_MAX)),
+			static_cast<uint64_t>(std::max(SettingsManager::ARCHIVE_MAX_BYTES_MIN, SETTING(ARCHIVE_MAX_FILE_BYTES))),
+			static_cast<uint64_t>(std::max(SettingsManager::ARCHIVE_MAX_BYTES_MIN, SETTING(ARCHIVE_MAX_TOTAL_BYTES))));
 
 		SimpleXML xml;
 		xml.fromXML(File(directory + "info.xml", File::READ, File::OPEN).read());

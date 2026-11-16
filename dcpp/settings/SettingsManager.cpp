@@ -146,6 +146,7 @@ const string SettingsManager::settingTags[] =
 	"ThemeHighlightTextColor",
 	"OutboxMaxEntries", "OutboxMaxMessageBytes", "OutboxExpiryDays",
 	"AdcMinSaltLength", "BBSMaxBoards",
+	"ArchiveMaxEntries", "ArchiveMaxFileBytes", "ArchiveMaxTotalBytes",
 	"SENTRY",
 	// Bools
 	"AddFinishedInstantly", "AdlsBreakOnFirst",
@@ -305,6 +306,9 @@ SettingsManager::SettingsManager() {
 	setDefault(OUTBOX_EXPIRY_DAYS, 7);
 	setDefault(ADC_MIN_SALT_LENGTH, 10);
 	setDefault(BBS_MAX_BOARDS, 100);
+	setDefault(ARCHIVE_MAX_ENTRIES, 4096);
+	setDefault(ARCHIVE_MAX_FILE_BYTES, 16 * 1024 * 1024);
+	setDefault(ARCHIVE_MAX_TOTAL_BYTES, 128 * 1024 * 1024);
 	setDefault(THEME_BACKGROUND_COLOR, RGB(32, 32, 32));
 	setDefault(THEME_SURFACE_COLOR, RGB(45, 45, 48));
 	setDefault(THEME_TEXT_COLOR, RGB(241, 241, 241));
