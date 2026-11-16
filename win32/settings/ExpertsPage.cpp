@@ -23,10 +23,12 @@
 #include <win32/settings/ExpertsPage.h>
 
 #include <dcpp/settings/SettingsManager.h>
+#include <dcpp/user/CID.h>
 
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/GroupBox.h>
 #include <dwt/widgets/Label.h>
+#include <dwt/widgets/MessageBox.h>
 
 #include <win32/resource.h>
 #include <win32/dialog/ItemsEditDlg.h>
@@ -49,7 +51,7 @@ modifyWhitelistButton(nullptr)
 	addItem(T_("Auto-search interval"), SettingsManager::AUTO_SEARCH_INTERVAL, true, IDH_SETTINGS_EXPERT_AUTO_SEARCH_INTERVAL, T_("seconds"));
 	addItem(T_("Mini slot size"), SettingsManager::SET_MINISLOT_SIZE, true, IDH_SETTINGS_EXPERT_MINISLOT_SIZE, T_("KiB"));
 	addItem(T_("Max filelist size"), SettingsManager::MAX_FILELIST_SIZE, true, IDH_SETTINGS_EXPERT_MAX_FILELIST_SIZE, T_("MiB"));
-	addItem(T_("PID"), SettingsManager::PRIVATE_ID, false, IDH_SETTINGS_EXPERT_PRIVATE_ID);
+	addPrivateIdItem();
 	addItem(T_("Auto refresh time"), SettingsManager::AUTO_REFRESH_TIME, true, IDH_SETTINGS_EXPERT_AUTO_REFRESH_TIME, T_("minutes"));
 	addItem(T_("Settings save interval"), SettingsManager::SETTINGS_SAVE_INTERVAL, true, IDH_SETTINGS_EXPERT_SETTINGS_SAVE_INTERVAL, T_("minutes"));
 	addItem(T_("Socket read buffer"), SettingsManager::SOCKET_IN_BUFFER, true, IDH_SETTINGS_EXPERT_SOCKET_IN_BUFFER, T_("B"));
@@ -94,6 +96,38 @@ void ExpertsPage::addItem(const tstring& text, int setting, bool isInt, unsigned
 		cur->setWidget(box, 0, 0, 1, 2);
 	else
 		cur->addChild(Label::Seed(text2));
+}
+
+void ExpertsPage::addPrivateIdItem() {
+	auto group = grid->addChild(GroupBox::Seed(T_("PID")));
+	group->setHelpId(IDH_SETTINGS_EXPERT_PRIVATE_ID);
+
+	auto cur = group->addChild(Grid::Seed(1, 2));
+	cur->column(0).mode = GridInfo::FILL;
+
+	auto box = cur->addChild(ControlSeeds::Dialog::textBox);
+	box->setHelpId(IDH_SETTINGS_EXPERT_PRIVATE_ID);
+	items.emplace_back(box, SettingsManager::PRIVATE_ID, PropPage::T_STR);
+
+	auto generate = cur->addChild(Button::Seed(T_("&Generate new...")));
+	generate->setHelpId(IDH_SETTINGS_EXPERT_PRIVATE_ID);
+	generate->onClicked([this, box] {
+		if(dwt::MessageBox(this).show(
+			T_("A new private ID also gives you a new CID, the identity other users and hubs know you by.\n\n"
+				"After DC++ restarts:\n"
+				"- Other users' favorite user entries and the slots they reserved or granted for you will no longer match you.\n"
+				"- Hubs that registered your account by CID may not recognize you until you register again.\n"
+				"- Your current private ID is lost unless you keep a copy of it.\n\n"
+				"Private IDs made by earlier versions of DC++ can be worked out from your public CID, which lets someone sign in "
+				"to ADC hubs as you. The new private ID is generated securely.\n\n"
+				"The change is saved when you click OK in the settings and takes effect after restarting DC++. "
+				"Click Cancel in the settings to keep your current private ID.\n\n"
+				"Generate a new private ID?"),
+			T_("Generate new private ID"), dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONEXCLAMATION) == IDYES)
+		{
+			box->setText(Text::toT(CID::generate().toBase32()));
+		}
+	});
 }
 
 void ExpertsPage::AddWhitelistUI()

@@ -25,7 +25,7 @@ malformed file lists that require large amounts of memory to decode.
 You may need to reduce or increase the value of this setting
 based on personal experience. (default: 512 MiB)</dd>
   <dt>PID</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERT_PRIVATE_ID">This is your unique private ID (PID). This will later with an algorithm be used to identify you on ADC hubs. <b>Do not share this with other users.</b></dd>
+  <dd cshelp="IDH_SETTINGS_EXPERT_PRIVATE_ID">This is your unique private ID (PID). This will later with an algorithm be used to identify you on ADC hubs. <b>Do not share this with other users.</b> Your CID, which other users and hubs see, is derived from it.<br/><b>Generate new...</b> creates a new, securely generated private ID after a warning. Private IDs created by earlier versions of DC++ can be worked out from the public CID, which lets someone sign in to ADC hubs as you. A new private ID also changes your CID, so other users' favorite user entries and reserved or granted slots, and hub registrations tied to your CID, will no longer match you. The new ID is saved when you click OK and takes effect after restarting DC++.</dd>
   <dt id="autorefresh">Auto refresh time</dt>
   <dd cshelp="IDH_SETTINGS_EXPERT_AUTO_REFRESH_TIME">This controls the interval at which your shared directories
 are rescanned for new and changed content. This is measured

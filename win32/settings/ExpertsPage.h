@@ -39,6 +39,7 @@ private:
 
 	void addItem(const tstring& text, int setting, bool isInt, unsigned helpId, const tstring& text2 = _T(""));
 
+	void addPrivateIdItem();
 	void AddWhitelistUI();
 
 };

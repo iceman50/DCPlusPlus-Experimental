@@ -11,6 +11,10 @@
 #include <win32/dialog/ParamDlg.h>
 #include <win32/settings/BandwidthLimitPage.h>
 #include <win32/settings/ExperimentalPage.h>
+#include <win32/settings/ExpertsPage.h>
+#include <dcpp/user/CID.h>
+#include <atomic>
+#include <thread>
 #include <win32/util/ThemeManager.h>
 #include <dcpp/user/UserMatchManager.h>
 #include <dwt/widgets/Window.h>
@@ -322,6 +326,84 @@ void experimentalGroupsAreLaidOut() {
 	LogManager::deleteInstance();
 }
 
+/** Answer the next "Generate new private ID" warning from another thread, as a user would. */
+std::thread answerPrivateIdWarning(int button, std::atomic<bool>& answered) {
+	const auto processId = GetCurrentProcessId();
+	return std::thread([button, processId, &answered] {
+		for(int attempt = 0; attempt < 500 && !answered; ++attempt) {
+			std::pair<DWORD, HWND> search(processId, nullptr);
+			EnumWindows([](HWND hwnd, LPARAM data) -> BOOL {
+				auto& found = *reinterpret_cast<std::pair<DWORD, HWND>*>(data);
+				DWORD owner = 0;
+				GetWindowThreadProcessId(hwnd, &owner);
+				wchar_t title[128] = {};
+				GetWindowTextW(hwnd, title, 128);
+				if(owner == found.first && std::wstring(title) == L"Generate new private ID") {
+					found.second = hwnd;
+					return FALSE;
+				}
+				return TRUE;
+			}, reinterpret_cast<LPARAM>(&search));
+			if(search.second) {
+				PostMessage(search.second, WM_COMMAND, button, 0);
+				answered = true;
+				return;
+			}
+			Sleep(10);
+		}
+	});
+}
+
+void privateIdCanBeRegenerated() {
+	auto settings = SettingsManager::getInstance();
+	const auto original = settings->get(SettingsManager::PRIVATE_ID);
+	auto window = new dwt::Window();
+	auto seed = dwt::Window::Seed();
+	seed.style &= ~WS_VISIBLE;
+	window->create(seed);
+	{
+		auto page = new ExpertsPage(window);
+		page->resize(dwt::Rectangle(0, 0, 640, 600));
+		page->layout();
+		std::vector<HWND> children;
+		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
+		dwt::Button* generate = nullptr;
+		dwt::TextBox* pid = nullptr;
+		for(auto child: children) {
+			auto button = dwt::hwnd_cast<dwt::Button*>(child);
+			if(button && button->getText() == T_("&Generate new...")) generate = button;
+		}
+		check(generate != nullptr, "The private ID has no Generate new button");
+		for(auto child: children) {
+			auto box = dwt::hwnd_cast<dwt::TextBox*>(child);
+			if(box && GetParent(box->handle()) == GetParent(generate->handle())) pid = box;
+		}
+		check(pid && Text::fromT(pid->getText()) == original, "The private ID field does not show the saved private ID");
+
+		// Answering No keeps the current private ID.
+		std::atomic<bool> answered { false };
+		auto no = answerPrivateIdWarning(IDNO, answered);
+		generate->sendMessage(BM_CLICK);
+		no.join();
+		check(answered && Text::fromT(pid->getText()) == original, "Declining the warning changed the private ID");
+
+		// Answering Yes fills in a new, valid private ID, saved only with OK.
+		answered = false;
+		auto yes = answerPrivateIdWarning(IDYES, answered);
+		generate->sendMessage(BM_CLICK);
+		yes.join();
+		const auto generated = Text::fromT(pid->getText());
+		check(answered && generated != original && generated.size() == 39 && CID(generated),
+			"Confirming the warning did not generate a new private ID");
+		check(settings->get(SettingsManager::PRIVATE_ID) == original, "The new private ID was saved before OK");
+		page->write();
+		check(settings->get(SettingsManager::PRIVATE_ID) == generated, "OK did not save the new private ID");
+		settings->set(SettingsManager::PRIVATE_ID, original);
+		DestroyWindow(page->handle());
+	}
+	DestroyWindow(window->handle());
+}
+
 void tableSettings() {
 	const std::vector<int> columns { 3, 0, 2, 1 };
 	check(TableLayout::toString(columns) == "3,0,2,1", "Column persistence format changed");
@@ -413,6 +495,7 @@ int dwtMain(dwt::Application&) {
 		dialogBorderPreference();
 		experimentalInterfaceScrolls();
 		experimentalGroupsAreLaidOut();
+		privateIdCanBeRegenerated();
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(0, 0, 0))) == RGB(0, 0, 0), "Black color conversion changed");
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(255, 255, 255))) == RGB(255, 255, 255), "White color conversion changed");
 		check(ColorUtil::modRed(RGB(250, 100, 100), 20) == RGB(255, 85, 85), "Color overflow adjustment changed");
