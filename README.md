@@ -99,3 +99,5 @@ DC++ is copyright © 2001-2025 Jacek Sieka and the DC++ contributors. The modifi
 ## AI assistance
 
 Parts of this project's code were written, reviewed and tested with the help of Claude, an AI model by Anthropic.
+
+The project also uses ChatGPT Codex 5.5 by OpenAI for debugging, code checking, modifying scripts and porting code.
