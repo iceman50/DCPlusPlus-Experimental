@@ -31,6 +31,16 @@ TEST(testarchive, test_archive)
 	ASSERT_EQ(tiger("test/dcpp/data/gtest_h_original.txt"), tiger("test/dcpp/data/out/gtest.h"));
 }
 
+TEST(testarchive, extraction_enforces_entry_and_size_limits)
+{
+	const auto size = static_cast<uint64_t>(File("test/dcpp/data/gtest_h_original.txt", File::READ, File::OPEN).getSize());
+	EXPECT_THROW(Archive("test/dcpp/data/gtest_h.zip").extract("test/dcpp/data/out-limits/", 0), Exception);
+	EXPECT_THROW(Archive("test/dcpp/data/gtest_h.zip").extract("test/dcpp/data/out-limits/", 16, size - 1), Exception);
+	EXPECT_THROW(Archive("test/dcpp/data/gtest_h.zip").extract("test/dcpp/data/out-limits/", 16, size, size - 1), Exception);
+	EXPECT_NO_THROW(Archive("test/dcpp/data/gtest_h.zip").extract("test/dcpp/data/out-limits/", 1, size, size));
+	File::deleteFile("test/dcpp/data/out-limits/gtest.h");
+}
+
 TEST(testarchive, reads_a_bounded_entry_without_extracting_the_archive)
 {
 	const auto expected = File("test/dcpp/data/gtest_h_original.txt", File::READ, File::OPEN).read();

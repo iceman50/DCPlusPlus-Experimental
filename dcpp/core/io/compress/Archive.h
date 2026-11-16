@@ -36,8 +36,10 @@ public:
 	Archive(const string& path);
 	~Archive();
 
-	/** Extract all the files in the archive to the specified directory. Throws on errors. */
-	void extract(const string& path);
+	/** Extract all the files in the archive to the specified directory. Throws on errors, including
+	    archives with more entries or more decompressed data than the limits allow. */
+	void extract(const string& path, size_t maxEntries = 4096, uint64_t maxFileBytes = 16 * 1024 * 1024,
+		uint64_t maxTotalBytes = 128 * 1024 * 1024);
 	/** Read one archive entry without extracting its siblings. */
 	string readFile(const string& name, size_t maxBytes);
 	/** Validate a bounded package before reading any payloads. Returns regular file names. */

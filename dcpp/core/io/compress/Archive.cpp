@@ -50,7 +50,7 @@ Archive::~Archive() {
 	}
 }
 
-void Archive::extract(const string& path) {
+void Archive::extract(const string& path, size_t maxEntries, uint64_t maxFileBytes, uint64_t maxTotalBytes) {
 	auto isDir = [](const string& path) { return *(path.end() - 1) == '/' || *(path.end() - 1) == '\\'; };
 	auto isSafeEntry = [](string entry) {
 		if(entry.empty() || entry.front() == '/' || entry.front() == '\\' || entry.find(':') != string::npos) return false;
@@ -70,7 +70,11 @@ void Archive::extract(const string& path) {
 
 	if(check(unzGoToFirstFile(file)) != UNZ_OK) { return; }
 
+	// Count what is actually decompressed: shared packages must not be able to fill the disk.
+	size_t entries = 0;
+	uint64_t totalBytes = 0;
 	do {
+		if(++entries > maxEntries) throw Exception(_("Archive has too many entries"));
 		unz_file_info64 info = { };
 		if(check(unzGetCurrentFileInfo64(file, &info, nullptr, 0, nullptr, 0, nullptr, 0)) != UNZ_OK) { continue; }
 		vector<char> pathBuf(static_cast<size_t>(info.size_filename) + 1, 0);
@@ -89,9 +93,16 @@ void Archive::extract(const string& path) {
 
 		const size_t BUF_SIZE = 64 * 1024;
 		ByteVector buf(BUF_SIZE);
+		uint64_t fileBytes = 0;
 		while(true) {
 			auto read = unzReadCurrentFile(file, &buf[0], BUF_SIZE);
 			if(read > 0) {
+				fileBytes += static_cast<uint64_t>(read);
+				totalBytes += static_cast<uint64_t>(read);
+				if(fileBytes > maxFileBytes || totalBytes > maxTotalBytes) {
+					unzCloseCurrentFile(file);
+					throw Exception(_("Archive contents are too large"));
+				}
 				f_out.write(&buf[0], read);
 			} else if(read == UNZ_EOF) {
 				break;
