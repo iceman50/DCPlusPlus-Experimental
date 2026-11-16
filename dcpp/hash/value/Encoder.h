@@ -36,8 +36,6 @@ public:
 	}
 	static void fromBase32(const char* src, uint8_t* dst, size_t len);
 	static bool isBase32(const string& str);
-
-	static void fromBase16(const char* src, uint8_t *dst, size_t len);
 private:
 	static const int8_t base32Table[];
 	static const char base32Alphabet[];
