@@ -141,8 +141,14 @@ private:
 
 	struct HubState {
 		bool supported = false;
+		bool boardLimitReported = false;
 		std::map<string, BoardState> boards;
 	};
+
+	/** Existing board, or a new one while the hub is below the configured board limit. Requires cs. */
+	static BoardState* findOrCreateBoard(HubState& hub, const string& name) noexcept;
+	/** Marks the hub as notified; returns the message to report once, or an empty string. Requires cs. */
+	static string boardLimitMessage(HubState& hub);
 
 	struct PendingRequest {
 		string hubUrl;

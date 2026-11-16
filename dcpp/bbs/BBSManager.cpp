@@ -381,13 +381,36 @@ bool BBSManager::isHubSupported(const string& hubUrl) const noexcept {
 	return i != hubs.end() && i->second.supported;
 }
 
+BBSManager::BoardState* BBSManager::findOrCreateBoard(HubState& hub, const string& name) noexcept {
+	auto i = hub.boards.find(name);
+	if(i != hub.boards.end()) return &i->second;
+	const auto limit = static_cast<size_t>(std::clamp(SETTING(BBS_MAX_BOARDS),
+		SettingsManager::BBS_MAX_BOARDS_MIN, SettingsManager::BBS_MAX_BOARDS_MAX));
+	if(hub.boards.size() >= limit) return nullptr;
+	return &hub.boards[name];
+}
+
+string BBSManager::boardLimitMessage(HubState& hub) {
+	if(hub.boardLimitReported) return string();
+	hub.boardLimitReported = true;
+	return str(F_("Ignoring additional BBS boards from this hub after %1% boards. "
+		"The limit can be changed in Settings > Experimental > Protocol limits.") % hub.boards.size());
+}
+
 bool BBSManager::updateBoard(const string& hubUrl, BBSBoard board) noexcept {
 	bool subscribe = false;
 	const auto boardName = board.name;
 	{
 		Lock l(cs);
 		auto& hub = hubs[hubUrl];
-		auto& state = hub.boards[board.name];
+		auto statePtr = findOrCreateBoard(hub, board.name);
+		if(!statePtr) {
+			const auto message = boardLimitMessage(hub);
+			l.unlock();
+			if(!message.empty()) reportStatus(hubUrl, message);
+			return false;
+		}
+		auto& state = *statePtr;
 		board.cursor = state.descriptor.cursor;
 		board.subscribed = state.descriptor.subscribed && board.canSubscribe();
 		board.gap = board.oldest != 0 && board.cursor < board.oldest;
@@ -439,7 +462,15 @@ bool BBSManager::updateEntry(const string& hubUrl, BBSEntry entry) noexcept {
 	bool liveAnywhere = false;
 	{
 		Lock l(cs);
-		auto& board = hubs[hubUrl].boards[entry.board];
+		auto& hub = hubs[hubUrl];
+		auto boardPtr = findOrCreateBoard(hub, entry.board);
+		if(!boardPtr) {
+			const auto message = boardLimitMessage(hub);
+			l.unlock();
+			if(!message.empty()) reportStatus(hubUrl, message);
+			return false;
+		}
+		auto& board = *boardPtr;
 		if(board.descriptor.name.empty()) board.descriptor.name = entry.board;
 		auto existing = board.entries.find(entry.tth);
 		if(existing != board.entries.end() && entry.timestamp <= existing->second.timestamp) return false;
@@ -1018,7 +1049,12 @@ void BBSManager::on(SettingsManagerListener::Load, SimpleXML& xml) noexcept {
 				descriptor.cursor = static_cast<uint64_t>(xml.getLongLongChildAttrib("Cursor"));
 				descriptor.gap = xml.getBoolChildAttrib("Gap");
 				xml.stepIn();
-				auto& board = hubs[hubUrl].boards[descriptor.name];
+				auto boardPtr = findOrCreateBoard(hubs[hubUrl], descriptor.name);
+				if(!boardPtr) {
+					xml.stepOut();
+					continue;
+				}
+				auto& board = *boardPtr;
 				board.descriptor = descriptor;
 				while(xml.findChild("Entry")) {
 					BBSEntry entry;

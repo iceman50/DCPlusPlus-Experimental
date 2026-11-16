@@ -266,4 +266,34 @@ TEST_F(AdcLoginTest, NmdcBanDuringLoginDisablesAutoReconnect) {
 	EXPECT_TRUE(hub.getAutoReconnect());
 }
 
+TEST_F(AdcLoginTest, BBSBoardsPerHubAreCapped) {
+	const string url = "adc://login.example.invalid:411";
+	SettingsManager::getInstance()->set(SettingsManager::BBS_MAX_BOARDS, 2);
+	LoginHub hub;
+	hub.begin();
+	hub.acknowledge();
+	hub.emulateCommand("ISUP ADBBS0");
+	ASSERT_TRUE(BBSManager::getInstance()->isHubSupported(url));
+
+	for(const auto name: { "first", "second", "third" }) {
+		hub.emulateCommand(string("IBBD BD") + name + " PE1 MS4096 TS1 OT1");
+	}
+	EXPECT_EQ(2u, BBSManager::getInstance()->getBoards(url).size());
+	EXPECT_FALSE(BBSManager::getInstance()->getBoard(url, "third"));
+
+	// Boards already kept continue to update at the limit.
+	hub.emulateCommand("IBBD BDfirst PE1 MS4096 TS2 OT1 NIRenamed");
+	auto first = BBSManager::getInstance()->getBoard(url, "first");
+	ASSERT_TRUE(first);
+	EXPECT_EQ("Renamed", first->title);
+
+	// A post naming an unknown board must not create one past the limit.
+	BBSEntry entry;
+	entry.board = "fourth";
+	entry.tth = string(39, 'A');
+	entry.timestamp = 1;
+	EXPECT_FALSE(BBSManager::getInstance()->updateEntry(url, entry));
+	EXPECT_EQ(2u, BBSManager::getInstance()->getBoards(url).size());
+}
+
 } // namespace

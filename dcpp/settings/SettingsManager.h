@@ -150,7 +150,7 @@ public:
 		THEME_DISABLED_TEXT_COLOR, THEME_BORDER_COLOR, THEME_ACCENT_COLOR,
 		THEME_HIGHLIGHT_TEXT_COLOR,
 		OUTBOX_MAX_ENTRIES, OUTBOX_MAX_MESSAGE_BYTES, OUTBOX_EXPIRY_DAYS,
-		ADC_MIN_SALT_LENGTH,
+		ADC_MIN_SALT_LENGTH, BBS_MAX_BOARDS,
 
 		INT_LAST };
 
@@ -158,6 +158,8 @@ public:
 	// requires 10 (6 bytes); the ADC specification's 24 bytes encode to 39.
 	static constexpr int ADC_MIN_SALT_LENGTH_MIN = 2;
 	static constexpr int ADC_MIN_SALT_LENGTH_MAX = 39;
+	static constexpr int BBS_MAX_BOARDS_MIN = 1;
+	static constexpr int BBS_MAX_BOARDS_MAX = 1000;
 	static constexpr int CCPM_RECONNECT_DELAY_MIN = 1;
 	static constexpr int CCPM_RECONNECT_DELAY_MAX = 3600;
 	static constexpr int CCPM_STABLE_CONNECTION_TIME_MIN = 1;
