@@ -17,6 +17,8 @@
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/TabView.h>
+#include <dwt/widgets/Button.h>
+#include <dwt/widgets/ScrolledContainer.h>
 #include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/core/classes/Magnet.h>
 #include <dcpp/settings/SettingsManager.h>
@@ -169,6 +171,84 @@ void dialogBorderPreference() {
 	appearance.setDialogBorders(true);
 }
 
+void experimentalInterfaceScrolls() {
+	LogManager::newInstance();
+	HashManager::newInstance();
+	SearchManager::newInstance();
+	UploadManager::newInstance();
+	QueueManager::newInstance();
+	ShareManager::newInstance();
+	auto window = new dwt::Window();
+	auto seed = dwt::Window::Seed();
+	seed.style &= ~WS_VISIBLE;
+	window->create(seed);
+	{
+		auto page = new ExperimentalPage(window);
+		page->resize(dwt::Rectangle(0, 0, 640, 300));
+		page->layout();
+
+		std::vector<HWND> children;
+		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
+		dwt::CheckBox* first = nullptr;
+		HWND last = nullptr;
+		for(auto child: children) {
+			auto box = dwt::hwnd_cast<dwt::CheckBox*>(child);
+			if(box && box->getText() == T_("Show borders around themed dialogs")) first = box;
+			auto button = dwt::hwnd_cast<dwt::Button*>(child);
+			if(button && button->getText() == T_("Edit themes, fonts and chat colors...")) last = child;
+		}
+		check(first && last, "Interface tab controls were not found");
+
+		dwt::ScrolledContainer* scroller = nullptr;
+		for(HWND child = first->handle(); child && child != page->handle(); child = GetParent(child)) {
+			if(!scroller) scroller = dwt::hwnd_cast<dwt::ScrolledContainer*>(child);
+			if(auto tabs = dwt::hwnd_cast<dwt::TabView*>(GetParent(child))) {
+				tabs->setActive(dwt::hwnd_cast<dwt::Container*>(child));
+				break;
+			}
+		}
+		check(scroller != nullptr, "Interface tab has no scroll container");
+
+		SCROLLINFO info = { sizeof(SCROLLINFO), SIF_ALL };
+		GetScrollInfo(scroller->handle(), SB_VERT, &info);
+		check(info.nMax - info.nMin + 1 > static_cast<int>(info.nPage) && info.nPos == 0,
+			"Interface tab does not scroll in a small settings window");
+
+		// Wheel input over a control inside the tab is forwarded to the scroller.
+		first->sendMessage(WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), 0);
+		GetScrollInfo(scroller->handle(), SB_VERT, &info);
+		check(info.nPos > 0, "Mouse wheel did not scroll the Interface tab");
+
+		for(int i = 0; i < 100; ++i) first->sendMessage(WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), 0);
+		RECT visible, button;
+		GetWindowRect(scroller->handle(), &visible);
+		GetWindowRect(last, &button);
+		check(button.top >= visible.top && button.bottom <= visible.bottom,
+			"The last Interface option cannot be scrolled into view");
+
+		for(int i = 0; i < 100; ++i) first->sendMessage(WM_MOUSEWHEEL, MAKEWPARAM(0, WHEEL_DELTA), 0);
+		GetScrollInfo(scroller->handle(), SB_VERT, &info);
+		check(info.nPos == 0, "Mouse wheel did not scroll the Interface tab back to the top");
+
+		// The Interface tab scrolls on its own instead of making the whole page taller.
+		dwt::TabView* tabView = nullptr;
+		for(HWND child = first->handle(); child && !tabView; child = GetParent(child)) {
+			tabView = dwt::hwnd_cast<dwt::TabView*>(child);
+		}
+		check(tabView && tabView->getPreferredSize().y < scroller->getPreferredSize().y,
+			"The Interface tab still forces the settings page to its full height");
+		DestroyWindow(page->handle());
+	}
+	DestroyWindow(window->handle());
+	ShareManager::deleteInstance();
+	QueueManager::deleteInstance();
+	UploadManager::deleteInstance();
+	SearchManager::deleteInstance();
+	HashManager::getInstance()->shutdown();
+	HashManager::deleteInstance();
+	LogManager::deleteInstance();
+}
+
 void tableSettings() {
 	const std::vector<int> columns { 3, 0, 2, 1 };
 	check(TableLayout::toString(columns) == "3,0,2,1", "Column persistence format changed");
@@ -258,6 +338,7 @@ int dwtMain(dwt::Application&) {
 		chatAndLinks();
 		manualLimitControls();
 		dialogBorderPreference();
+		experimentalInterfaceScrolls();
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(0, 0, 0))) == RGB(0, 0, 0), "Black color conversion changed");
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(255, 255, 255))) == RGB(255, 255, 255), "White color conversion changed");
 		check(ColorUtil::modRed(RGB(250, 100, 100), 20) == RGB(255, 85, 85), "Color overflow adjustment changed");

@@ -38,6 +38,7 @@
 #include <dwt/widgets/LoadDialog.h>
 #include <dwt/widgets/MessageBox.h>
 #include <dwt/widgets/SaveDialog.h>
+#include <dwt/widgets/ScrolledContainer.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/TabView.h>
 
@@ -65,13 +66,16 @@ const TableLayout::ColumnInfo tempColumns[] = {
 	{ N_("Path"), 220, false }
 };
 
-/** An opaque settings tab page that uses the same default background as its child grid. */
+/** An opaque settings tab page that uses the same default background as its child grid.
+ * A scrollable page keeps its options in its own ScrolledContainer, so it scrolls below the tab
+ * strip instead of making the whole settings page taller. */
 class ExperimentalTabPage : public dwt::Container
 {
 public:
-	ExperimentalTabPage(dwt::Widget* parent, const tstring& title, size_t rows) :
+	ExperimentalTabPage(dwt::Widget* parent, const tstring& title, size_t rows, bool scrollable) :
 		dwt::Container(parent),
-		grid(nullptr)
+		grid(nullptr),
+		scroller(nullptr)
 	{
 		dwt::Container::Seed seed;
 		seed.caption = title;
@@ -80,7 +84,14 @@ public:
 		create(seed);
 		setHelpId(IDH_EXPERIMENTALPAGE);
 
-		grid = addChild(Grid::Seed(rows, 1));
+		if(scrollable) {
+			scroller = addChild(dwt::ScrolledContainer::Seed(0, WS_EX_CONTROLPARENT));
+			scroller->setHelpId(IDH_EXPERIMENTALPAGE);
+			scroller->setAccessibleName(title);
+			grid = scroller->addChild(Grid::Seed(rows, 1));
+		} else {
+			grid = addChild(Grid::Seed(rows, 1));
+		}
 		grid->setSpacing(10);
 		grid->column(0).mode = GridInfo::FILL;
 	}
@@ -88,17 +99,33 @@ public:
 	GridPtr content() const { return grid; }
 
 	dwt::Point getPreferredSize() override {
-		return grid->getPreferredSize() + dwt::Point(14, 12);
+		auto size = grid->getPreferredSize() + dwt::Point(14, 12);
+		if(scroller) {
+			// Keep every option's full width (plus room for the scrollbar), but leave the
+			// height to the scroller so this tab does not force the whole page to grow.
+			size.x += getSystemMetric(SM_CXVSCROLL);
+			size.y = std::min<LONG>(size.y, scale(MIN_SCROLLED_HEIGHT));
+		}
+		return size;
 	}
 
 	void layout() override {
 		const auto size = getClientSize();
-		grid->resize(dwt::Rectangle(7, 4,
-			std::max<LONG>(0, size.x - 14), std::max<LONG>(0, size.y - 12)));
+		const dwt::Rectangle area(7, 4, std::max<LONG>(0, size.x - 14), std::max<LONG>(0, size.y - 12));
+		if(scroller) {
+			scroller->resize(area);
+			// Content can change without the scroller moving (fonts, DPI, themes).
+			scroller->layout();
+		} else {
+			grid->resize(area);
+		}
 	}
 
 private:
+	static constexpr int MIN_SCROLLED_HEIGHT = 160;
+
 	GridPtr grid;
+	dwt::ScrolledContainerPtr scroller;
 };
 
 /** TabView normally has no preferred size because it is used to fill application frames.
@@ -111,8 +138,8 @@ public:
 
 	explicit ExperimentalTabView(dwt::Widget* parent) : dwt::TabView(parent) { }
 
-	ExperimentalTabPage* addPage(const tstring& title, size_t rows) {
-		auto page = new ExperimentalTabPage(this, title, rows);
+	ExperimentalTabPage* addPage(const tstring& title, size_t rows, bool scrollable = false) {
+		auto page = new ExperimentalTabPage(this, title, rows, scrollable);
 		pages.push_back(page);
 		add(page);
 		return page;
@@ -373,7 +400,8 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			SettingsManager::BBS_MAX_BOARDS_MIN, SettingsManager::BBS_MAX_BOARDS_MAX);
 	}
 
-	auto themeGrid = tabs->addPage(T_("Interface"), 7)->content();
+	// The Interface tab holds the most groups; it scrolls on its own in small settings windows.
+	auto themeGrid = tabs->addPage(T_("Interface"), 7, true)->content();
 
 	auto borders = themeGrid->addChild(CheckBox::Seed(T_("Show borders around themed dialogs")));
 	borders->setHelpId(IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS);
