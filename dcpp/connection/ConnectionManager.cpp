@@ -18,6 +18,7 @@
 
 #include "stdinc.h"
 #include <dcpp/connection/ConnectionManager.h>
+#include <dcpp/core/crypto/SecureRandom.h>
 
 #include <dcpp/hub/Client.h>
 #include <dcpp/hub/ClientManager.h>
@@ -70,7 +71,8 @@ string ConnectionManager::makeToken() const {
 
 	Lock l(cs);
 	do {
-		token = std::to_string(Util::rand());
+		// Tokens admit incoming connections, so they must not be predictable from earlier ones.
+		token = std::to_string(SecureRandom::next64());
 	} while(tokens.find(token) != tokens.end() || removedDownloadTokens.find(token) != removedDownloadTokens.end() ||
 		std::any_of(std::begin(cqis), std::end(cqis), [&](const auto& items) {
 		return std::any_of(items.begin(), items.end(), [&](const ConnectionQueueItem& item) {

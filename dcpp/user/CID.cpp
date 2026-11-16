@@ -19,15 +19,16 @@
 #include "stdinc.h"
 #include <dcpp/user/CID.h>
 
-#include <dcpp/util/Util.h>
+#include <dcpp/core/crypto/SecureRandom.h>
 
 namespace dcpp {
 
 CID CID::generate() {
+	// The private ID is generated with this, and anyone who can predict it can sign in to ADC hubs
+	// as its owner. Util::rand would make it a function of one 32-bit seed, which can be searched
+	// from the public CID in under an hour.
 	uint8_t data[CID::SIZE];
-	for(size_t i = 0; i < sizeof(data); ++i) {
-		data[i] = (uint8_t)Util::rand();
-	}
+	SecureRandom::fill(data, sizeof(data));
 	return CID(data);
 }
 

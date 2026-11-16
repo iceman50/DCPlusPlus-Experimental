@@ -727,3 +727,14 @@ TEST_F(ConnectionManagerTest, outgoing_adc_connections_accept_only_the_requested
 	BufferedSocket::waitShutdown();
 	PluginManager::deleteInstance();
 }
+
+TEST_F(ConnectionManagerTest, connection_tokens_do_not_follow_from_the_util_rand_seed) {
+	// Tokens admit incoming connections; the old ones were Util::rand() values.
+	Util::mt.seed(1234);
+	const auto first = manager->makeToken();
+	Util::mt.seed(1234);
+	const auto second = manager->makeToken();
+	EXPECT_NE(first, second);
+	EXPECT_FALSE(first.empty());
+	EXPECT_TRUE(std::all_of(first.begin(), first.end(), [](char c) { return c >= '0' && c <= '9'; }));
+}
