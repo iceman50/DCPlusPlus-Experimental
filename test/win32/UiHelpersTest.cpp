@@ -18,6 +18,7 @@
 #include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/TabView.h>
 #include <dwt/widgets/Button.h>
+#include <dwt/widgets/GroupBox.h>
 #include <dwt/widgets/ScrolledContainer.h>
 #include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/core/classes/Magnet.h>
@@ -249,6 +250,61 @@ void experimentalInterfaceScrolls() {
 	LogManager::deleteInstance();
 }
 
+void experimentalGroupsAreLaidOut() {
+	LogManager::newInstance();
+	HashManager::newInstance();
+	SearchManager::newInstance();
+	UploadManager::newInstance();
+	QueueManager::newInstance();
+	ShareManager::newInstance();
+	auto window = new dwt::Window();
+	auto seed = dwt::Window::Seed();
+	seed.style &= ~WS_VISIBLE;
+	window->create(seed);
+	{
+		auto page = new ExperimentalPage(window);
+		page->resize(dwt::Rectangle(0, 0, 900, 1400));
+		page->layout();
+
+		std::vector<HWND> children;
+		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
+		dwt::TabView* tabs = nullptr;
+		for(auto child: children) {
+			if(!tabs) tabs = dwt::hwnd_cast<dwt::TabView*>(child);
+		}
+		check(tabs != nullptr, "Experimental settings have no tabs");
+
+		// A Grid silently leaves children past its last row unplaced, which hides a whole group.
+		size_t groups = 0;
+		for(auto child: children) {
+			auto group = dwt::hwnd_cast<dwt::GroupBox*>(child);
+			if(!group) continue;
+			for(HWND parent = child; parent && parent != page->handle(); parent = GetParent(parent)) {
+				if(GetParent(parent) == tabs->handle()) {
+					tabs->setActive(dwt::hwnd_cast<dwt::Container*>(parent));
+					break;
+				}
+			}
+			const auto size = group->getWindowSize();
+			if(size.x <= 0 || size.y <= 0) {
+				throw std::runtime_error("Experimental settings group is not laid out: " + Text::fromT(group->getText()));
+			}
+			++groups;
+		}
+		check(groups >= 12, "Experimental settings groups were not found");
+
+		DestroyWindow(page->handle());
+	}
+	DestroyWindow(window->handle());
+	ShareManager::deleteInstance();
+	QueueManager::deleteInstance();
+	UploadManager::deleteInstance();
+	SearchManager::deleteInstance();
+	HashManager::getInstance()->shutdown();
+	HashManager::deleteInstance();
+	LogManager::deleteInstance();
+}
+
 void tableSettings() {
 	const std::vector<int> columns { 3, 0, 2, 1 };
 	check(TableLayout::toString(columns) == "3,0,2,1", "Column persistence format changed");
@@ -339,6 +395,7 @@ int dwtMain(dwt::Application&) {
 		manualLimitControls();
 		dialogBorderPreference();
 		experimentalInterfaceScrolls();
+		experimentalGroupsAreLaidOut();
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(0, 0, 0))) == RGB(0, 0, 0), "Black color conversion changed");
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(255, 255, 255))) == RGB(255, 255, 255), "White color conversion changed");
 		check(ColorUtil::modRed(RGB(250, 100, 100), 20) == RGB(255, 85, 85), "Color overflow adjustment changed");

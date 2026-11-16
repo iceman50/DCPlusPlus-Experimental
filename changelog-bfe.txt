@@ -12,6 +12,7 @@
 * Limit the number of entries and the decompressed size when extracting emoticon packages, so a crafted .dcemo cannot fill the disk when it is selected or previewed; the entry, per-file and total size limits are configurable under Experimental > Interface (iceman50)
 * Scroll the Experimental settings Interface tab on its own below the tab strip when the settings window is too small to show all of its options (iceman50)
 * Scroll settings pages and other scrollable containers with the mouse wheel, following the Windows lines-per-notch setting (iceman50)
+* Show the Protocol resource limits group on the Experimental Protocol limits tab again; it had been hidden since the Hub authentication group was added. The tab now scrolls on its own like the Interface tab (iceman50)
 
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)

@@ -337,7 +337,9 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		buttons->setWidget(hashDbStatus, 1, 0, 1, 4);
 	}
 
-	auto protocolGrid = tabs->addPage(T_("Protocol limits"), 2)->content();
+	// One row per group: a Grid leaves children past its last row unplaced. This tab is about as tall
+	// as Interface, so it also scrolls on its own in small settings windows.
+	auto protocolGrid = tabs->addPage(T_("Protocol limits"), 3, true)->content();
 
 	{
 		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Direct private-message channels (CCPM)")));
