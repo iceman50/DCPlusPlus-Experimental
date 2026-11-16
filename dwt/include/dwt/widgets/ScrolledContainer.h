@@ -86,6 +86,11 @@ private:
 	bool isAccessibleScrollable(int type) const;
 	void setAccessibleScrollPosition(int type, int position);
 	bool handleKeyDown(int key);
+	/// Scroll for WM_MOUSEWHEEL/WM_MOUSEHWHEEL; returns false to let an enclosing scroller handle it.
+	bool handleMouseWheel(const MSG& msg);
+
+	/// Wheel movement below one notch, kept so high-resolution wheels and touchpads still scroll.
+	int wheelDelta = 0;
 };
 
 inline ScrolledContainer::Seed::Seed(DWORD style, DWORD exStyle) :

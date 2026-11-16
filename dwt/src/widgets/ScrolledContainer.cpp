@@ -87,6 +87,16 @@ bool ScrolledContainer::handleMessage(const MSG &msg, LRESULT &retVal) {
 		return true;
 	}
 
+	if(msg.message == WM_MOUSEWHEEL || msg.message == WM_MOUSEHWHEEL) {
+		// Controls forward unhandled wheel input to their parents, so this also
+		// scrolls while the pointer is over a label or group inside the container.
+		if(handleMouseWheel(msg)) {
+			retVal = 0;
+			return true;
+		}
+		return false;
+	}
+
 	if(!(msg.message == WM_HSCROLL || msg.message == WM_VSCROLL)) {
 		return false;
 	}
@@ -268,6 +278,33 @@ bool ScrolledContainer::isAccessibleScrollable(int type) const {
 	SCROLLINFO info = { sizeof(SCROLLINFO), SIF_ALL };
 	::GetScrollInfo(handle(), type, &info);
 	return info.nPage && info.nMax - info.nMin + 1 > static_cast<int>(info.nPage);
+}
+
+bool ScrolledContainer::handleMouseWheel(const MSG& msg) {
+	const auto type = msg.message == WM_MOUSEHWHEEL ? SB_HORZ : SB_VERT;
+	if(!getChild() || !isAccessibleScrollable(type)) {
+		// Nothing to scroll here: let the message continue to an enclosing scroller.
+		wheelDelta = 0;
+		return false;
+	}
+
+	wheelDelta += GET_WHEEL_DELTA_WPARAM(msg.wParam);
+	const auto notches = wheelDelta / WHEEL_DELTA;
+	if(!notches) {
+		return true;
+	}
+	wheelDelta -= notches * WHEEL_DELTA;
+
+	UINT lines = 3;
+	::SystemParametersInfo(type == SB_VERT ? SPI_GETWHEELSCROLLLINES : SPI_GETWHEELSCROLLCHARS, 0, &lines, 0);
+	SCROLLINFO info = { sizeof(SCROLLINFO), SIF_ALL };
+	::GetScrollInfo(handle(), type, &info);
+	const auto step = lines == WHEEL_PAGESCROLL ? static_cast<int>(info.nPage) :
+		static_cast<int>(std::min<UINT>(lines, 100)) * scale(10);
+	// Rolling the wheel forward scrolls up; tilting it right scrolls right.
+	const auto direction = type == SB_VERT ? -1 : 1;
+	setAccessibleScrollPosition(type, info.nPos + direction * notches * step);
+	return true;
 }
 
 void ScrolledContainer::setAccessibleScrollPosition(int type, int position) {
