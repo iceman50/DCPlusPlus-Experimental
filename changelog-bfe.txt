@@ -1,3 +1,12 @@
+== Unreleased - after 0.8842-RC3 !!!Experimental!!! ==
+* Accept ADC failover addresses only from the hub's own INF; a user claiming hub status (CT32 or HU1) could previously redirect automatic failover reconnects, which answer the password challenge with the favorite's saved password (iceman50)
+* Never save settings, favorite hubs or saved users that cannot be loaded again: truncate values beyond the XML reader limit on a UTF-8 boundary instead of losing every setting and generating a new CID (adapted from DC++ 0.884, L#2157005) (iceman50)
+* Ignore hub user commands nested more than 16 menu levels deep and keep them out of the client's own context-menu popups (adapted from DC++ 0.884, L#2156457, L#2156461) (iceman50)
+* Require ADC password challenges of at least 10 Base32 characters by default, as DC++ 0.884 does (L#2162554); refuse shorter challenges with a status message instead of sending the password, and make the minimum configurable under Experimental > Protocol limits (iceman50)
+* Stop automatically reconnecting to NMDC hubs that report a ban during login, restoring the upstream behaviour (iceman50)
+* Limit the BBS boards kept for each hub (default 100, configurable under Experimental > Protocol limits), including boards referenced only by posts or by the saved cache (iceman50)
+* Fix SFV parsing of non-ASCII bytes and remove an unused, incorrect base16 decoder (iceman50)
+
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)
 * Improve radio-button edges and native filename dropdown rendering; add direct magnet downloads, destination selection and remembered magnet actions (iceman50)
