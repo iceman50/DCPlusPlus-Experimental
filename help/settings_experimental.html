@@ -134,6 +134,12 @@ restarting DC++.</p>
   <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ADC_MIN_SALT_LENGTH">Shortest password challenge (salt), in Base32 characters, that an ADC hub may send before DC++ answers it with your password hash. Short challenges make captured responses easier to crack. If a hub sends a shorter one, the password is not sent, the hub is disconnected and automatic reconnection is turned off. Lower this only for older hub software you trust. Range: 2 to 39 (39 is the 24 bytes the ADC specification requires). Default: 10, as in DC++ 0.884.</dd>
 </dl>
 
+<h2>NMDC hubs</h2>
+<dl style="margin-left: 40px;">
+  <dt>Default encoding for NMDC hubs</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING">Character encoding (code page) used for NMDC hubs that do not have their own encoding in the favorite hub properties. It applies to hub chat, nicks, private messages, search results and direct connections. <b>Windows default</b> uses the system code page. NMDC hubs use a single encoding for everything, so DC++ no longer guesses the encoding from each line: on a hub that uses UTF-8, choose <b>65001 (UTF-8)</b> here or in that hub's favorite properties, otherwise names and messages with non-English characters will be garbled. Default: Windows default.</dd>
+</dl>
+
 <h2>Private Send (experimental PFT1)</h2>
 <p>Disabled by default. Private Send offers a selected file directly from private chat without a search result,
 file list, or public magnet. Both clients must support the same experimental draft, use an ADCS hub and a fresh

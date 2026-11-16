@@ -78,6 +78,11 @@ void Client::reloadSettings(bool updateNick) {
 	*static_cast<HubSettings*>(this) = SettingsManager::getInstance()->getHubSettings();
 	setFailoverUrls(StringList());
 
+	// Start from the default so clearing a favorite's encoding takes effect.
+	string newEncoding = SETTING(NMDC_ENCODING);
+	if(newEncoding.empty())
+		newEncoding = Text::systemCharset;
+
 	auto fav = FavoriteManager::getInstance()->getFavoriteHubEntry(getHubUrl());
 	if(fav) {
 		FavoriteManager::getInstance()->mergeHubSettings(*fav, *this);
@@ -86,10 +91,15 @@ void Client::reloadSettings(bool updateNick) {
 			setPassword(fav->getPassword());
 
 		if(!fav->getEncoding().empty())
-			setEncoding(fav->getEncoding());
+			newEncoding = fav->getEncoding();
 
 		setFailoverUrls(fav->getFailoverServers());
 	}
+
+	// This runs on every NMDC info refresh while other threads read the encoding,
+	// so only replace the string when it actually changes.
+	if(encoding != newEncoding)
+		setEncoding(newEncoding);
 
 	if(updateNick)
 		checkNick(get(Nick));

@@ -539,7 +539,11 @@ void FavoriteManager::load(SimpleXML& aXml) {
 			e->setHubDescription(aXml.getChildAttrib("Description"));
 			e->setPassword(aXml.getChildAttrib("Password"));
 			e->setServer(aXml.getChildAttrib("Server"));
-			e->setEncoding(aXml.getChildAttrib("Encoding"));
+			// Older versions stored the Windows locale (for example "English_United States.1252")
+			// when no encoding was chosen. The encoding list never produces that form, so treat it as
+			// the default and let the hub follow the default NMDC encoding setting.
+			auto encoding = aXml.getChildAttrib("Encoding");
+			e->setEncoding(encoding == Text::systemCharset ? string() : encoding);
 			e->setGroup(aXml.getChildAttrib("Group"));
 			aXml.stepIn();
 			if(aXml.findChild("Failovers")) {

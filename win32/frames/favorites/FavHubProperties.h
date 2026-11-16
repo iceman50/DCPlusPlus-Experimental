@@ -65,11 +65,8 @@ private:
 
 	void fillGroups();
 
-	void fillEncodings();
 	void fillShareFolders();
 
-	static std::map<UINT, std::wstring> encodings;
-	static BOOL CALLBACK EnumCodePageProc(LPTSTR lpCodePageString);
 };
 
 #endif // !defined(DCPLUSPLUS_WIN32_FAV_HUB_PROPERTIES_H)

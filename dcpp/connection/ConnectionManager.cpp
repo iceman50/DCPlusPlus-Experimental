@@ -956,7 +956,7 @@ void ConnectionManager::on(UserConnectionListener::MyNick, UserConnection* aSour
 		aSource->setEncoding(ClientManager::getInstance()->findHubEncoding(i.second));
 	}
 
-	string nick = Text::toUtf8(aNick, aSource->getEncoding());
+	string nick = Text::nmdcToUtf8(aNick, aSource->getEncoding());
 	CID cid = ClientManager::getInstance()->makeCid(nick, aSource->getHubUrl());
 
 	// First, we try looking in the pending downloads...hopefully it's one of them...

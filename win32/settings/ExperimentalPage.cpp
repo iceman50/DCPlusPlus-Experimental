@@ -11,6 +11,7 @@
 #include <dcpp/util/Util.h>
 #include <dcpp/private_chat/MessageOutboxManager.h>
 #include <win32/util/ControlSeeds.h>
+#include <win32/util/Encodings.h>
 #include <win32/util/IconManager.h>
 #include <win32/components/TableLayout.h>
 #include <win32/util/LinkActions.h>
@@ -177,6 +178,7 @@ private:
 ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 	PropPage(parent, 1, 1),
 	hubUserIconSize(nullptr),
+	nmdcEncoding(nullptr),
 	tempShares(nullptr),
 	tempSummary(nullptr),
 	removeTemp(nullptr),
@@ -339,7 +341,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 
 	// One row per group: a Grid leaves children past its last row unplaced. This tab is about as tall
 	// as Interface, so it also scrolls on its own in small settings windows.
-	auto protocolGrid = tabs->addPage(T_("Protocol limits"), 3, true)->content();
+	auto protocolGrid = tabs->addPage(T_("Protocol limits"), 4, true)->content();
 
 	{
 		auto group = protocolGrid->addChild(GroupBox::Seed(T_("Direct private-message channels (CCPM)")));
@@ -369,6 +371,21 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		addIntItem(cur, T_("Minimum ADC password challenge length"), SettingsManager::ADC_MIN_SALT_LENGTH,
 			IDH_SETTINGS_EXPERIMENTAL_ADC_MIN_SALT_LENGTH, T_("characters"),
 			SettingsManager::ADC_MIN_SALT_LENGTH_MIN, SettingsManager::ADC_MIN_SALT_LENGTH_MAX);
+	}
+
+	{
+		auto group = protocolGrid->addChild(GroupBox::Seed(T_("NMDC hubs")));
+		group->setHelpId(IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING);
+		auto cur = group->addChild(Grid::Seed(2, 2));
+		cur->column(0).mode = GridInfo::FILL;
+		cur->addChild(Label::Seed(T_("Default encoding for NMDC hubs")))->setHelpId(IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING);
+		nmdcEncoding = cur->addChild(ControlSeeds::Dialog::comboBox);
+		nmdcEncoding->setHelpId(IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING);
+		nmdcEncoding->setAccessibleName(T_("Default encoding for NMDC hubs"));
+		Encodings::fill(nmdcEncoding, T_("Windows default"), SETTING(NMDC_ENCODING));
+		auto note = cur->addChild(Label::Seed(T_("Favorite hubs can choose their own encoding. Choose 65001 (UTF-8) for hubs that use UTF-8.")));
+		note->setHelpId(IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING);
+		cur->setWidget(note, 1, 0, 1, 2);
 	}
 
 	{
@@ -516,6 +533,7 @@ void ExperimentalPage::write() {
 
 	auto settings = SettingsManager::getInstance();
 	const auto iconSizeIndex = hubUserIconSize->getSelected();
+	settings->set(SettingsManager::NMDC_ENCODING, Encodings::selected(nmdcEncoding));
 	settings->set(SettingsManager::HUB_USER_ICON_SIZE,
 		iconSizeIndex >= 0 && static_cast<size_t>(iconSizeIndex) < std::size(HubSettings::userIconSizes) ? HubSettings::userIconSizes[iconSizeIndex] : 16);
 	auto clamp = [settings](SettingsManager::IntSetting setting, int minimum) {

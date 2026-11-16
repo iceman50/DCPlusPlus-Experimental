@@ -393,9 +393,9 @@ void SearchManager::onSR(const string& x, const string& remoteIp) {
 	}
 
 	string encoding = ClientManager::getInstance()->findHubEncoding(user.hint);
-	nick = Text::toUtf8(nick, encoding);
-	file = Text::toUtf8(file, encoding);
-	hubName = Text::toUtf8(hubName, encoding);
+	nick = Text::nmdcToUtf8(nick, encoding);
+	file = Text::nmdcToUtf8(file, encoding);
+	hubName = Text::nmdcToUtf8(hubName, encoding);
 
 	if (!user) {
 		user.user = ClientManager::getInstance()->findUser(nick, user.hint);

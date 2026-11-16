@@ -266,6 +266,30 @@ string sanitizeUtf8(const string& str) noexcept {
 	return wideToUtf8(utf8ToWide(str));
 }
 
+bool isUtf8Charset(const string& charset) noexcept {
+	string tmp;
+	if(charset == utf8 || toLower(charset, tmp) == utf8) {
+		return true;
+	}
+#ifdef _WIN32
+	// CP_ACP covers the system locale (and unrecognized names); it is UTF-8 when Windows is set to
+	// use UTF-8 for non-Unicode programs.
+	const auto codePage = static_cast<UINT>(getCodePage(charset));
+	return codePage == CP_UTF8 || (codePage == CP_ACP && GetACP() == CP_UTF8);
+#else
+	return false;
+#endif
+}
+
+string nmdcToUtf8(const string& str, const string& charset) {
+	if(isUtf8Charset(charset)) {
+		// Decoding UTF-8 through acpToUtf8 would pass MB_PRECOMPOSED, which Windows does not
+		// accept for code page 65001.
+		return validateUtf8(str) ? str : sanitizeUtf8(str);
+	}
+	return toUtf8(str, charset);
+}
+
 const string& utf8ToAcp(const string& str, string& tmp, const string& toCharset) noexcept {
 	wstring wtmp;
 	return wideToAcp(utf8ToWide(str, wtmp), tmp, toCharset);

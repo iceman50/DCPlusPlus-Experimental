@@ -18,6 +18,7 @@
 #include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/TabView.h>
 #include <dwt/widgets/Button.h>
+#include <dwt/widgets/ComboBox.h>
 #include <dwt/widgets/GroupBox.h>
 #include <dwt/widgets/ScrolledContainer.h>
 #include <dcpp/core/localization/ResourceManager.h>
@@ -257,6 +258,7 @@ void experimentalGroupsAreLaidOut() {
 	UploadManager::newInstance();
 	QueueManager::newInstance();
 	ShareManager::newInstance();
+	auto settings = SettingsManager::getInstance();
 	auto window = new dwt::Window();
 	auto seed = dwt::Window::Seed();
 	seed.style &= ~WS_VISIBLE;
@@ -269,8 +271,11 @@ void experimentalGroupsAreLaidOut() {
 		std::vector<HWND> children;
 		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
 		dwt::TabView* tabs = nullptr;
+		dwt::ComboBox* encoding = nullptr;
 		for(auto child: children) {
 			if(!tabs) tabs = dwt::hwnd_cast<dwt::TabView*>(child);
+			auto combo = dwt::hwnd_cast<dwt::ComboBox*>(child);
+			if(combo && combo->getAccessibleName() == T_("Default encoding for NMDC hubs")) encoding = combo;
 		}
 		check(tabs != nullptr, "Experimental settings have no tabs");
 
@@ -291,8 +296,20 @@ void experimentalGroupsAreLaidOut() {
 			}
 			++groups;
 		}
-		check(groups >= 12, "Experimental settings groups were not found");
+		check(groups >= 13, "Experimental settings groups were not found");
 
+		check(encoding && encoding->getSelected() == 0, "NMDC encoding does not default to the Windows code page");
+		int utf8 = -1;
+		for(int i = 0; i < static_cast<int>(encoding->size()); ++i) {
+			if(encoding->getValue(i).compare(0, 6, _T("65001 ")) == 0) utf8 = i;
+		}
+		check(utf8 > 0, "NMDC encoding list has no UTF-8 entry");
+		encoding->setSelected(utf8);
+		page->write();
+		check(Text::getCodePage(settings->get(SettingsManager::NMDC_ENCODING)) == CP_UTF8, "NMDC encoding was not saved");
+		encoding->setSelected(0);
+		page->write();
+		check(settings->get(SettingsManager::NMDC_ENCODING).empty(), "Windows default NMDC encoding was not saved as empty");
 		DestroyWindow(page->handle());
 	}
 	DestroyWindow(window->handle());

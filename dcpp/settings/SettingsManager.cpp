@@ -101,6 +101,7 @@ const string SettingsManager::settingTags[] =
 	"SoundMainChat", "SoundPM", "SoundPMWindow", "SoundFinishedDL", "SoundFinishedFL", "LastSharedFolder",
 	"SharingSkiplistExtensions", "SharingSkiplistRegEx", "SharingSkiplistPaths", "WhitelistOpenURIs",
 	"ACFrameOrder", "ACFrameWidths", "MaxMindAccountID", "MaxMindLicenseKey", "GeoIPDownloadURL",
+	"NmdcEncoding",
 	"SENTRY",
 	// Ints
 	"IncomingConnections", "IncomingConnections6", "OutgoingConnections", "InPort", "InPort6", 

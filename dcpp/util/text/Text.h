@@ -103,6 +103,15 @@ namespace Text {
 
 	bool validateUtf8(const string& str) noexcept;
 
+	/** True when the charset names UTF-8, either as "utf-8" or as Windows code page 65001
+	(for example "65001 (UTF-8)" from the favorite hub encoding list). */
+	bool isUtf8Charset(const string& charset) noexcept;
+
+	/** Decode NMDC protocol text using only the hub's configured charset. The bytes are never
+	used to guess the encoding, so the same nick bytes always decode to the same text. On a
+	UTF-8 hub, invalid sequences are replaced instead of passed through. */
+	string nmdcToUtf8(const string& str, const string& charset);
+
 	inline char asciiToLower(char c) { dcassert((((uint8_t)c) & 0x80) == 0); return (char)tolower(c); }
 
 	wchar_t toLower(wchar_t c) noexcept;

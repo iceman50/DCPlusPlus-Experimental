@@ -20,6 +20,7 @@
 #include <dcpp/util/Util.h>
 #include <win32/util/ControlSeeds.h>
 #include <win32/components/DialogControls.h>
+#include <win32/util/Encodings.h>
 #include <win32/util/HelpService.h>
 #include <win32/frames/favorites/FavHubProperties.h>
 
@@ -42,8 +43,6 @@
 using dwt::Grid;
 using dwt::GridInfo;
 using dwt::Label;
-
-std::map<UINT, std::wstring> FavHubProperties::encodings;
 
 FavHubProperties::FavHubProperties(dwt::Widget* parent, FavoriteHubEntry *_entry) :
 GridDialog(parent, 620, DS_CONTEXTHELP),
@@ -122,7 +121,7 @@ bool FavHubProperties::handleInitDialog() {
 			encoding = cur->addChild(ControlSeeds::Dialog::comboBox);
 			encoding->setHelpId(IDH_FAVORITE_HUB_ENCODING);
 
-			fillEncodings();
+			Encodings::fill(encoding, T_("Default"), entry->getEncoding());
 		}
 	}
 
@@ -310,9 +309,7 @@ void FavHubProperties::handleOKClicked() {
 	entry->setTabText(customTabText);
 	entry->setHubDescription(Text::fromT(hubDescription->getText()));
 	if(encoding) { // the box is optional.
-		entry->setEncoding(
-			encoding->getSelected() == 0 ? string() : // "Default" item.
-			Text::fromT(encoding->getText()));
+		entry->setEncoding(Encodings::selected(encoding));
 	}
 	entry->get(HubSettings::Nick) = Text::fromT(nick->getText());
 	entry->setPassword(Text::fromT(password->getText()));
@@ -421,47 +418,3 @@ void FavHubProperties::fillGroups() {
 		groups->setSelected(0);
 }
 
-void FavHubProperties::fillEncodings()
-{
-	// Load all available code pages
-	::EnumSystemCodePages(EnumCodePageProc, CP_INSTALLED);
-
-	// Add a default code page
-	encoding->addValue(T_("Default"));
-
-	UINT currentCodePage = Text::getCodePage(entry->getEncoding());
-
-	// Go through all code pages and add them to the view
-	int selectedItem = 0, counter = 1;
-	for(auto& e: encodings)
-	{
-		encoding->addValue(e.second);
-
-		// This is so we keep track of which code page should be the one to be selected
-		if(currentCodePage == e.first)
-		{
-			selectedItem = counter;
-		}
-		counter++;
-	}
-
-	encoding->setSelected(selectedItem);
-}
-
-BOOL CALLBACK FavHubProperties::EnumCodePageProc(LPTSTR lpCodePageString)
-{
-	if(wcslen(lpCodePageString) != 0)
-	{
-		UINT pageId = _ttoi(lpCodePageString);
-
-		CPINFOEX cpInfoEx = { 0 };
-		GetCPInfoEx(pageId, 0, &cpInfoEx);
-
-		if(wcslen(cpInfoEx.CodePageName) != 0)
-		{
-			encodings[pageId] = cpInfoEx.CodePageName;
-		}
-	}
-
-	return TRUE;
-}

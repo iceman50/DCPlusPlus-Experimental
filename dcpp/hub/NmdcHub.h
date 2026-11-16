@@ -111,7 +111,7 @@ private:
 	OnlineUser* findUser(const string& aNick);
 	void putUser(const string& aNick);
 
-	string toUtf8(const string& str) const { return Text::validateUtf8(str) ? str : Text::toUtf8(str, getEncoding()); }
+	string toUtf8(const string& str) const { return Text::nmdcToUtf8(str, getEncoding()); }
 	string fromUtf8(const string& str) const { return Text::fromUtf8(str, getEncoding()); }
 
 	void privateMessage(const string& nick, const string& aMessage);

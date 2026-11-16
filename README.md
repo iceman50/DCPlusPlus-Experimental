@@ -61,6 +61,8 @@ Several new protocol features are off by default or opt-in. Most of the new limi
 - Bounded protocol queues, plus flood and rate limits for incoming connections and UDP packets.
 - Hardened encrypted search (SUDP) and SOCKS5 handling, and validation of hub-supplied endpoints.
 - Safer settings files: values too long to load back are trimmed when saving.
+- NMDC nicks and text are decoded with each hub's configured encoding only, so a user cannot pose as another
+  user by sending the UTF-8 form of their nick. A default encoding for NMDC hubs is under **Settings > Experimental**.
 - Several fixes from DC++ 0.884 have been ported, as noted in the changelog.
 
 ### Building and dependencies

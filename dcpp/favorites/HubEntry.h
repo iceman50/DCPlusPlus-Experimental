@@ -62,9 +62,10 @@ public:
 
 class FavoriteHubEntry : public HubSettings {
 public:
-	FavoriteHubEntry() : encoding(Text::systemCharset), shareProfileSet(false) { }
+	// An empty encoding follows the default NMDC encoding setting.
+	FavoriteHubEntry() : shareProfileSet(false) { }
 	FavoriteHubEntry(const HubEntry& rhs) : name(rhs.getName()), server(rhs.getServer()),
-		hubDescription(rhs.getDescription()), encoding(Text::systemCharset), shareProfileSet(false) { }
+		hubDescription(rhs.getDescription()), shareProfileSet(false) { }
 
 	GETSET(string, name, Name);
 	GETSET(string, tabText, TabText);
