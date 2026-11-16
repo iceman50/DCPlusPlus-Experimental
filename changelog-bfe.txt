@@ -9,6 +9,7 @@
 * Close SQLite connections when opening a database fails, so an unreadable database file is no longer kept locked for the rest of the session (iceman50)
 * Set aside an unreadable hash database as HashStore.sqlite3.corrupt-<date> and create a new one; previously no newly hashed file could be shared until the file was deleted by hand. A failed startup verification is handled the same way, while locked or otherwise unavailable databases are left untouched (iceman50)
 * Replace an unreadable share cache when saving instead of failing on every later save (iceman50)
+* Limit the number of entries and the decompressed size when extracting emoticon packages, so a crafted .dcemo cannot fill the disk when it is selected or previewed (iceman50)
 
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)
