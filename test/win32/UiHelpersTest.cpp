@@ -10,18 +10,26 @@
 #include <win32/util/LinkActions.h>
 #include <win32/dialog/ParamDlg.h>
 #include <win32/settings/BandwidthLimitPage.h>
-#include <win32/settings/AppearancePage.h>
+#include <win32/settings/ExperimentalPage.h>
 #include <win32/util/ThemeManager.h>
 #include <dcpp/user/UserMatchManager.h>
 #include <dwt/widgets/Window.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/CheckBox.h>
+#include <dwt/widgets/TabView.h>
 #include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/core/classes/Magnet.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/connection/ThrottleManager.h>
+#include <dcpp/core/io/File.h>
+#include <dcpp/events/LogManager.h>
+#include <dcpp/hash/HashManager.h>
+#include <dcpp/queue/QueueManager.h>
+#include <dcpp/search/SearchManager.h>
+#include <dcpp/share/ShareManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #include <cstdio>
 #include <stdexcept>
 
@@ -100,6 +108,12 @@ void dialogBorderPreference() {
 	auto settings = SettingsManager::getInstance();
 	appearance.configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
 	check(settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Dialog borders were not enabled by default");
+	LogManager::newInstance();
+	HashManager::newInstance();
+	SearchManager::newInstance();
+	UploadManager::newInstance();
+	QueueManager::newInstance();
+	ShareManager::newInstance();
 	auto window = new dwt::Window();
 	auto seed = dwt::Window::Seed();
 	seed.style &= ~WS_VISIBLE;
@@ -109,7 +123,7 @@ void dialogBorderPreference() {
 		dialog.addTextBox(L"Content", L"Preview");
 		dialog.create(dwt::ModalDialog::Seed(dwt::Point(365, 0)));
 		for(bool save: { false, true }) {
-			auto page = new AppearancePage(window);
+			auto page = new ExperimentalPage(window);
 			page->resize(dwt::Rectangle(0, 0, 640, 600));
 			page->layout();
 			std::vector<HWND> children;
@@ -119,14 +133,22 @@ void dialogBorderPreference() {
 				auto box = dwt::hwnd_cast<dwt::CheckBox*>(child);
 				if(box && box->getText() == T_("Show borders around themed dialogs")) option = box;
 			}
-			check(option && option->getChecked(), "Appearance did not expose the saved border preference");
+			check(option && option->getChecked(), "Experimental settings did not expose the saved border preference");
+			// The option lives on the Interface tab; select it as a user would before clicking.
+			for(HWND child = option->handle(); child && child != page->handle(); child = GetParent(child)) {
+				auto tabs = dwt::hwnd_cast<dwt::TabView*>(GetParent(child));
+				if(tabs) {
+					tabs->setActive(dwt::hwnd_cast<dwt::Container*>(child));
+					break;
+				}
+			}
 			option->sendMessage(BM_CLICK);
 			check(!appearance.getDialogBorders() && dialog.getDialogBorderWidth() == 0, "Border checkbox did not update an open dialog");
 			check(settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Border preview prematurely saved the setting");
 			if(save) page->write();
 			DestroyWindow(page->handle());
 			check(appearance.getDialogBorders() == !save && settings->get(SettingsManager::THEMED_DIALOG_BORDERS) == !save,
-				"Closing Appearance did not respect OK/Cancel");
+				"Closing Experimental settings did not respect OK/Cancel");
 		}
 		UserMatchManager::newInstance();
 		auto theme = ThemeManager::capture();
@@ -136,6 +158,13 @@ void dialogBorderPreference() {
 		DestroyWindow(dialog.handle());
 	}
 	DestroyWindow(window->handle());
+	ShareManager::deleteInstance();
+	QueueManager::deleteInstance();
+	UploadManager::deleteInstance();
+	SearchManager::deleteInstance();
+	HashManager::getInstance()->shutdown();
+	HashManager::deleteInstance();
+	LogManager::deleteInstance();
 	settings->set(SettingsManager::THEMED_DIALOG_BORDERS, true);
 	appearance.setDialogBorders(true);
 }
@@ -213,6 +242,14 @@ void chatAndLinks() {
 
 int dwtMain(dwt::Application&) {
 	try {
+		wchar_t cwd[32768];
+		check(GetCurrentDirectoryW(static_cast<DWORD>(std::size(cwd)), cwd) != 0, "Cannot find workspace");
+		const auto directory = Text::fromT(cwd) + "\\build\\ui-helpers-test\\";
+		Util::PathsMap paths;
+		for(int path = 0; path < Util::PATH_LAST; ++path)
+			paths[static_cast<Util::Paths>(path)] = directory;
+		Util::initialize(paths);
+		File::ensureDirectory(directory);
 		ResourceManager::newInstance();
 		SettingsManager::newInstance();
 		TimerManager::newInstance();
