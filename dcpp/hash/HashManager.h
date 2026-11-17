@@ -331,7 +331,7 @@ private:
 		/** Read the legacy HashIndex.xml into memory and report whether it was missing, loaded or corrupt. */
 		LegacyLoadResult loadLegacy(function<void (float)> progressF);
 		/** Validate legacy HashData.dat tree data, write valid records into SQLite and mark migration complete. */
-		bool migrateLegacy();
+		bool migrateLegacy(function<void (float)> progressF);
 
 		void saveFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth);
 		void removeFile(const string& aFileName) noexcept;

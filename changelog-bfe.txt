@@ -25,6 +25,7 @@
 * Refuse full file lists announced as larger than the Max filelist size setting before downloading them; such lists could never be opened, but were still written to disk at whatever size the peer announced (iceman50)
 * Refresh the Users window when an online user's details change; its handler had the wrong signature and was never called (iceman50)
 * Scan newly added share folders in the background instead of freezing the settings dialog until the whole folder has been read; the Sharing page shows "Scanning..." until each folder's size is known. Removing a folder that shares its virtual name with others no longer rescans them in the foreground, and folders added or removed during a share refresh are no longer lost or brought back by it (iceman50)
+* Report progress while a DC++ hash database is migrated on first start instead of stopping once its index has been read, and read the legacy trees in file order to avoid a disk seek per tree on hard disks. A 320,000-file (3.6 TiB) share migrates in about two minutes on an SSD (iceman50)
 
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)

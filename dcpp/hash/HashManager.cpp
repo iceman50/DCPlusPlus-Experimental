@@ -944,7 +944,7 @@ HashManager::HashStore::LegacyLoadResult HashManager::HashStore::loadLegacy(func
 	}
 }
 
-bool HashManager::HashStore::migrateLegacy() {
+bool HashManager::HashStore::migrateLegacy(function<void (float)> progressF) {
 	if(treeIndex.empty() && fileIndex.empty()) {
 		try {
 			// A valid but empty legacy store, or a fresh install with no legacy files, still needs the
@@ -966,18 +966,33 @@ bool HashManager::HashStore::migrateLegacy() {
 		uint64_t invalidTrees = 0;
 
 		{
+			// Read the trees in file order. Hash-table order is random within HashData.dat, which
+			// costs a seek per tree when it is on a hard disk.
+			vector<pair<int64_t, TTHValue>> order;
+			order.reserve(treeIndex.size());
+			for(const auto& i: treeIndex) {
+				order.emplace_back(i.second.getIndex(), i.first);
+			}
+			std::sort(order.begin(), order.end(), [](const pair<int64_t, TTHValue>& a, const pair<int64_t, TTHValue>& b) {
+				return a.first < b.first;
+			});
+
 			File dataFile(getDataFile(), File::READ, File::OPEN);
-			for(auto i = treeIndex.begin(); i != treeIndex.end();) {
+			size_t done = 0;
+			for(const auto& item: order) {
+				auto i = treeIndex.find(item.second);
 				TigerTree tree;
 				if(loadLegacyTree(dataFile, i->second, i->first, tree)) {
 					// Recompute the SMALL_TREE marker from the verified tree rather than trusting
 					// stale XML metadata.
 					i->second.setIndex(tree.getLeaves().size() == 1 ? SMALL_TREE : 0);
 					validTrees.emplace(i->first, tree);
-					++i;
 				} else {
 					invalidTrees++;
-					i = treeIndex.erase(i);
+					treeIndex.erase(i);
+				}
+				if((++done & 1023) == 0) {
+					progressF(0.5f * static_cast<float>(done) / static_cast<float>(order.size()));
 				}
 			}
 		}
@@ -1004,6 +1019,15 @@ bool HashManager::HashStore::migrateLegacy() {
 		}
 
 		uint64_t migratedFiles = 0;
+		size_t rows = validTrees.size(), written = 0;
+		for(const auto& i: fileIndex) {
+			rows += i.second.size();
+		}
+		auto rowWritten = [&] {
+			if((++written & 1023) == 0) {
+				progressF(0.5f + 0.5f * static_cast<float>(written) / static_cast<float>(rows));
+			}
+		};
 		SQLiteTransaction transaction(db);
 		// Replace the SQLite contents atomically so a crash cannot leave a half-migrated hash store
 		// marked as complete.
@@ -1011,6 +1035,7 @@ bool HashManager::HashStore::migrateLegacy() {
 		db.execute("DELETE FROM trees");
 		for(auto& i: validTrees) {
 			writeTreeRow(i.second);
+			rowWritten();
 		}
 		for(auto& i: fileIndex) {
 			const string& dir = i.first;
@@ -1020,6 +1045,7 @@ bool HashManager::HashStore::migrateLegacy() {
 					writeFileRow(dir + fi.getFileName(), fi.getTimeStamp(), tree->second);
 					migratedFiles++;
 				}
+				rowWritten();
 			}
 		}
 		markLegacyMigrationComplete(migratedFiles, validTrees.size());
@@ -1123,11 +1149,13 @@ void HashManager::HashStore::loadStore(function<void (float)> progressF) {
 		} else {
 			// Only databases without rows and without a completion marker are eligible for one-time
 			// legacy XML/DAT import.
-			const auto legacyResult = loadLegacy(progressF);
+			// Reading the legacy index is the first 30% of startup progress; migrating it is the rest,
+			// so a long migration no longer looks stuck at 100%.
+			const auto legacyResult = loadLegacy([&](float progress) { progressF(0.3f * progress); });
 			if(legacyResult == LegacyLoadResult::Failed) {
 				fileIndex.clear();
 				treeIndex.clear();
-			} else if(migrateLegacy()) {
+			} else if(migrateLegacy([&](float progress) { progressF(0.3f + 0.7f * progress); })) {
 				if(legacyResult == LegacyLoadResult::Missing) {
 					LogManager::getInstance()->message(_("No legacy hash database found; SQLite hash database marked as migration complete"),
 						LogMessage::SEV_INFO, _("Hash database"));
