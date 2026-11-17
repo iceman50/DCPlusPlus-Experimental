@@ -21,6 +21,7 @@
 * Generate new private IDs and client connection tokens with a cryptographically secure generator. Both came from a std::mt19937 seeded with a single 32-bit value, so a private ID could be recovered from its public CID by searching the seeds, in under an hour on a desktop computer, letting someone sign in to ADC hubs as that user. Existing private IDs are not changed (iceman50)
 * Add a Generate new button for the private ID under Settings > Advanced > Experts only. It explains that private IDs from earlier versions can be worked out from the public CID, and that a new one changes the CID that other users and hubs know you by; the new ID is saved with OK and used after restarting (iceman50)
 * Let a later segment of a new download create its temporary file. When several connections start the same file (other sources, or MCN connections to one user), the one answering first for a later segment failed with "Target file is missing or wrong size" and was disconnected (iceman50)
+* Scroll every Experimental settings tab on its own below the tab strip; Chat and sharing, Transfers and hashing, and Private Send could not be scrolled and were cut off in small settings windows (iceman50)
 
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)

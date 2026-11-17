@@ -201,7 +201,9 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 	tabs->setHelpId(IDH_EXPERIMENTALPAGE);
 	grid->setWidget(tabs, 0, 0);
 
-	auto chatGrid = tabs->addPage(T_("Chat and sharing"), 2)->content();
+	// Every tab scrolls on its own below the tab strip. The page has no other way to scroll: its
+	// stretching tab row reports no preferred height to the settings dialog.
+	auto chatGrid = tabs->addPage(T_("Chat and sharing"), 2, true)->content();
 	chatGrid->row(1).mode = GridInfo::FILL;
 	chatGrid->row(1).align = GridInfo::STRETCH;
 
@@ -266,10 +268,10 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		tempShares->onWindowPosChanged([this](const dwt::Rectangle&) { layoutTempShares(); });
 	}
 
-	auto transferGrid = tabs->addPage(T_("Transfers and hashing"), 3)->content();
+	auto transferGrid = tabs->addPage(T_("Transfers and hashing"), 3, true)->content();
 
 	{
-		auto page = tabs->addPage(T_("Private Send"), 1)->content();
+		auto page = tabs->addPage(T_("Private Send"), 1, true)->content();
 		auto group = page->addChild(GroupBox::Seed(T_("Private Send (experimental PFT1)")));
 		auto cur = group->addChild(Grid::Seed(6, 1));
 		cur->column(0).mode = GridInfo::FILL;
@@ -339,8 +341,7 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 		buttons->setWidget(hashDbStatus, 1, 0, 1, 4);
 	}
 
-	// One row per group: a Grid leaves children past its last row unplaced. This tab is about as tall
-	// as Interface, so it also scrolls on its own in small settings windows.
+	// One row per group: a Grid leaves children past its last row unplaced.
 	auto protocolGrid = tabs->addPage(T_("Protocol limits"), 4, true)->content();
 
 	{
@@ -421,7 +422,6 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 			SettingsManager::BBS_MAX_BOARDS_MIN, SettingsManager::BBS_MAX_BOARDS_MAX);
 	}
 
-	// The Interface tab holds the most groups; it scrolls on its own in small settings windows.
 	auto themeGrid = tabs->addPage(T_("Interface"), 7, true)->content();
 
 	auto borders = themeGrid->addChild(CheckBox::Seed(T_("Show borders around themed dialogs")));

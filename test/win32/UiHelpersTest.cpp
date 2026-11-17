@@ -294,6 +294,14 @@ void experimentalGroupsAreLaidOut() {
 					break;
 				}
 			}
+			// Each tab scrolls its own options; nothing else can scroll them in a small settings window.
+			bool scrolled = false;
+			for(HWND parent = GetParent(child); parent && parent != tabs->handle(); parent = GetParent(parent)) {
+				scrolled = scrolled || dwt::hwnd_cast<dwt::ScrolledContainer*>(parent) != nullptr;
+			}
+			if(!scrolled) {
+				throw std::runtime_error("Experimental settings group cannot scroll: " + Text::fromT(group->getText()));
+			}
 			const auto size = group->getWindowSize();
 			if(size.x <= 0 || size.y <= 0) {
 				throw std::runtime_error("Experimental settings group is not laid out: " + Text::fromT(group->getText()));
