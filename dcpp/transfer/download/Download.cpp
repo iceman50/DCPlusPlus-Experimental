@@ -57,7 +57,7 @@ public:
 }
 
 Download::Download(UserConnection& conn, QueueItem& qi) noexcept : Transfer(conn, qi.getTarget(), qi.getTTH()),
-	tempTarget(qi.getTempTarget()), treeValid(false)
+	tempTarget(qi.getTempTarget()), treeValid(false), resuming(qi.getDownloadedBytes() > 0)
 {
 	conn.setDownload(this);
 
@@ -174,12 +174,15 @@ void Download::open(int64_t bytes, bool z, bool zstd) {
 		auto target = getDownloadTarget();
 		auto fullSize = tt.getFileSize();
 
-		if(getSegment().getStart() > 0) {
+		if(getSegment().getStart() > 0 && resuming) {
 			if(File::getSize(target) != fullSize) {
 				// When trying the download the next time, the resume pos will be reset
 				throw Exception(_("Target file is missing or wrong size"));
 			}
 		} else {
+			// A new file may be started by several connections at once (other sources, or MCN
+			// connections to the same user). Whichever answers first creates and sizes the file;
+			// the others open the same file, so a later segment must not require it to exist yet.
 			File::ensureDirectory(target);
 		}
 

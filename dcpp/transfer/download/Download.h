@@ -99,6 +99,8 @@ private:
 	TigerTree tt;
 	string pfs;
 	bool zstdRequested = false;
+	/** The queue item already had downloaded data, so its temp file must exist. */
+	bool resuming = false;
 	string requestedFile;
 };
 
