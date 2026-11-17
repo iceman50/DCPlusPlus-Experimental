@@ -1370,34 +1370,38 @@ void ShareManager::removeDirectory(const string& realPath) {
 
 	HashManager::getInstance()->stopHashing(realPath);
 
-	Lock l(cs);
-
-	auto i = shares.find(realPath);
-	if(i == shares.end()) {
-		return;
-	}
-
-	auto vName = i->second;
-	directories.erase(vName);
-
-	shares.erase(i);
-	pendingDirectories.erase(std::remove(pendingDirectories.begin(), pendingDirectories.end(), realPath), pendingDirectories.end());
-
-	// Other folders shared under the same virtual name were part of the removed tree. Rescan them
-	// in the background rather than holding the caller for the whole scan.
 	bool rescan = false;
-	for(i = shares.begin(); i != shares.end(); ++i) {
-		if(Util::stricmp(i->second, vName) == 0 &&
-			std::find(pendingDirectories.begin(), pendingDirectories.end(), i->first) == pendingDirectories.end())
-		{
-			pendingDirectories.push_back(i->first);
-			rescan = true;
+	{
+		Lock l(cs);
+
+		auto i = shares.find(realPath);
+		if(i == shares.end()) {
+			return;
 		}
+
+		auto vName = i->second;
+		directories.erase(vName);
+
+		shares.erase(i);
+		pendingDirectories.erase(std::remove(pendingDirectories.begin(), pendingDirectories.end(), realPath), pendingDirectories.end());
+
+		// Other folders shared under the same virtual name were part of the removed tree. Rescan them
+		// in the background rather than holding the caller for the whole scan.
+		for(i = shares.begin(); i != shares.end(); ++i) {
+			if(Util::stricmp(i->second, vName) == 0 &&
+				std::find(pendingDirectories.begin(), pendingDirectories.end(), i->first) == pendingDirectories.end())
+			{
+				pendingDirectories.push_back(i->first);
+				rescan = true;
+			}
+		}
+
+		rebuildIndices();
+		setDirty();
 	}
 
-	rebuildIndices();
-	setDirty();
-
+	// Not under cs: starting the scan waits for the previous scan thread, which takes cs as it
+	// finishes.
 	if(rescan) {
 		startPendingScan();
 	}

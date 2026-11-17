@@ -1090,6 +1090,26 @@ TEST_F(ShareCacheTest, removing_a_merged_folder_rescans_the_others_in_the_backgr
 	EXPECT_EQ(second.size, sm->getShareSize(secondSharePath));
 }
 
+TEST_F(ShareCacheTest, removing_folders_while_scans_finish_does_not_deadlock) {
+	// removeDirectory used to start the rescan while holding the share lock; starting a scan waits
+	// for the previous scan thread, which takes that lock as it finishes.
+	auto sm = ShareManager::getInstance();
+	cacheFile(sharePath + "first.bin", "first merged folder");
+	const auto second = cacheFile(secondSharePath + "second.bin", "second merged folder contents");
+	sm->addDirectory(secondSharePath, "Merged");
+	// Remove the moment a scan reports it has finished, while its thread is still saving the
+	// share cache and checking for more work.
+	for(int i = 0; i < 20; ++i) {
+		sm->addDirectory(sharePath, "Merged");
+		while(sm->isRefreshing()) { }
+		sm->removeDirectory(sharePath);
+		while(sm->isRefreshing()) { }
+	}
+	ASSERT_TRUE(waitForShareScans());
+	EXPECT_EQ(1u, sm->getDirectories().size());
+	EXPECT_EQ(second.size, sm->getShareSize());
+}
+
 TEST_F(ShareCacheTest, folders_added_during_a_refresh_are_not_lost) {
 	auto sm = ShareManager::getInstance();
 	const auto first = cacheFile(sharePath + "first.bin", "already shared");
