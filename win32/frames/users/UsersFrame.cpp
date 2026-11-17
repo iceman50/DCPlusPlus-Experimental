@@ -617,8 +617,10 @@ void UsersFrame::on(UserConnected, const UserPtr& aUser) noexcept {
 	callAsync([=] { addUser(aUser); });
 }
 
-void UsersFrame::on(ClientManagerListener::UserUpdated, const UserPtr& aUser) noexcept {
-	callAsync([=] { updateUser(aUser); });
+void UsersFrame::on(ClientManagerListener::UserUpdated, const OnlineUser& aUser) noexcept {
+	// Capture the user, not the OnlineUser: the hub may delete that before the UI runs this.
+	UserPtr user = aUser.getUser();
+	callAsync([=] { updateUser(user); });
 }
 
 void UsersFrame::on(UserDisconnected, const UserPtr& aUser) noexcept {

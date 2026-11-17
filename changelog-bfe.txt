@@ -23,6 +23,7 @@
 * Let a later segment of a new download create its temporary file. When several connections start the same file (other sources, or MCN connections to one user), the one answering first for a later segment failed with "Target file is missing or wrong size" and was disconnected (iceman50)
 * Scroll every Experimental settings tab on its own below the tab strip; Chat and sharing, Transfers and hashing, and Private Send could not be scrolled and were cut off in small settings windows (iceman50)
 * Refuse full file lists announced as larger than the Max filelist size setting before downloading them; such lists could never be opened, but were still written to disk at whatever size the peer announced (iceman50)
+* Refresh the Users window when an online user's details change; its handler had the wrong signature and was never called (iceman50)
 
 == 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)

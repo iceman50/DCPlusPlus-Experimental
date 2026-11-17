@@ -182,7 +182,7 @@ private:
 
 	// ClientManagerListner
 	virtual void on(UserConnected, const UserPtr& aUser) noexcept;
-	virtual void on(ClientManagerListener::UserUpdated, const UserPtr& aUser) noexcept;
+	void on(ClientManagerListener::UserUpdated, const OnlineUser& aUser) noexcept override;
 	virtual void on(UserDisconnected, const UserPtr& aUser) noexcept;
 
 	// UploadManagerListener
