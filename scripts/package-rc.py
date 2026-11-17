@@ -43,6 +43,14 @@ with (binary / 'DCPlusPlus.pdb').open('rb') as source:
 assert struct.unpack_from('<I', link, (end + 4) & ~3)[0] == crc
 
 files = {name: binary / name for name in ('DCPlusPlus.exe', 'DCPlusPlus.pdb')}
+for name in ('DCPlusPlus.chm', 'cshelp.rtf'):
+    assert (binary / name).is_file(), f'{name} is missing; build with i18n=1 help=1'
+    files[name] = binary / name
+if (binary / 'locale').is_dir():
+    for path in sorted((binary / 'locale').rglob('*')):
+        if path.is_file(): files[path.relative_to(binary).as_posix()] = path
+else:
+    print('No locale folder; the package will contain English only.')
 for name in ('changelog-bfe.txt', 'COPYING.TXT', 'License.txt', 'ThirdPartyLicenses.txt'):
     files[name] = root / name
 for directory in ('Themes', 'Emoticons', 'IconPacks'):

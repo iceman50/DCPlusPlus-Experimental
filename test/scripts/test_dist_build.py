@@ -24,6 +24,9 @@ class DistBuildTest(unittest.TestCase):
         self.write("dcpp/core/version.h", '#define VERSIONSTRING "0.8842"\n')
         self.write("dcpp/version-rev-id.inc", '#define DCPP_REVISION "[123abcd]"\n')
         self.write("changelog-bfe.txt", "Fixture changelog")
+        self.write("dcppboot.xml", "<Boot/>")
+        self.write("License.txt", "Fixture license")
+        self.write("ThirdPartyLicenses.txt", "Fixture notices")
         self.write("Themes/sample.xml", "theme")
         self.write("Emoticons/sample.dcemo", "emoticon")
         for name in ("Dark", "Neon-Circuit", "Aurora", "Copper", "Paper"):
@@ -70,6 +73,11 @@ $global:LASTEXITCODE = 0
         marker = f"{backend}/{compiler}/{mode}"
         for suffix in ("exe", "pdb"):
             self.write(directory + "/DCPlusPlus." + suffix, marker + "/" + suffix)
+        if backend == "SCons":
+            # Only SCons builds the help and translations (with i18n=1 help=1).
+            self.write(directory + "/DCPlusPlus.chm", "help")
+            self.write(directory + "/cshelp.rtf", "context help")
+            self.write(directory + "/locale/de/help/cshelp.rtf", "translated context help")
         return self.root / directory
 
     def run_builder(self, *args, answers=None, failure=None, success=True):
@@ -107,6 +115,12 @@ $global:LASTEXITCODE = 0
                 self.assertIn("Themes/sample.xml", package.namelist())
                 self.assertIn("Emoticons/sample.dcemo", package.namelist())
                 self.assertIn("IconPacks/Dark.dcico", package.namelist())
+                self.assertIn("dcppboot.xml", package.namelist())
+                help_files = {"DCPlusPlus.chm", "cshelp.rtf", "locale/de/help/cshelp.rtf"}
+                if backend == "SCons":
+                    self.assertLessEqual(help_files, set(package.namelist()))
+                else:
+                    self.assertFalse(help_files & set(package.namelist()))
         self.assertFalse(list((self.root / "dist").glob(".stage-*")))
 
     def test_legacy_configuration_only_uses_scons(self):

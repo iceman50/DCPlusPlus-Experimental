@@ -9,12 +9,12 @@ def gen_compile(target, source, env):
         + '"'
     )
 
-    f = open(str(source[1]), "r")
+    f = open(str(source[1]), "r", encoding="utf-8")
     template = f.read()
     f.close()
     template = template.split("<!-- contents -->", 1)
 
-    f = open(str(target[0]), "r")
+    f = open(str(target[0]), "r", encoding="utf-8")
     contents = f.read()
     f.close()
 
@@ -26,7 +26,7 @@ def gen_compile(target, source, env):
         contents,
     )
 
-    f = open(str(target[0]), "w")
+    f = open(str(target[0]), "w", encoding="utf-8")
     f.write(template[0])  # header
     f.write("<h1>Compiling DC++</h1>")
     f.write(contents)

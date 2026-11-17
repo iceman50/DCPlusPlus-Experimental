@@ -7,6 +7,8 @@ Stages the distributable payload, generates the English NSIS string catalog,
 and compiles installer/DCPlusPlus.nsi. The installed DCPlusPlus.exe is copied
 from the stripped DCPlusPlus.exe and is accompanied by its matching PDB, the BFE
 changelog, legal notices, flat Themes, flat Emoticons, and bundled icon packs.
+The English help (DCPlusPlus.chm and cshelp.rtf) must have been built with
+i18n=1 help=1; the locale folder is included when that build produced one.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\installer-build.ps1
@@ -127,6 +129,15 @@ $iconPacksDirectory = Join-Path $repoRoot "IconPacks"
 
 Assert-RequiredFile -Path $strippedExecutable -Description "Stripped release executable"
 Assert-RequiredFile -Path $debugSymbols -Description "Release PDB"
+$helpFiles = @("DCPlusPlus.chm", "cshelp.rtf")
+foreach($file in $helpFiles) {
+	Assert-RequiredFile -Path (Join-Path $ReleaseDirectory $file) -Description "Help file (build with i18n=1 help=1)"
+}
+$localeDirectory = Join-Path $ReleaseDirectory "locale"
+$haveLocale = Test-Path -LiteralPath $localeDirectory -PathType Container
+if(-not $haveLocale) {
+	Write-Warning "No locale folder in $ReleaseDirectory; the installer will contain English only."
+}
 $versionLine = Select-String -LiteralPath (Join-Path $repoRoot "dcpp\core\version.h") -Pattern '^\s*#define\s+VERSIONSTRING\s+"([^"]+)"' | Select-Object -First 1
 if($null -eq $versionLine) {
 	throw "Unable to determine the application version."
@@ -171,6 +182,12 @@ foreach($file in $installerFiles) {
 
 Copy-Item -LiteralPath $strippedExecutable -Destination (Join-Path $stageDirectory "DCPlusPlus.exe") -Force
 Copy-Item -LiteralPath $debugSymbols -Destination (Join-Path $stageDirectory "DCPlusPlus.pdb") -Force
+foreach($file in $helpFiles) {
+	Copy-Item -LiteralPath (Join-Path $ReleaseDirectory $file) -Destination $stageDirectory -Force
+}
+if($haveLocale) {
+	Copy-Item -LiteralPath $localeDirectory -Destination (Join-Path $stageDirectory "locale") -Recurse -Force
+}
 Copy-Item -LiteralPath (Join-Path $repoRoot "changelog-bfe.txt") -Destination $stageDirectory -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "dcppboot.xml") -Destination $stageDirectory -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "dcppboot.nonlocal.xml") -Destination $stageDirectory -Force
@@ -183,7 +200,11 @@ Write-EnglishCatalog -StringsPath (Join-Path $stageDirectory "Strings.xml") -Sta
 
 Push-Location -LiteralPath $stageDirectory
 try {
-	& $makensis /V4 "/DAPP_VERSION=$version" "DCPlusPlus.nsi"
+	$nsisArguments = @("/V4", "/DAPP_VERSION=$version")
+	if($haveLocale) {
+		$nsisArguments += "/DHAVE_LOCALE"
+	}
+	& $makensis @nsisArguments "DCPlusPlus.nsi"
 	if($LASTEXITCODE -ne 0) {
 		throw "NSIS failed with exit code $LASTEXITCODE."
 	}

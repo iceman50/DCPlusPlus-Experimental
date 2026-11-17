@@ -2,9 +2,9 @@
 
 
 def gen_changelog(target, source, env):
-    import re, cgi, html
+    import re, html
 
-    f_template = open(str(source[1]), "r")
+    f_template = open(str(source[1]), "r", encoding="utf-8")
     template = f_template.read()
     f_template.close()
     template = template.split("<!-- contents -->", 1)
@@ -42,12 +42,12 @@ See the version history of DC++ below.
     new_change = re.compile(r"^\* (?P<change>.*?)$")
     bugzilla_change = re.compile(r"^\* \[B#(?P<bug_id>\d+?)\] (?P<change>.*?)$")
     launchpad_change = re.compile(r"^\* \[L#(?P<bug_id>\d+?)\] (?P<change>.*?)$")
-    continue_change = re.compile("^\w*?(?P<change>.*?)$")
+    continue_change = re.compile(r"^\w*?(?P<change>.*?)$")
     warning_change = re.compile("^(?P<change>[^ ].*?)$")
 
-    fp_txt = open(str(source[0]), "r")
+    fp_txt = open(str(source[0]), "r", encoding="utf-8")
 
-    fp_html = open(str(target[0]), "w")
+    fp_html = open(str(target[0]), "w", encoding="utf-8")
     fp_html.write(start_head)
 
     open_change_state = False
@@ -112,7 +112,8 @@ See the version history of DC++ below.
         mObj = warning_change.match(line)
         if mObj:
             if open_change_state:
-                fp_html.write(end_change_state)
+                fp_html.write(end_change)
+                open_change_state = False
             fp_html.write(start_warning_end % mObj.groupdict())
             continue
 

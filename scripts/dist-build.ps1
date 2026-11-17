@@ -6,6 +6,8 @@ Interactively build and package x64 MinGW or MSVC DC++ artifacts.
 Interactive helper for producing a distribution zip. The zip contains the
 DCPlusPlus.exe, its matching GNU debug companion or native Microsoft PDB,
 changelog-bfe.txt, and the distributable theme, emoticon, and icon-pack collections.
+The help (DCPlusPlus.chm, cshelp.rtf) and locale folder are included when the build
+produced them; only SCons with i18n=1 help=1 does.
 
 Package names use:
 DCPlusPlus-Experimental-VERSION-COMPILER-CONFIGURATION-RUNTIME-BUILDSYSTEM-gitrev-yyyyMMdd-HHmmssZ.zip
@@ -404,6 +406,16 @@ function New-DistPackage {
 		Copy-Item -LiteralPath $themesPath -Destination (Join-Path $stageDir "Themes") -Recurse -Force
 		Copy-Item -LiteralPath $emoticonPath -Destination (Join-Path $stageDir "Emoticons") -Recurse -Force
 		Copy-Item -LiteralPath $iconPacksPath -Destination (Join-Path $stageDir "IconPacks") -Recurse -Force
+		$helpFiles = @("DCPlusPlus.chm", "cshelp.rtf") | Where-Object { Test-Path -LiteralPath (Join-Path $binDir $_) -PathType Leaf }
+		if(@($helpFiles).Count -eq 2) {
+			foreach($file in $helpFiles) { Copy-Item -LiteralPath (Join-Path $binDir $file) -Destination $stageDir }
+		} else {
+			Write-Warning "Help files were not found in $binDir; the package will not include help."
+		}
+		$localePath = Join-Path $binDir "locale"
+		if(Test-Path -LiteralPath $localePath -PathType Container) {
+			Copy-Item -LiteralPath $localePath -Destination (Join-Path $stageDir "locale") -Recurse -Force
+		}
 
 		Get-ChildItem -LiteralPath $stageDir | Compress-Archive -DestinationPath $temporaryZip -CompressionLevel Optimal
 		Move-Item -LiteralPath $temporaryZip -Destination $zipPath -Force:$OverwriteExisting
