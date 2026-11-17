@@ -157,6 +157,10 @@ public:
 	void startupRefresh(function<void (float)> progressF = nullptr) noexcept;
 	/** True while a share refresh is building or applying a live filesystem view. */
 	bool isRefreshing() const noexcept { return refreshActive; }
+	/** True while added share folders are still waiting for, or in, their background scan. */
+	bool hasPendingDirectories() const noexcept;
+	/** True while this share root is waiting for, or in, its background scan. */
+	bool isDirectoryPending(const string& realPath) const noexcept;
 	void setDirty() { xmlDirty = true; }
 
 	SearchResultList search(const StringList& adcParams, size_t maxResults) noexcept;
@@ -367,6 +371,12 @@ private:
 	/** Map real name to virtual name - multiple real names may be mapped to a single virtual one.
 	The map is sorted to make sure conflicts are always resolved in the same order when merging. */
 	map<string, string> shares;
+	/** Share roots registered but not yet scanned. They are scanned by the refresh thread, so
+	 * adding a large folder doesn't block the caller (the settings dialog). Guarded by cs. */
+	StringList pendingDirectories;
+	string scanningDirectory;
+	bool scanPendingDirectories();
+	void startPendingScan() noexcept;
 
 	unordered_map<TTHValue, const Directory::File*> tthIndex;
 

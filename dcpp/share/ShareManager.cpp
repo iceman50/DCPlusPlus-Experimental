@@ -1187,6 +1187,7 @@ void ShareManager::addDirectory(const string& realPath, const string& virtualNam
 		throw ShareException(_("The temporary download directory cannot be shared"));
 	}
 
+	string vName = validateVirtual(virtualName);
 	{
 		Lock l(cs);
 
@@ -1199,23 +1200,95 @@ void ShareManager::addDirectory(const string& realPath, const string& virtualNam
 				throw ShareException(_("Remove all subdirectories before adding this one"));
 			}
 		}
+
+		// Scanning a large folder can take hours. Register it now and let the refresh thread
+		// build its tree, so the caller (the settings dialog) returns at once.
+		shares[realPath] = move(vName);
+		pendingDirectories.push_back(realPath);
+		setDirty();
 	}
 
-	HashManager::HashPauser pauser;
+	startPendingScan();
+}
 
-	auto dp = buildTree(realPath);
-
-	string vName = validateVirtual(virtualName);
-	dp->setName(vName);
-
+bool ShareManager::hasPendingDirectories() const noexcept {
 	Lock l(cs);
+	return !pendingDirectories.empty() || !scanningDirectory.empty();
+}
 
-	shares[realPath] = move(vName);
+bool ShareManager::isDirectoryPending(const string& realPath) const noexcept {
+	Lock l(cs);
+	return scanningDirectory == realPath ||
+		std::find(pendingDirectories.begin(), pendingDirectories.end(), realPath) != pendingDirectories.end();
+}
 
-	merge(dp, realPath);
+void ShareManager::startPendingScan() noexcept {
+	// A running refresh scans pending folders before it finishes (see run()).
+	if(refreshing.test_and_set()) {
+		return;
+	}
+	refreshActive = true;
+	update = true;
+	refreshDirs = false;
 
-	rebuildIndices();
-	setDirty();
+	join();
+	try {
+		start();
+		setThreadPriority(Thread::LOW);
+	} catch(const ThreadException& e) {
+		LogManager::getInstance()->message(str(F_("File list refresh failed: %1%") % e.getError()),
+			LogMessage::SEV_ERROR, _("Sharing"));
+		refreshActive = false;
+		refreshing.clear();
+	}
+}
+
+bool ShareManager::scanPendingDirectories() {
+	bool scanned = false;
+	// Hold off hashing while folders are scanned, as a full refresh does.
+	std::unique_ptr<HashManager::HashPauser> pauser;
+	for(;;) {
+		string realPath, vName;
+		{
+			Lock l(cs);
+			if(pendingDirectories.empty()) {
+				break;
+			}
+			realPath = pendingDirectories.front();
+			pendingDirectories.erase(pendingDirectories.begin());
+			auto i = shares.find(realPath);
+			if(i == shares.end()) {
+				continue;
+			}
+			vName = i->second;
+			scanningDirectory = realPath;
+		}
+		ScopedFunctor([this] { Lock l(cs); scanningDirectory.clear(); });
+
+		if(!pauser) {
+			pauser = std::make_unique<HashManager::HashPauser>();
+		}
+		if(!checkHidden(realPath)) {
+			continue;
+		}
+		updateFilterCache();
+		auto dp = buildTree(realPath);
+		dp->setName(vName);
+
+		Lock l(cs);
+		auto i = shares.find(realPath);
+		// Removed, renamed or queued again while it was scanned: that change has its own scan.
+		if(i == shares.end() || i->second != vName ||
+			std::find(pendingDirectories.begin(), pendingDirectories.end(), realPath) != pendingDirectories.end())
+		{
+			continue;
+		}
+		merge(dp, realPath);
+		rebuildIndices();
+		setDirty();
+		scanned = true;
+	}
+	return scanned;
 }
 
 void ShareManager::merge(const Directory::Ptr& directory, const string& realPath) {
@@ -1308,20 +1381,26 @@ void ShareManager::removeDirectory(const string& realPath) {
 	directories.erase(vName);
 
 	shares.erase(i);
+	pendingDirectories.erase(std::remove(pendingDirectories.begin(), pendingDirectories.end(), realPath), pendingDirectories.end());
 
-	HashManager::HashPauser pauser;
-
-	// Readd all directories with the same vName
+	// Other folders shared under the same virtual name were part of the removed tree. Rescan them
+	// in the background rather than holding the caller for the whole scan.
+	bool rescan = false;
 	for(i = shares.begin(); i != shares.end(); ++i) {
-		if(Util::stricmp(i->second, vName) == 0 && checkHidden(i->first)) {
-			auto dp = buildTree(i->first);
-			dp->setName(i->second);
-			merge(dp, i->first);
+		if(Util::stricmp(i->second, vName) == 0 &&
+			std::find(pendingDirectories.begin(), pendingDirectories.end(), i->first) == pendingDirectories.end())
+		{
+			pendingDirectories.push_back(i->first);
+			rescan = true;
 		}
 	}
 
 	rebuildIndices();
 	setDirty();
+
+	if(rescan) {
+		startPendingScan();
+	}
 }
 
 void ShareManager::renameDirectory(const string& realPath, const string& virtualName) {
@@ -2105,11 +2184,29 @@ StringPairList ShareManager::getDirectories() const noexcept {
 
 int ShareManager::run() {
 	runRefresh();
+	// A folder added after the refresh scanned its pending list, but before it released the
+	// refresh flag, found the flag taken and left its scan to this thread.
+	while(hasPendingDirectories() && !refreshing.test_and_set()) {
+		refreshActive = true;
+		update = true;
+		refreshDirs = false;
+		runRefresh();
+	}
 	return 0;
 }
 
 void ShareManager::runRefresh(function<void (float)> progressF) {
-	auto dirs = getDirectories();
+	StringPairList dirs;
+	{
+		Lock l(cs);
+		for(auto& i: shares) {
+			dirs.emplace_back(i.second, i.first);
+		}
+		// A full scan builds every registered root, including any still waiting for their own scan.
+		if(refreshDirs) {
+			pendingDirectories.clear();
+		}
+	}
 	// Don't need to refresh if no directories are shared
 	if(dirs.empty())
 		refreshDirs = false;
@@ -2148,7 +2245,11 @@ void ShareManager::runRefresh(function<void (float)> progressF) {
 			directories.clear();
 
 			for(auto& i: newDirs) {
-				merge(i.first, i.second);
+				// A folder removed or renamed during the scan must not come back.
+				auto share = shares.find(i.second);
+				if(share != shares.end() && share->second == i.first->getName()) {
+					merge(i.first, i.second);
+				}
 			}
 
 			rebuildIndices();
@@ -2157,6 +2258,10 @@ void ShareManager::runRefresh(function<void (float)> progressF) {
 		refreshedDirs = true;
 
 		LogManager::getInstance()->message(_("File list refresh finished"), LogMessage::SEV_INFO, _("Sharing"));
+	}
+
+	if(scanPendingDirectories()) {
+		refreshedDirs = true;
 	}
 
 	if(update) {

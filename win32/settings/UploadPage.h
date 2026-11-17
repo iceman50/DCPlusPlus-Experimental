@@ -61,6 +61,9 @@ private:
 	DirectoryRow* getDirectoryRow(int row);
 	void fillList();
 	void refreshTotalSize();
+	tstring sizeText(const string& realPath) const;
+	void refreshSizes();
+	void watchScans();
 	void addDirectory(const tstring& aPath);
 };
 

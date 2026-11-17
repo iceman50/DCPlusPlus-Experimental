@@ -147,6 +147,7 @@ remove(0)
 	TableLayout::makeColumns(directories, columns, 3);
 
 	fillList();
+	watchScans();
 
 	handleSelectionChanged();
 
@@ -232,6 +233,8 @@ void UploadPage::handleRenameClicked() {
 					ShareManager::getInstance()->renameDirectory(row->realPath, Text::fromT(line));
 					directories->setText(i, 0, line);
 					row->virtualPath = Text::fromT(line);
+					directories->setText(i, 2, sizeText(row->realPath));
+					watchScans();
 
 					setDirty = true;
 				} else {
@@ -259,13 +262,16 @@ void UploadPage::handleRemoveClicked() {
 		directories->erase(i);
 		refreshTotalSize();
 	}
+	// Folders merged under the same virtual name are rescanned in the background.
+	refreshSizes();
+	watchScans();
 }
 
 void UploadPage::addRow(const string& virtualPath, const string& realPath) {
 	TStringList row;
 	row.push_back(Text::toT(virtualPath));
 	row.push_back(Text::toT(realPath));
-	row.push_back(Text::toT(Util::formatBytes(ShareManager::getInstance()->getShareSize(realPath))));
+	row.push_back(sizeText(realPath));
 	auto data = std::make_unique<DirectoryRow>(DirectoryRow { virtualPath, realPath });
 	directories->insert(row, reinterpret_cast<LPARAM>(data.get()));
 	directoryRows.push_back(std::move(data));
@@ -282,6 +288,31 @@ void UploadPage::fillList() {
 
 void UploadPage::refreshTotalSize() {
 	total->setText(Text::toT(Util::formatBytes(ShareManager::getInstance()->getShareSize())));
+}
+
+tstring UploadPage::sizeText(const string& realPath) const {
+	auto sm = ShareManager::getInstance();
+	return sm->isDirectoryPending(realPath) ? T_("Scanning...") : Text::toT(Util::formatBytes(sm->getShareSize(realPath)));
+}
+
+void UploadPage::refreshSizes() {
+	for(int i = 0, n = static_cast<int>(directories->size()); i < n; ++i) {
+		if(auto row = getDirectoryRow(i)) {
+			directories->setText(i, 2, sizeText(row->realPath));
+		}
+	}
+	refreshTotalSize();
+}
+
+void UploadPage::watchScans() {
+	// Added folders are scanned in the background; show their sizes once they're known.
+	if(!ShareManager::getInstance()->hasPendingDirectories()) {
+		return;
+	}
+	setTimer([this] {
+		refreshSizes();
+		return ShareManager::getInstance()->hasPendingDirectories();
+	}, 1000);
 }
 
 void UploadPage::addDirectory(const tstring& aPath) {
@@ -306,6 +337,7 @@ void UploadPage::addDirectory(const tstring& aPath) {
 				ShareManager::getInstance()->addDirectory(aPath, aLine);
 				addRow(aLine, aPath);
 				refreshTotalSize();
+				watchScans();
 			}
 			break;
 		}

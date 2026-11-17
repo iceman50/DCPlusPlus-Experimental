@@ -14,17 +14,18 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <thread>
 
 #define private public
 #include <dcpp/bbs/BBSManager.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/share/ShareManager.h>
+#include <dcpp/hash/HashManager.h>
 #undef private
 
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/core/io/File.h>
-#include <dcpp/hash/HashManager.h>
 #include <dcpp/connection/http/HttpManager.h>
 #include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
@@ -1041,3 +1042,67 @@ TEST_F(ShareCacheTest, private_markers_block_stale_resolution_refresh_and_cache_
 	EXPECT_TRUE(sm->tthIndex.empty());
 }
 #endif
+
+namespace {
+
+bool waitForShareScans() {
+	auto sm = ShareManager::getInstance();
+	for(int i = 0; i < 1000; ++i) {
+		if(!sm->hasPendingDirectories() && !sm->isRefreshing()) return true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	return false;
+}
+
+}
+
+TEST_F(ShareCacheTest, added_folders_are_scanned_in_the_background) {
+	auto sm = ShareManager::getInstance();
+	const auto file = cacheFile(sharePath + "added.bin", "contents of an added share folder");
+	{
+		// The scan needs the hash store; holding it keeps the scan from finishing.
+		Lock blockScan(HashManager::getInstance()->cs);
+		sm->addDirectory(sharePath, "Added");
+		// The folder is registered at once, before its contents are known.
+		EXPECT_EQ(1u, sm->getDirectories().size());
+		EXPECT_TRUE(sm->isDirectoryPending(sharePath));
+		EXPECT_EQ(0, sm->getShareSize());
+	}
+	ASSERT_TRUE(waitForShareScans());
+	EXPECT_FALSE(sm->isDirectoryPending(sharePath));
+	EXPECT_EQ(file.size, sm->getShareSize(sharePath));
+	EXPECT_EQ(file.size, sm->getShareSize());
+}
+
+TEST_F(ShareCacheTest, removing_a_merged_folder_rescans_the_others_in_the_background) {
+	auto sm = ShareManager::getInstance();
+	const auto first = cacheFile(sharePath + "first.bin", "first merged folder");
+	const auto second = cacheFile(secondSharePath + "second.bin", "second merged folder contents");
+	sm->addDirectory(sharePath, "Merged");
+	sm->addDirectory(secondSharePath, "Merged");
+	ASSERT_TRUE(waitForShareScans());
+	EXPECT_EQ(first.size + second.size, sm->getShareSize());
+
+	sm->removeDirectory(sharePath);
+	ASSERT_TRUE(waitForShareScans());
+	EXPECT_EQ(1u, sm->getDirectories().size());
+	EXPECT_EQ(second.size, sm->getShareSize());
+	EXPECT_EQ(second.size, sm->getShareSize(secondSharePath));
+}
+
+TEST_F(ShareCacheTest, folders_added_during_a_refresh_are_not_lost) {
+	auto sm = ShareManager::getInstance();
+	const auto first = cacheFile(sharePath + "first.bin", "already shared");
+	const auto second = cacheFile(secondSharePath + "second.bin", "added while refreshing");
+	sm->addDirectory(sharePath, "First");
+	ASSERT_TRUE(waitForShareScans());
+	{
+		Lock blockScan(HashManager::getInstance()->cs);
+		sm->refresh(true, false, false);
+		// The full refresh has its snapshot of shared folders; this one isn't in it.
+		sm->addDirectory(secondSharePath, "Second");
+	}
+	ASSERT_TRUE(waitForShareScans());
+	EXPECT_EQ(2u, sm->getDirectories().size());
+	EXPECT_EQ(first.size + second.size, sm->getShareSize());
+}
