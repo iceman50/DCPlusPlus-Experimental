@@ -738,3 +738,26 @@ TEST_F(ConnectionManagerTest, connection_tokens_do_not_follow_from_the_util_rand
 	EXPECT_FALSE(first.empty());
 	EXPECT_TRUE(std::all_of(first.begin(), first.end(), [](char c) { return c >= '0' && c <= '9'; }));
 }
+
+TEST_F(ConnectionManagerTest, full_lists_larger_than_the_open_limit_are_refused) {
+	const string hub = "dchub://one.example";
+	SettingsManager::getInstance()->set(SettingsManager::MAX_FILELIST_SIZE, 1);
+	auto qm = QueueManager::getInstance();
+	auto u = user(3);
+	qm->addList(HintedUser(u, hub), 0);
+	auto uc = peer(u, "token", false, false);
+	uc->socket = BufferedSocket::getSocket(0);
+	uc->socket->setSocket(unique_ptr<Socket>(new Socket(Socket::TYPE_TCP)));
+	auto d = qm->getDownload(*uc);
+	ASSERT_TRUE(d && d->getType() == Transfer::TYPE_FULL_LIST);
+	const auto path = d->getPath();
+
+	// A 1 MiB limit refuses a list announced one byte larger, before anything is written.
+	DownloadManager::getInstance()->startData(uc, 0, 1024 * 1024 + 1, false, false);
+	EXPECT_EQ(nullptr, uc->getDownload());
+	auto item = qm->fileQueue.find(path);
+	EXPECT_TRUE(!item || !item->isSource(u));
+	for(const auto& extension: { ".xml", ".xml.bz2", ".xml.zst" }) {
+		EXPECT_EQ(-1, File::getSize(path + extension));
+	}
+}
