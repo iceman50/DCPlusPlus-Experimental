@@ -14,6 +14,7 @@
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/share/ShareManager.h>
 #include <dcpp/util/Util.h>
+#include <dcpp/util/text/Text.h>
 
 #include <md4c.h>
 
@@ -159,12 +160,37 @@ namespace {
 		}
 	}
 
+	/* Like plain chat, mark text that starts a display line the way a timestamp, nick, action or
+	status line does, so a message cannot show lines as coming from someone else. */
+	void markChatLookalike(string& value) {
+		const auto start = value.find_first_not_of(" \t");
+		if(start != string::npos && (value[start] == '[' || value[start] == '<' || value[start] == '*'))
+			value.insert(start, "- ");
+	}
+
+	/* Whether the next text starts a display line: only markup and blanks follow the last
+	line break in the HTML so far. */
+	bool atLineStart(const string& html) {
+		const auto br = html.rfind("<br/>");
+		if(br == string::npos) return false;
+		bool inTag = false;
+		for(auto i = br + 5; i < html.size(); ++i) {
+			const auto ch = html[i];
+			if(ch == '<') inTag = true;
+			else if(ch == '>') inTag = false;
+			else if(!inTag && ch != ' ' && ch != '\t') return false;
+		}
+		return true;
+	}
+
 	void appendXmlTextWithBreaks(string& target, const string& value) {
 		size_t begin = 0;
 		while(begin < value.size()) {
 			auto end = value.find('\n', begin);
 			if(end == string::npos) end = value.size();
-			appendXmlEscaped(target, value.substr(begin, end - begin));
+			auto line = value.substr(begin, end - begin);
+			if(begin > 0) markChatLookalike(line);
+			appendXmlEscaped(target, line);
 			if(end != value.size()) target += "<br/>";
 			begin = end + 1;
 		}
@@ -458,6 +484,8 @@ namespace {
 				decoded.assign(value, size);
 				break;
 			}
+			if(type != MD_TEXT_BR && type != MD_TEXT_SOFTBR && atLineStart(result.html))
+				markChatLookalike(decoded);
 
 			if(!images.empty()) {
 				if(type == MD_TEXT_BR || type == MD_TEXT_SOFTBR) images.back().alt += ' ';
@@ -591,7 +619,10 @@ bool RichText::isSafeLink(const string& url, size_t maxLength) noexcept {
 	}
 }
 
-RichText::Parsed RichText::parse(const string& text, size_t maxTargetLength) {
+RichText::Parsed RichText::parse(const string& source, size_t maxTargetLength) {
+	// CommonMark only knows CR and LF as line endings; the chat display also breaks lines at
+	// vertical tab, form feed, U+2028 and U+2029, which would bypass the markdown structure.
+	const auto text = Text::normalizeLineBreaks(source);
 	Renderer renderer(std::max<size_t>(1, maxTargetLength));
 	if(text.size() > std::numeric_limits<MD_SIZE>::max()) {
 		renderer.result.valid = false;

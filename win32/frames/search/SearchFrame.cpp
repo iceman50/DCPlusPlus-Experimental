@@ -495,9 +495,9 @@ void SearchFrame::SearchInfo::update() {
 	const SearchResultPtr& sr = srs[0];
 	if(sr->getType() == SearchResult::TYPE_FILE) {
 		if(sr->getFile().rfind(_T('\\')) == tstring::npos) {
-			columns[COLUMN_FILENAME] = Text::toT(sr->getFile());
+			columns[COLUMN_FILENAME] = Text::toT(Text::toDisplayName(sr->getFile()));
 		} else {
-			columns[COLUMN_FILENAME] = Text::toT(Util::getFileName(sr->getFile()));
+			columns[COLUMN_FILENAME] = Text::toT(Text::toDisplayName(Util::getFileName(sr->getFile())));
 			columns[COLUMN_PATH] = Text::toT(Util::getFilePath(sr->getFile()));
 		}
 
@@ -508,7 +508,7 @@ void SearchFrame::SearchInfo::update() {
 		columns[COLUMN_EXACT_SIZE] = Text::toT(Util::formatExactSize(sr->getSize()));
         columns[COLUMN_TTH] = Text::toT(sr->getTTH().toBase32());
 	} else {
-		columns[COLUMN_FILENAME] = Text::toT(sr->getFileName());
+		columns[COLUMN_FILENAME] = Text::toT(Text::toDisplayName(sr->getFileName()));
 		columns[COLUMN_PATH] = Text::toT(sr->getFile());
 		columns[COLUMN_TYPE] = T_("Directory");
 		if(sr->getSize() > 0) {
@@ -537,8 +537,8 @@ void SearchFrame::SearchInfo::update() {
 			freeSlots += i->getFreeSlots();
 			slots += i->getSlots();
 		}
-		columns[COLUMN_NICK] = Text::toT(Util::toString(StringList(nicks.begin(), nicks.end())));
-		columns[COLUMN_HUB] = Text::toT(Util::toString(StringList(hubs.begin(), hubs.end())));
+		columns[COLUMN_NICK] = Text::toT(Text::toDisplayName(Util::toString(StringList(nicks.begin(), nicks.end()))));
+		columns[COLUMN_HUB] = Text::toT(Text::toDisplayName(Util::toString(StringList(hubs.begin(), hubs.end()))));
 		columns[COLUMN_SLOTS] = Text::toT(std::to_string(freeSlots) + '/' + std::to_string(slots));
 
 	} else {

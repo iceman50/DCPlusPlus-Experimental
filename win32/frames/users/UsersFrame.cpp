@@ -328,7 +328,7 @@ void UsersFrame::UserInfo::update(const UserPtr& u, bool visible) {
 	if(fu) {
 		isFavorite = true;
 		grantSlot = fu->isSet(FavoriteUser::FLAG_GRANTSLOT);
-		columns[COLUMN_NICK] = Text::toT(fu->getNick());
+		columns[COLUMN_NICK] = Text::toT(Text::toDisplayName(fu->getNick()));
 		if(!visible) {
 			return;
 		}

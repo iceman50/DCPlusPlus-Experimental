@@ -28,7 +28,7 @@
 namespace UserPresentation {
 
 tstring getNicks(const CID& cid) {
-	return Text::toT(Util::toString(ClientManager::getInstance()->getNicks(cid)));
+	return Text::toT(Text::toDisplayName(Util::toString(ClientManager::getInstance()->getNicks(cid))));
 }
 
 pair<tstring, bool> getHubNames(const CID& cid) {
@@ -36,16 +36,16 @@ pair<tstring, bool> getHubNames(const CID& cid) {
 	if(hubs.empty()) {
 		return make_pair(T_("Offline"), false);
 	} else {
-		return make_pair(Text::toT(Util::toString(hubs)), true);
+		return make_pair(Text::toT(Text::toDisplayName(Util::toString(hubs))), true);
 	}
 }
 
 tstring getNick(const HintedUser& user) {
-	return Text::toT(ClientManager::getInstance()->getNick(user));
+	return Text::toT(Text::toDisplayName(ClientManager::getInstance()->getNick(user)));
 }
 
 tstring getHubName(const HintedUser& user) {
-	return Text::toT(ClientManager::getInstance()->getHubName(user));
+	return Text::toT(Text::toDisplayName(ClientManager::getInstance()->getHubName(user)));
 }
 
 void getHubStatus(const string& url, tstring& statusText, int& statusIcon)

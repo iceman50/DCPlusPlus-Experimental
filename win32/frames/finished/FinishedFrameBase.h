@@ -266,7 +266,7 @@ private:
 				StringList nicks;
 				for(auto& i: entry->getUsers())
 					nicks.push_back(Util::toString(ClientManager::getInstance()->getNicks(i)));
-				columns[FILES_COLUMN_NICKS] = Text::toT(Util::toString(nicks));
+				columns[FILES_COLUMN_NICKS] = Text::toT(Text::toDisplayName(Util::toString(nicks)));
 			}
 			columns[FILES_COLUMN_TRANSFERRED] = Text::toT(Util::formatBytes(entry->getTransferred()));
 			columns[FILES_COLUMN_PERCENTAGE] = Text::toT(Util::toString(entry->getTransferredPercentage()) + '%');

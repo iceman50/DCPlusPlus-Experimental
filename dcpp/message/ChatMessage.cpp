@@ -30,6 +30,7 @@
 #include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/message/Tagger.h>
 #include <dcpp/util/Util.h>
+#include <dcpp/util/text/Text.h>
 
 namespace dcpp {
 
@@ -87,7 +88,8 @@ messageTimestamp(messageTimestamp)
 	}
 
 	nick = sender.getNick();
-	tmp = nick;
+	// A nick must not reorder or break the line it is shown in (L#1425276).
+	tmp = Text::toDisplayName(nick);
 	// let's *not* obey the spec here and add a space after the star. :P
 	tmp = thirdPerson ? "* " + tmp + " " : "<" + tmp + ">";
 	message += tmp + " ";
@@ -100,19 +102,22 @@ messageTimestamp(messageTimestamp)
 	// The configured own-nickname color intentionally takes precedence over user-match text color.
 	htmlMessage += addSpan(ownMessage ? "ownNick" : "nick", tmp, styleAttr, &style) + " ";
 
-	// Check all '<' and '[' after newlines in plain messages as they're probably
-	// pastes. RTF0 whitespace and markers must reach the CommonMark parser
-	// byte-for-byte after ADC unescaping.
-	tmp = text;
+	// The chat display starts a new line at a lone CR, vertical tab, form feed, U+2028 or U+2029
+	// as well as at LF, so make them all LF before looking for lines that imitate chat.
+	tmp = Text::normalizeLineBreaks(text);
+
+	// Mark lines in plain messages that start like a timestamp, nick, action or status line, as
+	// they're either pastes or attempts to show text as coming from someone else. RTF0 text
+	// reaches the CommonMark parser unmarked; RichText marks such lines itself.
 	if(!richText) {
 		size_t i = 0;
 		while((i = tmp.find('\n', i)) != string::npos) {
 			++i;
-			if(i < tmp.size()) {
-				if(tmp[i] == '[' || tmp[i] == '<') {
-					tmp.insert(i, "- ");
-					i += 2;
-				}
+			auto start = tmp.find_first_not_of(" \t", i);
+			if(start != string::npos && tmp.find('\n', i) >= start &&
+				(tmp[start] == '[' || tmp[start] == '<' || tmp[start] == '*')) {
+				tmp.insert(start, "- ");
+				i = start + 2;
 			}
 		}
 	}

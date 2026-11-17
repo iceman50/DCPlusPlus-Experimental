@@ -43,6 +43,7 @@ namespace Text {
 using std::abs;
 
 const string utf8 = "utf-8"; // optimization
+const string replacementChar = "\xef\xbf\xbd";
 string systemCharset;
 
 void initialize() {
@@ -288,6 +289,71 @@ string nmdcToUtf8(const string& str, const string& charset) {
 		return validateUtf8(str) ? str : sanitizeUtf8(str);
 	}
 	return toUtf8(str, charset);
+}
+
+size_t directionalFormattingLength(const string& str, size_t pos) noexcept {
+	if(pos + 2 >= str.size() || static_cast<uint8_t>(str[pos]) != 0xe2)
+		return 0;
+	const auto b1 = static_cast<uint8_t>(str[pos + 1]), b2 = static_cast<uint8_t>(str[pos + 2]);
+	if(b1 == 0x80 && b2 >= 0xaa && b2 <= 0xae) return 3; // U+202A-U+202E: embeddings, overrides, pop
+	if(b1 == 0x81 && b2 >= 0xa6 && b2 <= 0xa9) return 3; // U+2066-U+2069: isolates, pop
+	return 0;
+}
+
+size_t lineBreakLength(const string& str, size_t pos) noexcept {
+	if(pos >= str.size())
+		return 0;
+	const auto b0 = static_cast<uint8_t>(str[pos]);
+	if(b0 == '\r')
+		return pos + 1 < str.size() && str[pos + 1] == '\n' ? 2 : 1;
+	if(b0 == '\n' || b0 == '\v' || b0 == '\f')
+		return 1;
+	if(b0 == 0xc2 && pos + 1 < str.size() && static_cast<uint8_t>(str[pos + 1]) == 0x85)
+		return 2; // NEL
+	if(b0 == 0xe2 && pos + 2 < str.size() && static_cast<uint8_t>(str[pos + 1]) == 0x80 &&
+		(static_cast<uint8_t>(str[pos + 2]) == 0xa8 || static_cast<uint8_t>(str[pos + 2]) == 0xa9))
+		return 3; // U+2028 LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR
+	return 0;
+}
+
+string toDisplayName(const string& str) {
+	string ret;
+	ret.reserve(str.size());
+	for(size_t i = 0; i < str.size();) {
+		const auto b0 = static_cast<uint8_t>(str[i]);
+		size_t length = 0;
+		if(b0 < 0x20 || b0 == 0x7f) {
+			length = lineBreakLength(str, i);
+			if(!length) length = 1;
+		} else if(b0 == 0xc2 && i + 1 < str.size() && static_cast<uint8_t>(str[i + 1]) >= 0x80 &&
+			static_cast<uint8_t>(str[i + 1]) <= 0x9f) {
+			length = 2; // C1 controls U+0080-U+009F, NEL among them
+		} else {
+			length = directionalFormattingLength(str, i);
+			if(!length) length = lineBreakLength(str, i);
+		}
+		if(length) {
+			ret += replacementChar;
+			i += length;
+		} else {
+			ret += str[i++];
+		}
+	}
+	return ret;
+}
+
+string normalizeLineBreaks(const string& str) {
+	string ret;
+	ret.reserve(str.size());
+	for(size_t i = 0; i < str.size();) {
+		if(const auto length = lineBreakLength(str, i)) {
+			ret += '\n';
+			i += length;
+		} else {
+			ret += str[i++];
+		}
+	}
+	return ret;
 }
 
 const string& utf8ToAcp(const string& str, string& tmp, const string& toCharset) noexcept {

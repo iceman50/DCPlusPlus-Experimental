@@ -38,6 +38,7 @@
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/util/text/StringTokenizer.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/core/version.h>
 
 #ifndef _WIN32
@@ -319,7 +320,20 @@ static const char badChars[] = {
 string Util::validateFileName(string tmp) {
 	string::size_type i = 0;
 
-	// First, eliminate forbidden chars
+	// Directional formatting and Unicode line breaks are valid in Windows file names but make a
+	// name such as "photo<U+202E>gpj.exe" show as "photoexe.jpg", in DC++ and in Explorer.
+	// Show where they were instead.
+	for(i = 0; i < tmp.size(); ++i) {
+		auto length = Text::directionalFormattingLength(tmp, i);
+		if(!length && Text::lineBreakLength(tmp, i) == 3) length = 3;
+		if(length) {
+			tmp.replace(i, length, Text::replacementChar);
+			i += Text::replacementChar.size() - 1;
+		}
+	}
+	i = 0;
+
+	// Then, eliminate forbidden chars
 	while( (i = tmp.find_first_of(badChars, i)) != string::npos) {
 		tmp[i] = '_';
 		i++;

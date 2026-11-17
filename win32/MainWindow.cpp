@@ -1607,7 +1607,7 @@ public:
 				dl.loadFile(i);
 				int matched = QueueManager::getInstance()->matchListing(dl);
 				LogManager::getInstance()->message(str(FN_("%1%: matched %2% file", "%1%: matched %2% files", matched)
-				% Util::toString(ClientManager::getInstance()->getNicks(user))
+				% Text::toDisplayName(Util::toString(ClientManager::getInstance()->getNicks(user)))
 				% matched), LogMessage::SEV_INFO, _("Queue"));
 			} catch(const Exception&) {
 			}

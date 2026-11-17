@@ -123,7 +123,7 @@ private:
 		ItemInfo(bool root, DirectoryListing::Directory* d) : type(USER), dir(d), itemSize(0) { }
 
 		ItemInfo(DirectoryListing::File* f) : type(FILE), file(f), itemSize(f->getSize()) {
-			columns[COLUMN_FILENAME] = Text::toT(f->getName());
+			columns[COLUMN_FILENAME] = Text::toT(Text::toDisplayName(f->getName()));
 			columns[COLUMN_TYPE] = Util::getFileExt(columns[COLUMN_FILENAME]);
 			if(!columns[COLUMN_TYPE].empty() && columns[COLUMN_TYPE][0] == '.')
 				columns[COLUMN_TYPE].erase(0, 1);
@@ -136,7 +136,7 @@ private:
 		}
 		ItemInfo(DirectoryListing::Directory* d) : ItemInfo(d, d->getComplete() ? d->getTotalSize() : d->getRemoteSize()) { }
 		ItemInfo(DirectoryListing::Directory* d, int64_t aSize) : type(DIRECTORY), dir(d), itemSize(aSize) {
-			columns[COLUMN_FILENAME] = Text::toT(d->getName());
+			columns[COLUMN_FILENAME] = Text::toT(Text::toDisplayName(d->getName()));
 			columns[COLUMN_EXACTSIZE] = itemSize >= 0 ? Text::toT(Util::formatExactSize(itemSize)) : _T("?");
 			columns[COLUMN_SIZE] = itemSize >= 0 ? Text::toT(Util::formatBytes(itemSize)) : _T("?");
 			if(d->getRemoteDate() > 0)

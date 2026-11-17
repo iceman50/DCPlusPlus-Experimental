@@ -1317,7 +1317,7 @@ bool HubFrame::UserInfo::update(const Identity& identity, int sortCol) {
 	if(sortCol != -1)
 		old = columns[sortCol];
 
-	columns[COLUMN_NICK] = Text::toT(identity.getNick());
+	columns[COLUMN_NICK] = Text::toT(Text::toDisplayName(identity.getNick()));
 	columns[COLUMN_SHARED] = Text::toT(Util::formatBytes(identity.getBytesShared()));
 	columns[COLUMN_DESCRIPTION] = Text::toT(identity.getDescription());
 	columns[COLUMN_TAG] = Text::toT(identity.getTag());
@@ -1481,7 +1481,7 @@ void HubFrame::on(ClientListener::UserUpdated, Client*, const OnlineUser& user) 
 				if(client->get(HubSettings::ShowJoins) ||
 					(client->get(HubSettings::FavShowJoins) && FavoriteManager::getInstance()->isFavoriteUser(u.user)))
 				{
-					addStatus(str(TF_("Joins: %1%") % Text::toT(u.identity.getNick())));
+					addStatus(str(TF_("Joins: %1%") % Text::toT(Text::toDisplayName(u.identity.getNick()))));
 				}
 			}
 		}, unique_ptr<UserTask>(task));
@@ -1510,7 +1510,7 @@ void HubFrame::on(ClientListener::UserRemoved, Client*, const OnlineUser& user) 
 			if(client->get(HubSettings::ShowJoins) ||
 				(client->get(HubSettings::FavShowJoins) && FavoriteManager::getInstance()->isFavoriteUser(u.user)))
 			{
-				addStatus(str(TF_("Parts: %1%") % Text::toT(u.identity.getNick())));
+				addStatus(str(TF_("Parts: %1%") % Text::toT(Text::toDisplayName(u.identity.getNick()))));
 			}
 		}, unique_ptr<UserTask>(task));
 		updateUsers = true;
@@ -1551,9 +1551,9 @@ void HubFrame::on(GetPassword, Client*) noexcept {
 }
 
 void HubFrame::on(HubUpdated, Client*) noexcept {
-	string hubName = client->getHubName();
+	string hubName = Text::toDisplayName(client->getHubName());
 	if(!client->getHubDescription().empty()) {
-		hubName += " - " + client->getHubDescription();
+		hubName += " - " + Text::toDisplayName(client->getHubDescription());
 	}
 	hubName += " (" + client->getHubUrl() + ")";
 #ifdef _DEBUG

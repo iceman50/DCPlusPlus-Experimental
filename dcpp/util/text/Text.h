@@ -112,6 +112,28 @@ namespace Text {
 	UTF-8 hub, invalid sequences are replaced instead of passed through. */
 	string nmdcToUtf8(const string& str, const string& charset);
 
+	/** U+FFFD, shown in place of characters that would change how other text is displayed. */
+	extern const string replacementChar;
+
+	/** Length in bytes of the UTF-8 directional formatting character at pos (U+202A-U+202E,
+	U+2066-U+2069), or 0. These reorder the text that follows them, so a name such as
+	"photo<U+202E>gpj.exe" displays as "photoexe.jpg". The implicit marks U+200E, U+200F and
+	U+061C are not included: they cannot reorder letters, and right-to-left text relies on them. */
+	size_t directionalFormattingLength(const string& str, size_t pos) noexcept;
+
+	/** Length in bytes of the UTF-8 line or paragraph break at pos (CR, LF, vertical tab, form
+	feed, NEL, U+2028, U+2029), or 0. A CRLF pair counts as one break. */
+	size_t lineBreakLength(const string& str, size_t pos) noexcept;
+
+	/** Text for showing a single-line name that another user chose (a nick, hub name or file
+	name). Control characters, line breaks and directional formatting characters are each
+	replaced with U+FFFD, so the name can neither reorder nor start a new line in what is shown
+	around it, and the replacement stays visible. */
+	string toDisplayName(const string& str);
+
+	/** Turn every kind of line break (see lineBreakLength) into a single LF. */
+	string normalizeLineBreaks(const string& str);
+
 	inline char asciiToLower(char c) { dcassert((((uint8_t)c) & 0x80) == 0); return (char)tolower(c); }
 
 	wchar_t toLower(wchar_t c) noexcept;
