@@ -161,3 +161,72 @@ TEST(testspeaker, external_removal_waits_for_active_callback) {
 	delete listener;
 	delete speaker;
 }
+
+namespace {
+
+class CountingListener : public TestSpeakerListener {
+public:
+	void on(Event, bool) noexcept override { ++calls; }
+	int calls = 0;
+};
+
+/** Reacts to an event by registering more listeners and firing again on the same thread, the
+pattern that let upstream DC++ 0.884 replace the shared snapshot its outer fire() was iterating. */
+class ReactingListener : public TestSpeakerListener {
+public:
+	explicit ReactingListener(TestSpeaker& speaker_) : speaker(speaker_) { }
+	void on(Event, bool) noexcept override {
+		if(depth++ > 0) return;
+		for(auto& listener: added) speaker.addListener(&listener);
+		speaker.fire(Event(), false);
+		// With a shared snapshot, the outer fire() is now iterating freed memory. Reuse that memory
+		// so such an implementation calls the wrong listeners instead of passing by luck.
+		std::vector<std::vector<char>> churn;
+		for(int i = 0; i < 64; ++i) churn.emplace_back(16, static_cast<char>(0xEE));
+	}
+	TestSpeaker& speaker;
+	std::vector<CountingListener> added = std::vector<CountingListener>(64);
+	int depth = 0;
+};
+
+class RemovingListener : public TestSpeakerListener {
+public:
+	RemovingListener(TestSpeaker& speaker_, CountingListener& victim_) : speaker(speaker_), victim(victim_) { }
+	void on(Event, bool) noexcept override { speaker.removeListener(&victim); }
+	TestSpeaker& speaker;
+	CountingListener& victim;
+};
+
+} // namespace
+
+TEST(testspeaker, reentrant_fire_calls_each_listener_of_each_event_once) {
+	TestSpeaker speaker;
+	ReactingListener reacting(speaker);
+	CountingListener after;
+	speaker.addListener(&reacting);
+	speaker.addListener(&after);
+
+	speaker.fire(TestSpeakerListener::Event(), false);
+
+	// The outer event reaches the two original listeners; the inner one also reaches every
+	// listener added before it. Listeners added during the outer event are not called by it.
+	EXPECT_EQ(2, after.calls);
+	EXPECT_EQ(2, reacting.depth);
+	for(const auto& listener: reacting.added) {
+		EXPECT_EQ(1, listener.calls);
+	}
+}
+
+TEST(testspeaker, listener_removed_earlier_in_the_same_event_is_not_called) {
+	TestSpeaker speaker;
+	CountingListener victim;
+	RemovingListener remover(speaker, victim);
+	speaker.addListener(&remover);
+	speaker.addListener(&victim);
+
+	// Code normally deletes a listener right after removing it, so calling it later in the same
+	// event would use a destroyed object.
+	speaker.fire(TestSpeakerListener::Event(), false);
+	EXPECT_EQ(0, victim.calls);
+	EXPECT_FALSE(speaker.contains(&victim));
+}
