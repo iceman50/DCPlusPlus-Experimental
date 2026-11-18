@@ -205,6 +205,14 @@ private:
 	Part* tipPart; /// part currently showing the tooltip
 	std::vector<tstring> lastLines;
 	enum { MAX_LINES = 10 }; /// @todo configurable?
+	enum { MAX_LINE_LENGTH = 256 };
+
+public:
+	/// The tooltip entry for a status line: its first line, shortened. Status text can come from
+	/// a hub (banners of any length); whole entries could make the tooltip cover the screen.
+	static tstring historyLine(const tstring& text);
+
+private:
 
 	Part& getPart(unsigned part);
 	void updatePartSizes();

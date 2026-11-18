@@ -37,6 +37,7 @@
 #include <dwt/widgets/Frame.h>
 #include <dwt/widgets/ToolTip.h>
 
+#include <algorithm>
 #include <numeric>
 
 #include "AppearanceDraw.h"
@@ -91,6 +92,21 @@ void StatusBar::setSize(unsigned part, unsigned size) {
 	parts[part]->desiredSize = size;
 }
 
+tstring StatusBar::historyLine(const tstring& text) {
+	// Every character a tooltip or the RichEdit chat shows as a line break.
+	const auto lineBreak = std::find_if(text.begin(), text.end(), [](TCHAR c) {
+		return c == _T('\r') || c == _T('\n') || c == _T('\v') || c == _T('\f') ||
+			c == static_cast<TCHAR>(0x85) || c == static_cast<TCHAR>(0x2028) || c == static_cast<TCHAR>(0x2029);
+	});
+	tstring line(text.begin(), lineBreak);
+	const bool more = std::any_of(lineBreak, text.end(), [](TCHAR c) { return !_istspace(c); });
+	if(line.size() > MAX_LINE_LENGTH || more) {
+		line.resize(std::min<size_t>(line.size(), MAX_LINE_LENGTH - 3));
+		line += _T("...");
+	}
+	return line;
+}
+
 void StatusBar::setText(unsigned part, const tstring& text, bool alwaysResize) {
 	dwtassert(part < parts.size(), "Invalid part number");
 	Part& info = getPart(part);
@@ -98,7 +114,7 @@ void StatusBar::setText(unsigned part, const tstring& text, bool alwaysResize) {
 	if(part != fill) {
 		info.updateSize(this, alwaysResize);
 	} else if(!text.empty()) {
-		lastLines.push_back(text);
+		lastLines.push_back(historyLine(text));
 		while(lastLines.size() > MAX_LINES) {
 			lastLines.erase(lastLines.begin());
 		}
