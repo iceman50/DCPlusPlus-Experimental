@@ -117,6 +117,13 @@ public:
 	  */
 	int addValue( const tstring & val );
 
+	/// Appends several values to the ComboBox.
+	/** Much faster than calling addValue for each one: until the list holds its
+	  * minimum visible number of items (30 by default), Windows resizes the
+	  * drop-down list after every insertion, which costs about 1 ms per item.
+	  */
+	void addValues(const std::vector<tstring>& values);
+
 	/// Appends a value to the ComboBox.
 	/** The return value is the index of the new item appended.
 	  */

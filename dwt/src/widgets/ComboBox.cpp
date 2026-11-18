@@ -69,6 +69,24 @@ void ComboBox::create( const Seed & cs ) {
 	getTextBox();
 }
 
+void ComboBox::addValues(const std::vector<tstring>& values) {
+	if(values.empty()) {
+		return;
+	}
+	/* Size the drop-down list once at the end instead of after every item.
+	CB_GETMINVISIBLE returns 0 without common controls 6. */
+	const auto visible = values.size() > 1 ? sendMessage(CB_GETMINVISIBLE) : 0;
+	if(visible > 1) {
+		sendMessage(CB_SETMINVISIBLE, 1);
+	}
+	for(const auto& value: values) {
+		addValue(value);
+	}
+	if(visible > 1) {
+		sendMessage(CB_SETMINVISIBLE, visible);
+	}
+}
+
 tstring ComboBox::getValue( int index ) {
 	// Uses CB_GETLBTEXTLEN and CB_GETLBTEXT
 	int txtLength = ComboBox_GetLBTextLen( handle(), index );
