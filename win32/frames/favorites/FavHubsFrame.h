@@ -98,6 +98,9 @@ private:
 	void fillGroupMenu(Menu* menu);
 	void fillList();
 	void refresh();
+	void updateRow(int row);
+	void updateStatus(int row);
+	void updateStatus();
 	FavoriteHubEntryList getSelection() const;
 	void select(const FavoriteHubEntryList& entries);
 	void openSelected();

@@ -216,7 +216,14 @@ FavHubsFrame::StateKeeper::~StateKeeper() {
 	// restore visual updating now, otherwise it doesn't always scroll
 	hubs->sendMessage(WM_SETREDRAW, TRUE);
 
-	hubs->scroll(0, scroll);
+	// The scroll position is in pixels in group view but in rows otherwise, and scroll() takes pixels.
+	auto dy = scroll;
+	if(!hubs->isGrouped() && hubs->size() > 0) {
+		RECT rc;
+		if(ListView_GetItemRect(hubs->handle(), 0, &rc, LVIR_BOUNDS))
+			dy *= rc.bottom - rc.top;
+	}
+	hubs->scroll(0, dy);
 
 	for(auto i: selected) {
 		int pos = hubs->findData(reinterpret_cast<LPARAM>(i));
@@ -250,10 +257,20 @@ void FavHubsFrame::handleAdd() {
 
 void FavHubsFrame::handleProperties() {
 	if(hubs->countSelected() == 1) {
-		FavHubProperties dlg(this, reinterpret_cast<FavoriteHubEntryPtr>(hubs->getData(hubs->getSelected())));
+		auto entry = reinterpret_cast<FavoriteHubEntryPtr>(hubs->getData(hubs->getSelected()));
+		const auto group = entry->getGroup();
+		const auto groups = getSortedGroups();
+		FavHubProperties dlg(this, entry);
 		if(dlg.run() == IDOK) {
-			StateKeeper keeper(hubs);
-			refresh();
+			// Update the row in place unless the hub moved to another group or the dialog changed
+			// the groups; the list may have been rebuilt while the dialog was open, so look it up again.
+			auto row = hubs->findData(reinterpret_cast<LPARAM>(entry));
+			if(row != -1 && entry->getGroup() == group && getSortedGroups() == groups) {
+				updateRow(row);
+			} else {
+				StateKeeper keeper(hubs);
+				refresh();
+			}
 		}
 	}
 }
@@ -427,28 +444,45 @@ void FavHubsFrame::fillList() {
 		} else
 			index = -1;
 
-		tstring statusText;
-		int statusIcon;
-		UserPresentation::getHubStatus(entry->getServer(), statusText, statusIcon);
-
-		auto row = hubs->insert({
-			statusText,
-			Text::toT(entry->getName()),
-			Text::toT(entry->getHubDescription()),
-			Text::toT(entry->get(HubSettings::Nick)),
-			tstring(entry->getPassword().size(), '*'),
-			Text::toT(entry->getServer()),
-			Text::toT(entry->get(HubSettings::Description)),
-			Text::toT(group)
-		}, reinterpret_cast<LPARAM>(entry), index);
-
-		hubs->setIcon(row, COLUMN_STATUS, statusIcon);
+		updateRow(hubs->insert(TStringList(COLUMN_LAST), reinterpret_cast<LPARAM>(entry), index));
 	}
 }
 
 void FavHubsFrame::refresh() {
 	hubs->clear();
 	fillList();
+}
+
+void FavHubsFrame::updateRow(int row) {
+	auto entry = reinterpret_cast<FavoriteHubEntryPtr>(hubs->getData(row));
+	const tstring texts[COLUMN_LAST] = {
+		tstring(),
+		Text::toT(entry->getName()),
+		Text::toT(entry->getHubDescription()),
+		Text::toT(entry->get(HubSettings::Nick)),
+		tstring(entry->getPassword().size(), '*'),
+		Text::toT(entry->getServer()),
+		Text::toT(entry->get(HubSettings::Description)),
+		Text::toT(entry->getGroup())
+	};
+	for(int column = COLUMN_FIRST + 1; column < COLUMN_LAST; ++column)
+		hubs->setText(row, column, texts[column]);
+	updateStatus(row);
+}
+
+void FavHubsFrame::updateStatus(int row) {
+	tstring statusText;
+	int statusIcon;
+	UserPresentation::getHubStatus(reinterpret_cast<FavoriteHubEntryPtr>(hubs->getData(row))->getServer(), statusText, statusIcon);
+	hubs->setText(row, COLUMN_STATUS, statusText);
+	hubs->setIcon(row, COLUMN_STATUS, statusIcon);
+}
+
+void FavHubsFrame::updateStatus() {
+	// Only the status column changes; rebuilding the list would lose the scroll position and
+	// selection every time any hub connects, disconnects or fails a reconnect attempt.
+	for(size_t row = 0, n = hubs->size(); row < n; ++row)
+		updateStatus(static_cast<int>(row));
 }
 
 void FavHubsFrame::openSelected() {
@@ -477,10 +511,10 @@ void FavHubsFrame::on(FavoriteRemoved, const FavoriteHubEntryPtr e) noexcept {
 
 void FavHubsFrame::on(ClientManagerListener::ClientConnected, Client*) noexcept
 {
-	callAsync([=] { refresh(); });
+	callAsync([this] { updateStatus(); });
 }
 
 void FavHubsFrame::on(ClientManagerListener::ClientDisconnected, Client*) noexcept
 {
-	callAsync([=] { refresh(); });
+	callAsync([this] { updateStatus(); });
 }

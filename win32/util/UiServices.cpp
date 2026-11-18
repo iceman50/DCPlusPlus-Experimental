@@ -60,7 +60,9 @@ void initFont() {
 }
 
 void setStaticWindowState(const string& id, bool open) {
-	mainWindow->setStaticWindowState(id, open);
+	// Frames are also opened without a main window by the win32 tests.
+	if(mainWindow)
+		mainWindow->setStaticWindowState(id, open);
 }
 
 bool checkNick() {
