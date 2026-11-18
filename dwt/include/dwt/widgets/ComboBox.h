@@ -117,13 +117,6 @@ public:
 	  */
 	int addValue( const tstring & val );
 
-	/// Appends several values to the ComboBox.
-	/** Much faster than calling addValue for each one: until the list holds its
-	  * minimum visible number of items (30 by default), Windows resizes the
-	  * drop-down list after every insertion, which costs about 1 ms per item.
-	  */
-	void addValues(const std::vector<tstring>& values);
-
 	/// Appends a value to the ComboBox.
 	/** The return value is the index of the new item appended.
 	  */
@@ -180,6 +173,15 @@ private:
 	DropListBoxPtr listBox;
 	TextBoxPtr textBox;
 
+	/* Until a combo box holds its minimum visible number of items (30 by default),
+	Windows resizes the drop-down list after every insertion, about 1 ms each.
+	Consecutive insertions size the list for one item and restore the minimum
+	before the list can be opened. */
+	unsigned batchedInserts = 0;
+	LRESULT savedMinVisible = 0;
+	void prepareInsert();
+	void restoreMinVisible();
+
 	// aspects::Selection
 	int getSelectedImpl() const;
 	void setSelectedImpl( int idx );
@@ -233,26 +235,6 @@ inline void ComboBox::clearImpl()
 inline void ComboBox::eraseImpl( int index )
 {
 	ComboBox_DeleteString( handle(), index );
-}
-
-inline int ComboBox::addValue( const tstring & val )
-{
-	int newIdx = ComboBox_AddString( handle(), ( TCHAR * ) val.c_str() );
-	if ( newIdx == CB_ERR )
-	{
-		dwtWin32DebugFail("Error while trying to add string into ComboBox");
-	}
-	return newIdx;
-}
-
-inline int ComboBox::insertValue( int pos, const tstring & val )
-{
-	int newIdx = ComboBox_InsertString( handle(), pos, ( TCHAR * ) val.c_str() );
-	if ( newIdx == CB_ERR )
-	{
-		dwtWin32DebugFail("Error while trying to insert string into ComboBox");
-	}
-	return newIdx;
 }
 
 inline size_t ComboBox::sizeImpl() const {

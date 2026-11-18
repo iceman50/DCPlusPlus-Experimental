@@ -101,15 +101,13 @@ throttleTime(0)
 		timeBound[1] = cur->addChild(ControlSeeds::Dialog::comboBox);
 	}
 
-	std::vector<tstring> hours;
-	hours.push_back(T_("Midnight"));
-	for (int j = 1; j < 12; ++j)
-		hours.push_back(Text::toT(std::to_string(j) + " AM")); ///@todo use the user locale
-	hours.push_back(T_("Noon"));
-	for (int j = 1; j < 12; ++j)
-		hours.push_back(Text::toT(std::to_string(j) + " PM")); ///@todo use the user locale
 	for (int i = 0; i < 2; ++i) {
-		timeBound[i]->addValues(hours);
+		timeBound[i]->addValue(T_("Midnight"));
+		for (int j = 1; j < 12; ++j)
+			timeBound[i]->addValue(Text::toT(std::to_string(j) +" AM").c_str()); ///@todo use the user locale
+	 	timeBound[i]->addValue(T_("Noon"));
+		for (int j = 1; j < 12; ++j)
+			timeBound[i]->addValue(Text::toT(std::to_string(j) +" PM").c_str()); ///@todo use the user locale
 		timeBound[i]->setSelected(i?SETTING(BANDWIDTH_LIMIT_END):SETTING(BANDWIDTH_LIMIT_START));
 		timeBound[i]->setHelpId(IDH_SETTINGS_BWLIMIT_SECONDARY_ENABLE);
 	}

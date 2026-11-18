@@ -69,20 +69,61 @@ void ComboBox::create( const Seed & cs ) {
 	getTextBox();
 }
 
-void ComboBox::addValues(const std::vector<tstring>& values) {
-	if(values.empty()) {
+namespace {
+
+UINT restoreMinVisibleMessage() {
+	static const UINT message = ::RegisterWindowMessage(_T("dwt.ComboBox.RestoreMinVisible"));
+	return message;
+}
+
+}
+
+int ComboBox::addValue( const tstring & val )
+{
+	prepareInsert();
+	int newIdx = ComboBox_AddString( handle(), ( TCHAR * ) val.c_str() );
+	if ( newIdx == CB_ERR )
+	{
+		dwtWin32DebugFail("Error while trying to add string into ComboBox");
+	}
+	return newIdx;
+}
+
+int ComboBox::insertValue( int pos, const tstring & val )
+{
+	prepareInsert();
+	int newIdx = ComboBox_InsertString( handle(), pos, ( TCHAR * ) val.c_str() );
+	if ( newIdx == CB_ERR )
+	{
+		dwtWin32DebugFail("Error while trying to insert string into ComboBox");
+	}
+	return newIdx;
+}
+
+void ComboBox::prepareInsert() {
+	if(savedMinVisible || !handle()) {
 		return;
 	}
-	/* Size the drop-down list once at the end instead of after every item.
-	CB_GETMINVISIBLE returns 0 without common controls 6. */
-	const auto visible = values.size() > 1 ? sendMessage(CB_GETMINVISIBLE) : 0;
-	if(visible > 1) {
+	/* The posted message arrives once the inserting code returns to the message
+	loop, before any mouse or keyboard input that could open the list. A single
+	insertion costs only this post. */
+	if(!batchedInserts++) {
+		::PostMessage(handle(), restoreMinVisibleMessage(), 0, 0);
+		return;
+	}
+	// CB_GETMINVISIBLE returns 0 without common controls 6.
+	const auto visible = sendMessage(CB_GETMINVISIBLE);
+	if(visible > 1 && static_cast<LRESULT>(size()) < visible) {
 		sendMessage(CB_SETMINVISIBLE, 1);
+		savedMinVisible = visible;
 	}
-	for(const auto& value: values) {
-		addValue(value);
-	}
-	if(visible > 1) {
+}
+
+void ComboBox::restoreMinVisible() {
+	batchedInserts = 0;
+	if(savedMinVisible) {
+		const auto visible = savedMinVisible;
+		savedMinVisible = 0;
 		sendMessage(CB_SETMINVISIBLE, visible);
 	}
 }
@@ -155,6 +196,27 @@ void ComboBox::clearColorImpl() {
 }
 
 bool ComboBox::handleMessage(const MSG& msg, LRESULT& retVal) {
+	if(msg.message == restoreMinVisibleMessage()) {
+		restoreMinVisible();
+		retVal = 0;
+		return true;
+	}
+	if(savedMinVisible) {
+		switch(msg.message) {
+		// Anything that opens the list or reads its size sees the real minimum.
+		case CB_SHOWDROPDOWN:
+		case CB_GETDROPPEDCONTROLRECT:
+		case CB_GETMINVISIBLE:
+		case CB_SETMINVISIBLE:
+		case WM_LBUTTONDOWN:
+		case WM_LBUTTONDBLCLK:
+		case WM_KEYDOWN:
+		case WM_SYSKEYDOWN:
+			restoreMinVisible();
+			break;
+		}
+	}
+
 	const bool handled = BaseType::handleMessage(msg, retVal);
 	if(handled || !isManualAppearance() ||
 		getAppearancePolicy() == AppearancePolicy::Native ||
