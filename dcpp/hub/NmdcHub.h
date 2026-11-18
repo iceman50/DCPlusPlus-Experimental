@@ -47,7 +47,9 @@ public:
 		bool echo = true, bool /*explicitRichText*/ = false);
 	virtual void sendUserCmd(const UserCommand& command, const ParamMap& params);
 	virtual void search(int aSizeType, int64_t aSize, int aFileType, const string& aString, const string& aToken, const StringList& aExtList, const string& aKey = Util::emptyString);
-	virtual void password(const string& aPass) { send("$MyPass " + fromUtf8(aPass) + "|"); }
+	// Escaped like chat: hubs store passwords set through chat commands as the client sent them,
+	// and a raw "|" would end the command early.
+	virtual void password(const string& aPass) { send("$MyPass " + fromUtf8(escape(aPass)) + "|"); }
 	virtual void infoImpl() { myInfo(false); }
 
 	virtual size_t getUserCount() const { Lock l(cs); return users.size(); }

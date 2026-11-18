@@ -428,4 +428,16 @@ TEST_F(NmdcEncodingTest, SavedSystemLocaleEncodingLoadsAsDefault) {
 	EXPECT_EQ(cp1251, chosen->getEncoding());
 }
 
+TEST_F(NmdcEncodingTest, PasswordIsEscapedLikeChat) {
+	// Hubs store a password set by a chat command as the client escaped it, so $MyPass must match
+	// (DC++ bug 2174731). A raw "|" would also end the command early.
+	SettingsManager::getInstance()->set(SettingsManager::NMDC_ENCODING, cp1251);
+	auto& hub = openHub();
+	hub.password("a$b|c&d&#36;" + textA);
+	EXPECT_TRUE(sentLine(hubOut, "$MyPass a&#36;b&#124;c&d&amp;#36;" + nickA + "|")) << ::testing::PrintToString(hubOut);
+
+	hub.hubMessage("+regme a$b|c&d&#36;" + textA);
+	EXPECT_TRUE(sentLine(hubOut, "<TestNick> +regme a&#36;b&#124;c&d&amp;#36;" + nickA + "|")) << ::testing::PrintToString(hubOut);
+}
+
 } // namespace
