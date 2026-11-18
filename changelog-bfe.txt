@@ -1,4 +1,4 @@
-== Unreleased - after 0.8842-RC3 !!!Experimental!!! ==
+== 11-17-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * [L#2174725] Keep the status bar history tooltip small: it joined the last ten status messages in full, so multi-line hub banners made it taller than the screen and it covered every window, taskbar included, until the mouse left the status bar. Each entry now shows its first line, shortened to 256 characters (iceman50)
 * [L#2173949] Keep the favorite hubs list in place: it no longer jumps back to the top and loses the selection whenever any hub connects, disconnects or fails a reconnect attempt (a regression since DC++ 0.840), and editing a hub's properties updates its row in place (iceman50)
 * [L#2174731] Escape the NMDC password like chat text, so a password containing "$" set with a hub chat command such as +regme or +passwd is accepted at login, and a "|" no longer ends the $MyPass command early (iceman50)
@@ -31,8 +31,6 @@
 * Refresh the Users window when an online user's details change; its handler had the wrong signature and was never called (iceman50)
 * Scan newly added share folders in the background instead of freezing the settings dialog until the whole folder has been read; the Sharing page shows "Scanning..." until each folder's size is known. Removing a folder that shares its virtual name with others no longer rescans them in the foreground, and folders added or removed during a share refresh are no longer lost or brought back by it (iceman50)
 * Report progress while a DC++ hash database is migrated on first start instead of stopping once its index has been read, and read the legacy trees in file order to avoid a disk seek per tree on hard disks. A 320,000-file (3.6 TiB) share migrates in about two minutes on an SSD (iceman50)
-
-== 11-15-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * Keep upstream DC++ storage conventions for drop-in replacement: installed settings use the existing DC++ AppData directories; portable settings remain beside the executable, without a bundled profile directory (iceman50)
 * Improve radio-button edges and native filename dropdown rendering; add direct magnet downloads, destination selection and remembered magnet actions (iceman50)
 * Fix oversized theme selectors, match custom checkbox glyphs to Windows, and theme scrollbars in native dialogs and toolbar customization (iceman50)
