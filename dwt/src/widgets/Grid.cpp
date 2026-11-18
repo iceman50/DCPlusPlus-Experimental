@@ -38,8 +38,49 @@
 #include <algorithm>
 #include <iterator>
 #include <numeric>
+#include <unordered_map>
 
 namespace dwt {
+
+namespace {
+
+/* A grid asks each child for its preferred size once while sizing rows, once while
+sizing columns and once more while placing it, and a nested grid answers by asking
+its own children the same way. A control N grids deep was measured about 3 * 2^N
+times per layout, each measurement reading its text into a device context. Nothing
+is resized while one layout or size query runs, so each answer is reused. */
+std::unordered_map<Control*, Point>* preferredSizes = nullptr;
+
+class PreferredSizeScope {
+public:
+	PreferredSizeScope() : owner(!preferredSizes) {
+		if(owner) preferredSizes = &sizes;
+	}
+	~PreferredSizeScope() {
+		if(owner) preferredSizes = nullptr;
+	}
+	PreferredSizeScope(const PreferredSizeScope&) = delete;
+	PreferredSizeScope& operator=(const PreferredSizeScope&) = delete;
+
+private:
+	const bool owner;
+	std::unordered_map<Control*, Point> sizes;
+};
+
+Point preferredSize(Control* widget) {
+	if(!preferredSizes) {
+		return widget->getPreferredSize();
+	}
+	auto known = preferredSizes->find(widget);
+	if(known != preferredSizes->end()) {
+		return known->second;
+	}
+	const auto size = widget->getPreferredSize();
+	preferredSizes->emplace(widget, size);
+	return size;
+}
+
+}
 
 Grid::Seed::Seed(size_t rows_, size_t cols_) :
 BaseType::Seed(0, WS_EX_CONTROLPARENT),
@@ -68,6 +109,7 @@ Point Grid::getPreferredSize() {
 	auto children = getChildren<Control>();
 	std::for_each(children.first, children.second, [this](Control* w) { getWidgetInfo(w); });
 
+	PreferredSizeScope cache;
 	std::vector<size_t> rowSize = calcSizes(rows, columns, 0, true);
 	std::vector<size_t> colSize = calcSizes(columns, rows, 0, false);
 	Point p(
@@ -82,7 +124,7 @@ Point Grid::getPreferredSize(size_t row, size_t column) const {
 
 	for(auto& i: widgetInfo) {
 		if(i.inCell(row, column) && i.w->hasStyle(WS_VISIBLE)) {
-			ret = i.w->getPreferredSize();
+			ret = preferredSize(i.w);
 			// TODO consider fractions...
 			if(i.colSpan > 1) {
 				auto spanSpacing = i.colSpan * spacing;
@@ -176,10 +218,14 @@ void Grid::layout() {
 	if(as.x < size.x && as.y < size.y)
 		size -= as;
 
+	// Children are moved when hr goes away, after the cache: a resized child grid
+	// lays out again and must measure its children at their new sizes.
+	util::HoldResize hr(this, std::distance(children.first, children.second));
+	PreferredSizeScope cache;
+
 	std::vector<size_t> rowSize = calcSizes(rows, columns, size.y, true);
 	std::vector<size_t> colSize = calcSizes(columns, rows, size.x, false);
 
-	util::HoldResize hr(this, std::distance(children.first, children.second));
 	for(auto i = children.first; i != children.second; ++i) {
 		WidgetInfo* wi = getWidgetInfo(*i);
 		if(!wi || wi->noResize) {
@@ -208,7 +254,7 @@ void Grid::layout() {
 		size_t h = std::accumulate(rowSize.begin() + r, rowSize.begin() + r + rs, static_cast<size_t>(0));
 		h += (rs-1)*spacing;
 
-		Point ps = wi->w->getPreferredSize();
+		Point ps = preferredSize(wi->w);
 
 		switch(columns[wi->column].align) {
 		case GridInfo::TOP_LEFT: w = ps.x; break;

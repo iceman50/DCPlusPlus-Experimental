@@ -40,7 +40,7 @@ constexpr auto MEASURE = std::chrono::milliseconds(500);
 constexpr auto TIMEOUT = std::chrono::seconds(120);
 constexpr UINT WM_TICK = WM_APP + 1;
 
-long paints = 0;
+long paints = 0, messages = 0;
 // Which messages each window class receives while a page is measured, so a
 // failure names what keeps the page repainting.
 bool recording = false;
@@ -52,6 +52,7 @@ int failures = 0;
 std::wstring className(HWND window);
 
 void countMessage(HWND window, UINT message) {
+	++messages;
 	if(message == WM_PAINT) {
 		++paints;
 		if(window && window == watched) ++watchedPaints;
@@ -139,12 +140,18 @@ struct Driver {
 		TreeView_GetItem(tree, &info);
 		page = text;
 		const auto windowsBefore = windowCount();
+		// Cycles spent on this thread stay comparable when other programs load the machine.
+		ULONG64 cyclesBefore = 0, cyclesAfter = 0;
+		QueryThreadCycleTime(GetCurrentThread(), &cyclesBefore);
+		const auto messagesBefore = messages;
 		const auto start = Clock::now();
 		TreeView_SelectItem(tree, item);
 		RedrawWindow(dialog, nullptr, nullptr, RDW_UPDATENOW | RDW_ALLCHILDREN);
+		QueryThreadCycleTime(GetCurrentThread(), &cyclesAfter);
 		if(measuring) {
-			std::printf("%-28ls switch %6.1f ms %4ld new windows", page.c_str(),
-				millisecondsSince(start), windowCount() - windowsBefore);
+			std::printf("%-28ls switch %6.1f ms %5.0f Mcycles %6ld messages %4ld new windows", page.c_str(),
+				millisecondsSince(start), (cyclesAfter - cyclesBefore) / 1e6, messages - messagesBefore,
+				windowCount() - windowsBefore);
 			std::fflush(stdout);
 		}
 		enter(Phase::Settle);

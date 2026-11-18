@@ -1,6 +1,7 @@
 == Unreleased - after 0.8842-RC3 !!!Experimental!!! ==
 * Stop the settings window from repainting nonstop while it is open, which kept a processor core and the graphics card busy. It happened on the Favorites, Sharing, Notifications, User commands, Search types and Experimental pages in every theme, and with dark or custom themes also on Personal information, Appearance, Themes, Tabs and Windows (iceman50)
 * Fill drop-down lists up to ten times faster: Windows resized a drop-down list after every entry until it held 30, about 1 ms each. The Bandwidth limiting settings page opens about a third faster, and settings pages, the search window, list filters and other windows with drop-down lists open faster too (iceman50)
+* Lay out windows with less work: a control nested several grids deep was measured hundreds of times per layout (382 times seven grids deep, now 8). Settings pages such as Manual configuration, Themes and Bandwidth limiting open with 20-27% less work, and every other window with nested layouts benefits as well (iceman50)
 
 == 11-17-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * [L#2174725] Keep the status bar history tooltip small: it joined the last ten status messages in full, so multi-line hub banners made it taller than the screen and it covered every window, taskbar included, until the mouse left the status bar. Each entry now shows its first line, shortened to 256 characters (iceman50)
