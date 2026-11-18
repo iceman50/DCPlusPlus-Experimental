@@ -107,7 +107,8 @@ bool clientNeedsPaint(HWND window) {
 void checkPresentedPage(PropPage* page) {
 	const auto host = page->getParent()->handle();
 	check(IsWindowVisible(page->handle()), "Selected settings page is hidden");
-	check(GetWindowLongPtr(host, GWL_EXSTYLE) & WS_EX_COMPOSITED, "Settings page descendants paint without a shared buffer");
+	// List views and custom-drawn scrollbars repaint without end under a composited host.
+	check(!(GetWindowLongPtr(host, GWL_EXSTYLE) & WS_EX_COMPOSITED), "Settings page host is composited");
 	unsigned visiblePages = 0;
 	for(auto child = GetWindow(host, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
 		if(dynamic_cast<PropPage*>(dwt::hwnd_cast<dwt::Widget*>(child)) && IsWindowVisible(child)) ++visiblePages;

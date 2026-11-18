@@ -146,9 +146,10 @@ bool SettingsDialog::initDialog() {
 		cur->column(0).mode = GridInfo::FILL;
 		cur->setSpacing(grid->getSpacing());
 
-		// Compose the page and its controls together, including their background
-		// erases. Buffer only this subtree so tree input and the footer stay responsive.
-		auto container = cur->addChild(dwt::ScrolledContainer::Seed(WS_BORDER, WS_EX_COMPOSITED));
+		// Not WS_EX_COMPOSITED: report-view list views and custom-drawn scrollbars
+		// repaint without end inside a composited window, keeping a CPU core and
+		// the GPU busy while the dialog is open. Page switches suppress redraw instead.
+		auto container = cur->addChild(dwt::ScrolledContainer::Seed(WS_BORDER));
 		pageHost = container;
 
 		const size_t setting = SETTING(SETTINGS_PAGE);

@@ -1,3 +1,6 @@
+== Unreleased - after 0.8842-RC3 !!!Experimental!!! ==
+* Stop the settings window from repainting nonstop while it is open, which kept a processor core and the graphics card busy. It happened on the Favorites, Sharing, Notifications, User commands, Search types and Experimental pages in every theme, and with dark or custom themes also on Personal information, Appearance, Themes, Tabs and Windows (iceman50)
+
 == 11-17-2026 - 0.8842-RC3 !!!Experimental!!! ==
 * [L#2174725] Keep the status bar history tooltip small: it joined the last ten status messages in full, so multi-line hub banners made it taller than the screen and it covered every window, taskbar included, until the mouse left the status bar. Each entry now shows its first line, shortened to 256 characters (iceman50)
 * [L#2173949] Keep the favorite hubs list in place: it no longer jumps back to the top and loses the selection whenever any hub connects, disconnects or fails a reconnect attempt (a regression since DC++ 0.840), and editing a hub's properties updates its row in place (iceman50)
