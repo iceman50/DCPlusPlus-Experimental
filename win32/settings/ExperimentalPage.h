@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 
+#include <dcpp/user/CID.h>
 #include <win32/settings/base/PropPage.h>
 
 /** Experimental sharing, hashing, MCN, RTF0, interface and defensive protocol controls. */
@@ -35,6 +36,7 @@ private:
 		string path;
 		string route;
 		string tth;
+		CID recipient;
 	};
 
 	ItemList items;

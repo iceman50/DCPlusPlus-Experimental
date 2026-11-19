@@ -194,6 +194,9 @@ public:
 
 	static void sanitizeUrl(string& url);
 	static void decodeUrl(const string& aUrl, string& protocol, string& host, string& port, string& path, string& query, string& fragment);
+	/** Identify a hub however its address is written: "hub.example:411", "dchub://Hub.Example"
+	 * and "nmdc://hub.example:411/" give the same key, while TLS and plain addresses differ. */
+	static string hubUrlKey(const string& url);
 	static map<string, string> decodeQuery(const string& query);
 
 	static string validateFileName(string aFile);

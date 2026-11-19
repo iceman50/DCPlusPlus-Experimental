@@ -19,6 +19,7 @@
 #ifndef DCPLUSPLUS_DCPP_FAVORITE_MANAGER_H
 #define DCPLUSPLUS_DCPP_FAVORITE_MANAGER_H
 
+#include <functional>
 #include <optional>
 
 #include <dcpp/settings/SettingsManager.h>
@@ -95,8 +96,19 @@ public:
 	/**
 	 * Return true when the favorite has an explicit share profile. An empty
 	 * returned set is meaningful and represents a valid, empty file list.
+	 * Network threads call this for every search and upload, so the profile of
+	 * any favorite for the hub applies however its address is written, and an
+	 * address a favorite had earlier in this session keeps that favorite's profile.
 	 */
 	bool getHubShareDirectories(const string& aServer, std::set<string>& directories) const;
+	/** Change a favorite hub while holding the favorites lock, then save. Share
+	 * lookups on network threads never see a half-changed entry. An entry that is
+	 * not stored yet is just changed (and not saved). */
+	void editFavorite(FavoriteHubEntry* entry, const std::function<void (FavoriteHubEntry&)>& edit);
+	/** Replace the order of the favorite hubs; the list must hold the same entries. */
+	void reorderFavorites(const FavoriteHubEntryList& order);
+	/** Remember the failover addresses a favorite hub announces. Returns whether they changed. */
+	bool setFailoverServers(const string& aServer, const StringList& urls);
 
 	void mergeHubSettings(const FavoriteHubEntry& entry, HubSettings& settings) const;
 
@@ -132,6 +144,24 @@ public:
 
 private:
 	FavoriteHubEntryList favoriteHubs;
+	/* Canonical keys (Util::hubUrlKey) of every favorite's address and failovers,
+	 * rebuilt whenever they change, so share lookups don't parse addresses per search. */
+	struct ServerKey {
+		string key;
+		FavoriteHubEntry* hub;
+	};
+	std::vector<ServerKey> serverKeys;
+	/* Addresses favorites had earlier in this session. An open hub window keeps
+	 * the address it was opened with, so its share profile must not lapse when
+	 * the favorite's address is edited. Used only for share profiles: a favorite's
+	 * password must never follow it to an address it no longer has. */
+	struct PreviousServer {
+		string url;
+		string key;
+		FavoriteHubEntry* hub;
+	};
+	std::vector<PreviousServer> previousServers;
+	void rebuildServerKeys();
 	FavHubGroups favHubGroups;
 	StringPairList favoriteDirs;
 	UserCommand::List userCommands;

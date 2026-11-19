@@ -263,9 +263,9 @@ void AdcHub::handle(AdcCommand::INF, AdcCommand& c) noexcept {
 					if(Client::isValidFailoverUrl(url, true, true))
 						urls.push_back(url);
 				}
-				if(!urls.empty() && urls != fav->getFailoverServers()) {
-					fav->setFailoverServers(urls);
-					FavoriteManager::getInstance()->save();
+				if(!urls.empty()) {
+					// Under the favorites lock: share lookups read failovers on other threads.
+					FavoriteManager::getInstance()->setFailoverServers(getHubUrl(), urls);
 				}
 			}
 		}
@@ -1111,7 +1111,7 @@ bool AdcHub::privateMessage(const OnlineUser& user, const string& aMessage, bool
 		return false;
 	string message = aMessage;
 	const bool richText = supportsRTF0 && user.getIdentity().supports(RTF0_FEATURE) &&
-		RichText::prepareOutgoingMessage(message, explicitRichText, getHubUrl());
+		RichText::prepareOutgoingMessage(message, explicitRichText, getHubUrl(), user.getUser()->getCID());
 	if(explicitRichText && !richText)
 		return false;
 

@@ -69,6 +69,9 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 	/* do some preliminary checking of the transfer request that doesn't involve any filesystem
 	access. we want to know the type of the upload to see if the user deserves a mini-slot. */
 
+	// Private-chat attachments are served only to their recipient.
+	const auto requester = aSource.getUser() ? aSource.getUser()->getCID() : CID();
+
 	bool miniSlot;
 
 	string sourceFile;
@@ -99,7 +102,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 				type = Transfer::TYPE_FULL_LIST;
 				miniSlot = true;
 			} else {
-				auto info = ShareManager::getInstance()->resolveFile(aFile, aSource.getHubUrl());
+				auto info = ShareManager::getInstance()->resolveFile(aFile, aSource.getHubUrl(), requester);
 				sourceFile = move(info.realPath);
 				expectedFileSize = info.size;
 				// Keep the requested root alongside the resolved path. If a refresh is
@@ -109,7 +112,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 					verifyTempShare = info.temporary;
 					exactOnly = info.exactOnly;
 				} else {
-					requestedRoot = ShareManager::getInstance()->getTTH(aFile, aSource.getHubUrl());
+					requestedRoot = ShareManager::getInstance()->getTTH(aFile, aSource.getHubUrl(), requester);
 				}
 				type = Transfer::TYPE_FILE;
 				miniSlot = info.size <= static_cast<int64_t>(SETTING(SET_MINISLOT_SIZE) * 1024);
@@ -120,7 +123,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 				aSource.fileNotAvail("Invalid tree range");
 				return false;
 			}
-			sourceFile = ShareManager::getInstance()->toReal(aFile, aSource.getHubUrl());
+			sourceFile = ShareManager::getInstance()->toReal(aFile, aSource.getHubUrl(), requester);
 			type = Transfer::TYPE_TREE;
 			miniSlot = true;
 
@@ -214,7 +217,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 				string tFile = aFile;
 				if(tFile.compare(0, 4, "TTH/") == 0) {
 					try {
-						tFile = ShareManager::getInstance()->toVirtual(TTHValue(aFile.substr(4)), aSource.getHubUrl());
+						tFile = ShareManager::getInstance()->toVirtual(TTHValue(aFile.substr(4)), aSource.getHubUrl(), requester);
 					} catch(const ShareException&) {
 					}
 				}
@@ -253,7 +256,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 				// Resolve again after slot negotiation. Removal, eviction, or a settings
 				// change must not turn a temporary candidate into an unverified upload.
 				auto current = ShareManager::getInstance()->resolveFile(
-					"TTH/" + requestedRoot->toBase32(), aSource.getHubUrl());
+					"TTH/" + requestedRoot->toBase32(), aSource.getHubUrl(), requester);
 				if(!current.temporary || current.exactOnly != exactOnly || current.size != expectedFileSize) return false;
 
 				// Keep this exact handle for the transfer. On Windows the non-SHARED open
@@ -262,7 +265,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 				auto candidate = std::make_unique<File>(current.realPath, File::READ, File::OPEN);
 				if(!HashManager::getInstance()->verifyFileTTH(*candidate, current.size, *requestedRoot)) return false;
 				if(!current.exactOnly && !ShareManager::getInstance()->validateChatAttachment(
-					*requestedRoot, current.size, aSource.getHubUrl())) return false;
+					*requestedRoot, current.size, aSource.getHubUrl(), requester)) return false;
 				sourceFile = std::move(current.realPath);
 				verifiedFile = std::move(candidate);
 				return true;
@@ -277,7 +280,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 			return true;
 		}
 
-		for(const auto& path: ShareManager::getInstance()->getRealPaths(*requestedRoot, aSource.getHubUrl())) {
+		for(const auto& path: ShareManager::getInstance()->getRealPaths(*requestedRoot, aSource.getHubUrl(), requester)) {
 			if(Util::stricmp(path, sourceFile) == 0) {
 				continue;
 			}
@@ -382,7 +385,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 
 		case Transfer::TYPE_TREE:
 			{
-				MemoryInputStream* mis = ShareManager::getInstance()->getTree(aFile, aSource.getHubUrl());
+				MemoryInputStream* mis = ShareManager::getInstance()->getTree(aFile, aSource.getHubUrl(), requester);
 				if(!mis) {
 					aSource.fileNotAvail();
 					return false;
@@ -909,7 +912,8 @@ void UploadManager::on(AdcCommand::GFI, UserConnection* aSource, const AdcComman
 		aSource->fileNotAvail();
 	} else if(type == Transfer::names[Transfer::TYPE_FILE]) {
 		try {
-			aSource->send(ShareManager::getInstance()->getFileInfo(ident, aSource->getHubUrl()));
+			aSource->send(ShareManager::getInstance()->getFileInfo(ident, aSource->getHubUrl(),
+				aSource->getUser() ? aSource->getUser()->getCID() : CID()));
 		} catch(const ShareException&) {
 			aSource->fileNotAvail();
 		}

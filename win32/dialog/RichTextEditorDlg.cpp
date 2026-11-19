@@ -60,9 +60,11 @@ void normalizeAdcLineEndings(string& text) {
 
 }
 
-RichTextEditorDlg::RichTextEditorDlg(dwt::Widget* parent, const string& aHubUrl, const tstring& aInitialText, const tstring& aUseCaption) :
+RichTextEditorDlg::RichTextEditorDlg(dwt::Widget* parent, const string& aHubUrl, const tstring& aInitialText, const tstring& aUseCaption,
+	const CID& aRecipient) :
 	GridDialog(parent, 780),
 	hubUrl(aHubUrl),
+	recipient(aRecipient),
 	initialText(aInitialText),
 	useCaption(aUseCaption),
 	source(nullptr),
@@ -220,7 +222,7 @@ void RichTextEditorDlg::updatePreview() {
 
 	const auto parsed = RichText::parse(text, maxTarget);
 	if(parsed.valid) {
-		const auto rtf = _T("{\\urtf1\n") + HtmlToRtf::convert(parsed.html, preview, hubUrl) + _T("}\n");
+		const auto rtf = _T("{\\urtf1\n") + HtmlToRtf::convert(parsed.html, preview, hubUrl, nullptr, recipient) + _T("}\n");
 		preview->addTextSteady(rtf);
 		preview->setSelection(0, 0);
 		preview->sendMessage(WM_VSCROLL, SB_TOP);
@@ -234,7 +236,7 @@ void RichTextEditorDlg::updatePreview() {
 		validation->setText(T_("Add at least one Markdown formatting construct before sending with RTF0."));
 	} else {
 		auto prepared = text;
-		if(!RichText::prepareOutgoingMessage(prepared, true, hubUrl)) {
+		if(!RichText::prepareOutgoingMessage(prepared, true, hubUrl, recipient)) {
 			validation->setText(T_("An attachment is unavailable in this hub's share or its declared size does not match."));
 		} else {
 			ready = true;
@@ -252,7 +254,7 @@ void RichTextEditorDlg::handleUse() {
 	if(!ready || pendingAttachments) return;
 	auto checked = Text::fromT(source->getText());
 	normalizeAdcLineEndings(checked);
-	if(!RichText::prepareOutgoingMessage(checked, true, hubUrl)) {
+	if(!RichText::prepareOutgoingMessage(checked, true, hubUrl, recipient)) {
 		ready = false;
 		useButton->setEnabled(false);
 		validation->setText(T_("The draft changed or an attachment is no longer available for this chat route."));
@@ -363,7 +365,7 @@ void RichTextEditorDlg::prepareAttachments(const StringList& paths, const vector
 	for(size_t index = 0; index < paths.size(); ++index) {
 		batch->names.push_back(Util::getFileName(paths[index]));
 		auto alive = editorAlive;
-		const auto requestId = ShareManager::getInstance()->prepareChatAttachment(paths[index], hubUrl,
+		const auto requestId = ShareManager::getInstance()->prepareChatAttachment(paths[index], hubUrl, recipient,
 			[this, alive, batch, index](ShareManager::ChatAttachmentResult result) mutable {
 				dwt::Application::instance().callAsync(
 					[this, alive, batch, index, result = std::move(result)]() mutable {
@@ -392,7 +394,7 @@ void RichTextEditorDlg::finishAttachments(const std::shared_ptr<AttachmentBatch>
 		}
 
 		const auto& attachment = *result.attachment;
-		if(!ShareManager::getInstance()->validateChatAttachment(attachment.tth, attachment.size, hubUrl)) {
+		if(!ShareManager::getInstance()->validateChatAttachment(attachment.tth, attachment.size, hubUrl, recipient)) {
 			if(firstError.empty()) firstError = Text::toT(batch->names[i]) +
 				T_(": the temporary attachment is no longer available");
 			continue;

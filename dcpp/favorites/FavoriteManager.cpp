@@ -240,25 +240,99 @@ std::string FavoriteManager::getUserURL(const UserPtr& aUser) const {
 }
 
 void FavoriteManager::addFavorite(const FavoriteHubEntry& aEntry) {
-	if(getFavoriteHub(aEntry.getServer())) {
-		return;
+	FavoriteHubEntry* f;
+	{
+		// Share lookups iterate the list on network threads.
+		Lock l(cs);
+		if(getFavoriteHub(aEntry.getServer())) {
+			return;
+		}
+		f = new FavoriteHubEntry(aEntry);
+		favoriteHubs.push_back(f);
+		rebuildServerKeys();
 	}
-	auto f = new FavoriteHubEntry(aEntry);
-	favoriteHubs.push_back(f);
 	fire(FavoriteManagerListener::FavoriteAdded(), f);
 	save();
 }
 
 void FavoriteManager::removeFavorite(FavoriteHubEntry* entry) {
-	auto i = find(favoriteHubs.begin(), favoriteHubs.end(), entry);
-	if(i == favoriteHubs.end()) {
-		return;
+	{
+		Lock l(cs);
+		if(find(favoriteHubs.begin(), favoriteHubs.end(), entry) == favoriteHubs.end()) {
+			return;
+		}
 	}
 
 	fire(FavoriteManagerListener::FavoriteRemoved(), entry);
-	favoriteHubs.erase(i);
+	{
+		Lock l(cs);
+		auto i = find(favoriteHubs.begin(), favoriteHubs.end(), entry);
+		if(i == favoriteHubs.end()) {
+			return;
+		}
+		favoriteHubs.erase(i);
+		previousServers.erase(std::remove_if(previousServers.begin(), previousServers.end(),
+			[entry](const PreviousServer& previous) { return previous.hub == entry; }), previousServers.end());
+		rebuildServerKeys();
+	}
 	delete entry;
 	save();
+}
+
+void FavoriteManager::editFavorite(FavoriteHubEntry* entry, const std::function<void (FavoriteHubEntry&)>& edit) {
+	{
+		Lock l(cs);
+		if(find(favoriteHubs.begin(), favoriteHubs.end(), entry) == favoriteHubs.end()) {
+			// Not stored yet (a new favorite being filled in): no other thread can see it.
+			edit(*entry);
+			return;
+		}
+		const auto oldServer = entry->getServer();
+		edit(*entry);
+		if(Util::stricmp(oldServer, entry->getServer()) != 0 && !oldServer.empty()) {
+			previousServers.push_back({ oldServer, Util::hubUrlKey(oldServer), entry });
+		}
+		rebuildServerKeys();
+	}
+	save();
+}
+
+void FavoriteManager::reorderFavorites(const FavoriteHubEntryList& order) {
+	{
+		Lock l(cs);
+		if(order.size() != favoriteHubs.size() ||
+			!std::is_permutation(order.begin(), order.end(), favoriteHubs.begin()))
+		{
+			return;
+		}
+		favoriteHubs = order;
+		rebuildServerKeys();
+	}
+	save();
+}
+
+bool FavoriteManager::setFailoverServers(const string& aServer, const StringList& urls) {
+	{
+		Lock l(cs);
+		auto fav = getFavoriteHubEntry(aServer);
+		if(!fav || fav->getFailoverServers() == urls) {
+			return false;
+		}
+		fav->setFailoverServers(urls);
+		rebuildServerKeys();
+	}
+	save();
+	return true;
+}
+
+void FavoriteManager::rebuildServerKeys() {
+	serverKeys.clear();
+	for(auto hub: favoriteHubs) {
+		serverKeys.push_back({ Util::hubUrlKey(hub->getServer()), hub });
+		for(const auto& failover: hub->getFailoverServers()) {
+			serverKeys.push_back({ Util::hubUrlKey(failover), hub });
+		}
+	}
 }
 
 bool FavoriteManager::isFavoriteHub(const std::string& url) {
@@ -566,7 +640,9 @@ void FavoriteManager::load(SimpleXML& aXml) {
 				}
 				e->setShareDirectories(directories);
 			}
+			Lock l(cs);
 			favoriteHubs.push_back(e);
+			rebuildServerKeys();
 		}
 
 		aXml.stepOut();
@@ -641,6 +717,8 @@ void FavoriteManager::userUpdated(const OnlineUser& info) {
 }
 
 FavoriteHubEntryPtr FavoriteManager::getFavoriteHubEntry(const string& aServer) const {
+	// Settings, including the password, only follow an exactly matching address.
+	Lock l(cs);
 	for(auto hub: favoriteHubs) {
 		if(hub->hasServer(aServer)) {
 			return hub;
@@ -651,11 +729,26 @@ FavoriteHubEntryPtr FavoriteManager::getFavoriteHubEntry(const string& aServer) 
 
 bool FavoriteManager::getHubShareDirectories(const string& aServer, std::set<string>& directories) const {
 	Lock l(cs);
+	// Matching more addresses can only restrict sharing, so a share profile is
+	// found however the hub's address is written. The active URL may also be one of
+	// the favorite's failover servers. The profile is kept as is, including an
+	// explicitly empty one.
 	for(auto hub: favoriteHubs) {
-		// The active URL may be one of the favorite's failover servers. It must
-		// retain the same share profile, including an explicitly empty profile.
 		if(hub->hasServer(aServer) && hub->hasShareProfile()) {
 			directories = hub->getShareDirectories();
+			return true;
+		}
+	}
+	const auto key = Util::hubUrlKey(aServer);
+	for(const auto& server: serverKeys) {
+		if(server.key == key && server.hub->hasShareProfile()) {
+			directories = server.hub->getShareDirectories();
+			return true;
+		}
+	}
+	for(const auto& previous: previousServers) {
+		if((previous.key == key || Util::stricmp(previous.url, aServer) == 0) && previous.hub->hasShareProfile()) {
+			directories = previous.hub->getShareDirectories();
 			return true;
 		}
 	}

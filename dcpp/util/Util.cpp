@@ -441,6 +441,29 @@ void Util::sanitizeUrl(string& url) {
 	}
 }
 
+string Util::hubUrlKey(const string& url) {
+	string address = url;
+	sanitizeUrl(address);
+	string protocol, host, port, path, query, fragment;
+	decodeUrl(address, protocol, host, port, path, query, fragment);
+	if(host.empty()) {
+		return Text::toLower(address);
+	}
+
+	protocol = Text::toLower(protocol);
+	if(protocol.empty() || protocol == "dchub" || protocol == "nmdc") {
+		protocol = "nmdc";
+	}
+	if(port.empty() && (protocol == "nmdc" || protocol == "nmdcs")) {
+		port = "411";
+	}
+	host = Text::toLower(host);
+	if(host.find(':') != string::npos) {
+		host = "[" + host + "]";
+	}
+	return protocol + "://" + host + ":" + port;
+}
+
 /**
  * Decodes a URL the best it can...
  * Default ports:

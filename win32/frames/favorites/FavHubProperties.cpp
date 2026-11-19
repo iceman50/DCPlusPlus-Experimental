@@ -302,39 +302,48 @@ void FavHubProperties::handleOKClicked() {
 		dwt::MessageBox(this).show(T_("Hub address cannot be empty"), _T(APPNAME) _T(" ") _T(VERSIONSTRING), dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONEXCLAMATION);
 		return;
 	}
-	entry->setServer(Text::fromT(addressText));
-	entry->setName(Text::fromT(name->getText()));
 	auto customTabText = Text::fromT(tabText->getText());
 	Util::trim(customTabText);
-	entry->setTabText(customTabText);
-	entry->setHubDescription(Text::fromT(hubDescription->getText()));
-	if(encoding) { // the box is optional.
-		entry->setEncoding(Encodings::selected(encoding));
-	}
-	entry->get(HubSettings::Nick) = Text::fromT(nick->getText());
-	entry->setPassword(Text::fromT(password->getText()));
-	entry->get(HubSettings::Description) = Text::fromT(description->getText());
-	entry->get(HubSettings::Email) = Text::fromT(email->getText());
-	entry->get(HubSettings::UserIp) = Text::fromT(userIp->getText());
-	entry->get(HubSettings::UserIp6) = Text::fromT(userIp6->getText());
-	entry->get(HubSettings::ShowJoins) = to3bool(showJoins->getSelected());
-	entry->get(HubSettings::FavShowJoins) = to3bool(favShowJoins->getSelected());
-	entry->get(HubSettings::LogMainChat) = to3bool(logMainChat->getSelected());
 	const auto iconSizeIndex = userIconSize->getSelected();
-	entry->get(HubSettings::UserIconSize) = iconSizeIndex > 0 && static_cast<size_t>(iconSizeIndex - 1) < std::size(HubSettings::userIconSizes) ?
-		HubSettings::userIconSizes[iconSizeIndex - 1] : HubSettings::getMinInt();
-	entry->setGroup(Text::fromT(groups->getText()));
+	const auto useDefaultShare = defaultShare->getChecked();
 
-	if(defaultShare->getChecked()) {
-		entry->clearShareProfile();
-	} else {
-		entry->setShareDirectories(selectedShareDirectories);
-	}
-	FavoriteManager::getInstance()->save();
+	// Apply everything in one step under the favorites lock: network threads read
+	// the address and share profile for every search and upload.
+	FavoriteManager::getInstance()->editFavorite(entry, [&](FavoriteHubEntry& e) {
+		e.setServer(Text::fromT(addressText));
+		e.setName(Text::fromT(name->getText()));
+		e.setTabText(customTabText);
+		e.setHubDescription(Text::fromT(hubDescription->getText()));
+		if(encoding) { // the box is optional.
+			e.setEncoding(Encodings::selected(encoding));
+		}
+		e.get(HubSettings::Nick) = Text::fromT(nick->getText());
+		e.setPassword(Text::fromT(password->getText()));
+		e.get(HubSettings::Description) = Text::fromT(description->getText());
+		e.get(HubSettings::Email) = Text::fromT(email->getText());
+		e.get(HubSettings::UserIp) = Text::fromT(userIp->getText());
+		e.get(HubSettings::UserIp6) = Text::fromT(userIp6->getText());
+		e.get(HubSettings::ShowJoins) = to3bool(showJoins->getSelected());
+		e.get(HubSettings::FavShowJoins) = to3bool(favShowJoins->getSelected());
+		e.get(HubSettings::LogMainChat) = to3bool(logMainChat->getSelected());
+		e.get(HubSettings::UserIconSize) = iconSizeIndex > 0 && static_cast<size_t>(iconSizeIndex - 1) < std::size(HubSettings::userIconSizes) ?
+			HubSettings::userIconSizes[iconSizeIndex - 1] : HubSettings::getMinInt();
+		e.setGroup(Text::fromT(groups->getText()));
+
+		if(useDefaultShare) {
+			e.clearShareProfile();
+		} else {
+			e.setShareDirectories(selectedShareDirectories);
+		}
+	});
 	HubFrame::refreshUserIconSizes();
 	HubFrame::refreshTabTexts();
-	if(oldShareProfile != entry->hasShareProfile() || oldShareDirectories != entry->getShareDirectories()) {
+	if(oldShareProfile != entry->hasShareProfile() || oldShareDirectories != entry->getShareDirectories() ||
+		Util::stricmp(oldServer, entry->getServer()) != 0)
+	{
+		// Transfers that started under the previous profile stop; new requests use the new one.
 		ConnectionManager::getInstance()->disconnectUploads(oldServer);
+		ConnectionManager::getInstance()->disconnectUploads(entry->getServer());
 	}
 	ClientManager::getInstance()->infoUpdated();
 	endDialog(IDOK);

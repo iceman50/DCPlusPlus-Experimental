@@ -121,9 +121,14 @@ protected:
 		cancelAttachmentRequests();
 	}
 
-	void setChatAvailability(bool richText, bool temporarySharing, const string& hubUrl) {
-		const auto routeChanged = Util::stricmp(richTextHubUrl, hubUrl) != 0;
+	/** recipient is the private-chat partner (zero in hub chat): files dropped into a
+	 * private chat are shared with that user only. */
+	void setChatAvailability(bool richText, bool temporarySharing, const string& hubUrl,
+		const CID& recipient = CID())
+	{
+		const auto routeChanged = Util::stricmp(richTextHubUrl, hubUrl) != 0 || !(richTextRecipient == recipient);
 		richTextHubUrl = hubUrl;
+		richTextRecipient = recipient;
 		richText = richText && SETTING(ENABLE_RICH_TEXT);
 		const auto acceptTempFiles = temporarySharing && !hubUrl.empty() && SETTING(ENABLE_RTF_TEMP_SHARES);
 		if(routeChanged || !acceptTempFiles) {
@@ -177,8 +182,9 @@ protected:
 	/// add an RTF-formatted message.
 	void addChatRTF(tstring message, tstring plainText = Util::emptyStringT,
 		tstring author = Util::emptyStringT, string userId = Util::emptyString, time_t timestamp = 0,
-		string html = string(), string hubUrl = string()) {
-		pendingChat.push_back({ std::move(message), std::move(plainText), std::move(author), std::move(userId), timestamp, std::move(html), std::move(hubUrl) });
+		string html = string(), string hubUrl = string(), const CID& recipient = CID()) {
+		pendingChat.push_back({ std::move(message), std::move(plainText), std::move(author), std::move(userId), timestamp,
+			std::move(html), std::move(hubUrl), recipient });
 		if(chatFlushScheduled) return;
 		chatFlushScheduled = true;
 		auto alive = chatAlive;
@@ -190,7 +196,8 @@ protected:
 	/// add an HTML-formatted message.
 	void addChatHTML(const string& message, const tstring& plainText = Util::emptyStringT,
 		tstring author = Util::emptyStringT, string userId = Util::emptyString, time_t timestamp = 0) {
-		addChatRTF(tstring(), plainText, std::move(author), std::move(userId), timestamp, message, richTextHubUrl);
+		addChatRTF(tstring(), plainText, std::move(author), std::move(userId), timestamp, message, richTextHubUrl,
+			richTextRecipient);
 	}
 
 	void readLog(const string& logPath, const unsigned setting) {
@@ -367,6 +374,7 @@ protected:
 private:
 	struct DroppedAttachmentBatch {
 		string hubUrl;
+		CID recipient;
 		vector<string> names;
 		vector<bool> inlineMedia;
 		vector<std::optional<ShareManager::ChatAttachmentResult>> results;
@@ -382,6 +390,7 @@ private:
 
 		auto batch = std::make_shared<DroppedAttachmentBatch>();
 		batch->hubUrl = richTextHubUrl;
+		batch->recipient = richTextRecipient;
 		batch->richText = richTextAvailable;
 		batch->remaining = files.size();
 		batch->names.reserve(files.size());
@@ -397,7 +406,7 @@ private:
 				RichText::isInlineMediaFile(realPath));
 			auto alive = chatAlive;
 			const auto requestId = ShareManager::getInstance()->prepareChatAttachment(realPath,
-				batch->hubUrl, [this, alive, batch, index](ShareManager::ChatAttachmentResult result) mutable {
+				batch->hubUrl, batch->recipient, [this, alive, batch, index](ShareManager::ChatAttachmentResult result) mutable {
 					dwt::Application::instance().callAsync(
 						[this, alive, batch, index, result = std::move(result)]() mutable {
 							if(!alive->load()) return;
@@ -415,7 +424,8 @@ private:
 	}
 
 	void finishDroppedAttachments(const std::shared_ptr<DroppedAttachmentBatch>& batch) {
-		if(!tempShareAvailable || Util::stricmp(richTextHubUrl, batch->hubUrl) != 0) return;
+		if(!tempShareAvailable || Util::stricmp(richTextHubUrl, batch->hubUrl) != 0 ||
+			!(richTextRecipient == batch->recipient)) return;
 		const auto insertAsRichText = batch->richText && richTextAvailable;
 
 		for(size_t i = 0; i < batch->results.size(); ++i) {
@@ -431,7 +441,7 @@ private:
 
 			const auto& attachment = *result.attachment;
 			if(!ShareManager::getInstance()->validateChatAttachment(
-				attachment.tth, attachment.size, batch->hubUrl))
+				attachment.tth, attachment.size, batch->hubUrl, batch->recipient))
 			{
 				++batch->failed;
 				t().addStatus(T_("The dropped attachment is no longer available: ") +
@@ -506,9 +516,10 @@ private:
 		}
 
 		const auto editorHubUrl = richTextHubUrl;
-		RichTextEditorDlg editor(&t(), editorHubUrl, initial);
+		const auto editorRecipient = richTextRecipient;
+		RichTextEditorDlg editor(&t(), editorHubUrl, initial, Util::emptyStringT, editorRecipient);
 		if(editor.run() != IDOK) return;
-		if(!richTextAvailable || Util::stricmp(richTextHubUrl, editorHubUrl) != 0) {
+		if(!richTextAvailable || Util::stricmp(richTextHubUrl, editorHubUrl) != 0 || !(richTextRecipient == editorRecipient)) {
 			t().addStatus(T_("The RTF0 route changed while the editor was open. The draft was not inserted."));
 			return;
 		}
@@ -545,6 +556,7 @@ private:
 	bool richTextAvailable;
 	bool tempShareAvailable;
 	string richTextHubUrl;
+	CID richTextRecipient;
 	vector<uint64_t> attachmentRequests;
 
 	TStringList prevCommands;

@@ -20,6 +20,7 @@
 #define DCPLUSPLUS_WIN32_HTML_TO_RTF_H
 
 #include <dcpp/core/header/typedefs.h>
+#include <dcpp/user/CID.h>
 
 #include <dwt/forward.h>
 #include <win32/util/ThemeManager.h>
@@ -28,8 +29,10 @@
 Simple HTML phrasing content and the trusted semantic elements generated for RTF0 are supported. */
 class HtmlToRtf {
 public:
+	/** Inline media previews show local files visible on hubUrl, to the private-chat
+	recipient when one is given. */
 	static tstring convert(const string& html, dwt::RichTextBox* box, const string& hubUrl = string(),
-		const ThemeManager::Theme* theme = nullptr);
+		const ThemeManager::Theme* theme = nullptr, const CID& recipient = CID());
 };
 
 #endif

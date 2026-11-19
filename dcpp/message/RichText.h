@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include <dcpp/user/CID.h>
+
 namespace dcpp {
 
 using std::string;
@@ -71,9 +73,11 @@ public:
 
 	/** Return whether an explicitly rich message should carry RT1. Windows CRLF
 	 * input is normalized to LF for ADC escaping; all other whitespace remains
-	 * untouched and ADC escaping remains a later, independent wire step. */
+	 * untouched and ADC escaping remains a later, independent wire step.
+	 * Attachments must be available to the recipient of a private message, or to
+	 * everyone on the hub when there is no recipient. */
 	static bool prepareOutgoingMessage(string& text, bool explicitRichText = false,
-		const string& hubUrl = string());
+		const string& hubUrl = string(), const CID& recipient = CID());
 };
 
 } // namespace dcpp

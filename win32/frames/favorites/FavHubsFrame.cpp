@@ -276,7 +276,7 @@ void FavHubsFrame::handleProperties() {
 }
 
 void FavHubsFrame::handleMove(bool up) {
-	FavoriteHubEntryList& fh = FavoriteManager::getInstance()->getFavoriteHubs();
+	const FavoriteHubEntryList& fh = FavoriteManager::getInstance()->getFavoriteHubs();
 	if(fh.size() <= 1)
 		return;
 
@@ -317,8 +317,8 @@ void FavHubsFrame::handleMove(bool up) {
 	}
 	if(!up)
 		reverse(fh_copy.begin(), fh_copy.end());
-	fh = fh_copy;
-	FavoriteManager::getInstance()->save();
+	// Under the favorites lock: share lookups iterate the list on network threads.
+	FavoriteManager::getInstance()->reorderFavorites(fh_copy);
 
 	refresh();
 }

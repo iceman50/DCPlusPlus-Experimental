@@ -27,6 +27,7 @@
 #include <dcpp/events/LogManager.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/share/ShareManager.h>
+#include <dcpp/hub/ClientManager.h>
 #include <dcpp/core/version.h>
 
 #include <dwt/util/StringUtils.h>
@@ -672,9 +673,16 @@ void ExperimentalPage::fillTempShares() {
 		auto name = Text::toT(Util::getFileName(share.realPath));
 		if(!available) name += T_(" (missing or changed)");
 		auto data = std::make_unique<TempShareRow>(TempShareRow {
-			share.realPath, share.hubUrl, share.tth.toBase32()
+			share.realPath, share.hubUrl, share.tth.toBase32(), share.recipient
 		});
-		tempShares->insert({ name, Text::toT(Util::formatBytes(share.size)), Text::toT(share.hubUrl),
+		auto route = Text::toT(share.hubUrl);
+		if(share.recipient) {
+			// Shared in a private chat: only this user can download it.
+			const auto nicks = ClientManager::getInstance()->getNicks(share.recipient);
+			route += _T(" (") + (nicks.empty() ? T_("private chat") :
+				str(TF_("private chat with %1%") % Text::toT(nicks.front()))) + _T(")");
+		}
+		tempShares->insert({ name, Text::toT(Util::formatBytes(share.size)), route,
 			Text::toT(data->tth), Text::toT(share.realPath) }, reinterpret_cast<LPARAM>(data.get()));
 		tempShareRows.push_back(std::move(data));
 	}
@@ -720,7 +728,7 @@ void ExperimentalPage::handleCopyTempMagnet() {
 		const auto shares = ShareManager::getInstance()->getTempShares();
 		const auto share = std::find_if(shares.begin(), shares.end(), [&](const ShareManager::TempShareInfo& item) {
 			return item.tth == tth && Util::stricmp(item.realPath, data->path) == 0 &&
-				Util::stricmp(item.hubUrl, data->route) == 0;
+				Util::stricmp(item.hubUrl, data->route) == 0 && item.recipient == data->recipient;
 		});
 		if(share != shares.end()) {
 			LinkActions::copyMagnet(share->tth, Text::toT(Util::getFileName(share->realPath)), share->size);
@@ -737,7 +745,7 @@ void ExperimentalPage::handleRemoveTemps() {
 			const auto data = getTempShareRow(row);
 			if(data) {
 				ShareManager::getInstance()->removeTempShare(data->path,
-					TTHValue(data->tth), data->route);
+					TTHValue(data->tth), data->route, data->recipient);
 			}
 		} catch(...) {
 		}

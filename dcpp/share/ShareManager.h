@@ -44,6 +44,7 @@
 #include <dcpp/hash/value/MerkleTree.h>
 #include <dcpp/core/classes/Pointer.h>
 #include <dcpp/util/text/StringMatch.h>
+#include <dcpp/user/CID.h>
 
 namespace dcpp {
 
@@ -80,6 +81,9 @@ public:
 		bool exactOnly;
 		/** Monotonic time of the most recent addition to a chat draft. */
 		uint64_t added = 0;
+		/** The one user a private-chat attachment is for; zero for everyone on the hub.
+		 * Such entries never answer searches and upload only to that user. */
+		CID recipient = CID();
 	};
 	struct ChatAttachmentInfo {
 		string realPath;
@@ -88,6 +92,7 @@ public:
 		int64_t size;
 		uint32_t timestamp;
 		bool temporary;
+		CID recipient = CID();
 	};
 	struct ChatAttachmentResult {
 		uint64_t requestId;
@@ -114,43 +119,52 @@ public:
 	void renameDirectory(const string& realPath, const string& virtualName);
 
 	string toVirtual(const TTHValue& tth) const;
-	string toVirtual(const TTHValue& tth, const string& hubUrl) const;
+	/* The functions below that take a hub and a user answer that user on that hub.
+	 * A temporary share for one private-chat recipient is visible only when the user
+	 * is that recipient; the default (zero) user sees only shares for the whole hub. */
+	string toVirtual(const TTHValue& tth, const string& hubUrl, const CID& user = CID()) const;
 	optional<TTHValue> getTTHFromReal(const string& realPath) noexcept;
 	/** Register a transient, TTH-only file for one chat route. Temporary files
 	 * are searchable and uploadable only on that route, but never appear in file lists. */
 	bool addTempShare(const string& realPath, int64_t size, uint32_t timestamp,
-		const TTHValue& tth, const string& hubUrl) noexcept;
+		const TTHValue& tth, const string& hubUrl, const CID& recipient = CID()) noexcept;
 	/** Register a verified protocol document that is visible only to exact-TTH searches/transfers. */
 	bool addTTHOnlyShare(const string& realPath, int64_t size, uint32_t timestamp,
 		const TTHValue& tth, const string& hubUrl) noexcept;
 	bool removeTTHOnlyShare(const string& realPath, const TTHValue& tth,
 		const string& hubUrl) noexcept;
-	bool isTempShare(const TTHValue& tth, const string& realPath, const string& hubUrl) const noexcept;
+	bool isTempShare(const TTHValue& tth, const string& realPath, const string& hubUrl,
+		const CID& recipient = CID()) const noexcept;
 	vector<TempShareInfo> getTempShares() const;
-	bool removeTempShare(const string& realPath, const TTHValue& tth, const string& hubUrl) noexcept;
+	bool removeTempShare(const string& realPath, const TTHValue& tth, const string& hubUrl,
+		const CID& recipient = CID()) noexcept;
 	size_t clearTempShares() noexcept;
 	/** Prepare a local file as an exact-TTH attachment for one chat route. The
 	 * callback may run immediately or on the hashing thread and is called exactly
 	 * once unless the request is cancelled. */
 	uint64_t prepareChatAttachment(const string& realPath, const string& hubUrl,
 		ChatAttachmentCallback callback) noexcept;
+	/** As above, for a private chat: a temporary share is only for the recipient. */
+	uint64_t prepareChatAttachment(const string& realPath, const string& hubUrl,
+		const CID& recipient, ChatAttachmentCallback callback) noexcept;
 	void cancelChatAttachment(uint64_t requestId) noexcept;
 	/** Verify that an attachment is currently visible and, for temporary entries,
 	 * still matches its saved file snapshot and TTH. */
-	bool validateChatAttachment(const TTHValue& tth, int64_t size, const string& hubUrl) const noexcept;
+	bool validateChatAttachment(const TTHValue& tth, int64_t size, const string& hubUrl,
+		const CID& user = CID()) const noexcept;
 	string toReal(const string& virtualFile);
-	string toReal(const string& virtualFile, const string& hubUrl);
+	string toReal(const string& virtualFile, const string& hubUrl, const CID& user = CID());
 	/** @return Actual file path & size. Returns 0 for file lists. */
 	pair<string, int64_t> toRealWithSize(const string& virtualFile);
-	pair<string, int64_t> toRealWithSize(const string& virtualFile, const string& hubUrl);
+	pair<string, int64_t> toRealWithSize(const string& virtualFile, const string& hubUrl, const CID& user = CID());
 	/** Resolve an upload candidate and atomically retain whether it came from the
 	 * route-scoped temporary-share table. */
-	ResolvedFileInfo resolveFile(const string& virtualFile, const string& hubUrl);
+	ResolvedFileInfo resolveFile(const string& virtualFile, const string& hubUrl, const CID& user = CID());
 	StringList getRealPaths(const string& virtualPath);
 	/** Return all currently shared real paths for a TTH that are visible from the requesting hub. */
-	StringList getRealPaths(const TTHValue& tth, const string& hubUrl) const;
+	StringList getRealPaths(const TTHValue& tth, const string& hubUrl, const CID& user = CID()) const;
 	optional<TTHValue> getTTH(const string& virtualFile) const;
-	optional<TTHValue> getTTH(const string& virtualFile, const string& hubUrl) const;
+	optional<TTHValue> getTTH(const string& virtualFile, const string& hubUrl, const CID& user = CID()) const;
 
 	void refresh(bool dirs = false, bool aUpdate = true, bool block = false, function<void (float)> progressF = nullptr) noexcept;
 	/** Load a validated cached share tree when possible, then refresh the real filesystem in the background. */
@@ -173,13 +187,13 @@ public:
 	MemoryInputStream* generatePartialList(const string& dir, bool recurse) const;
 	MemoryInputStream* generatePartialList(const string& dir, bool recurse, const string& hubUrl) const;
 	MemoryInputStream* getTree(const string& virtualFile) const;
-	MemoryInputStream* getTree(const string& virtualFile, const string& hubUrl) const;
+	MemoryInputStream* getTree(const string& virtualFile, const string& hubUrl, const CID& user = CID()) const;
 	MemoryInputStream* generateFileList(const string& hubUrl, bool compressed) const;
 	std::pair<std::unique_ptr<InputStream>, int64_t> openXmlList(const string& hubUrl);
 	bool hasCustomShare(const string& hubUrl) const;
 
 	AdcCommand getFileInfo(const string& aFile);
-	AdcCommand getFileInfo(const string& aFile, const string& hubUrl);
+	AdcCommand getFileInfo(const string& aFile, const string& hubUrl, const CID& user = CID());
 
 	int64_t getShareSize() const noexcept;
 	int64_t getShareSizeForHub(const string& hubUrl) const;
@@ -391,6 +405,7 @@ private:
 		uint64_t generation;
 		uint64_t hashJobId;
 		ChatAttachmentCallback callback;
+		CID recipient = CID();
 	};
 	enum class ChatAttachmentRequestState { READY, CANCELLED, CLEARED };
 	mutable CriticalSection chatAttachmentCs;
@@ -408,9 +423,12 @@ private:
 
 	const Directory::File& findFile(const string& virtualFile) const;
 	const TempShareInfo* findTempShare(const TTHValue& tth, const string* hubUrl = nullptr,
-		const bool* exactOnly = nullptr) const noexcept;
+		const bool* exactOnly = nullptr, const CID& user = CID()) const noexcept;
+	/** Whether a temporary share may be served to this user (see TempShareInfo::recipient). */
+	static bool tempShareVisibleTo(const TempShareInfo& item, const CID& user) noexcept;
 	bool addValidatedTempShare(const string& realPath, int64_t size, uint32_t timestamp,
-		const TTHValue& tth, const string& hubUrl, bool exactOnly = false) noexcept;
+		const TTHValue& tth, const string& hubUrl, bool exactOnly = false,
+		const CID& recipient = CID()) noexcept;
 	void finishChatAttachment(PendingChatAttachment request, const TTHValue& tth) noexcept;
 	void failChatAttachments(const string& realPath, int64_t size, uint32_t timestamp,
 		uint64_t hashJobId, const string& error) noexcept;

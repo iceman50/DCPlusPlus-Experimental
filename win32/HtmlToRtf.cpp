@@ -67,7 +67,7 @@ namespace {
 		return s;
 	}
 
-	tstring inlineMediaRtf(const string& uri, const string& hubUrl) {
+	tstring inlineMediaRtf(const string& uri, const string& hubUrl, const CID& recipient) {
 		RichText::Attachment attachment;
 		if(!RichText::parseMagnetUri(uri,
 			static_cast<size_t>(std::max(1, SETTING(CHAT_LINK_MAX_LENGTH))), attachment)) return tstring();
@@ -76,8 +76,8 @@ namespace {
 		try {
 			const TTHValue root(attachment.tth);
 			if(!hubUrl.empty()) {
-				if(ShareManager::getInstance()->validateChatAttachment(root, attachment.size, hubUrl)) {
-					auto shared = ShareManager::getInstance()->resolveFile("TTH/" + attachment.tth, hubUrl);
+				if(ShareManager::getInstance()->validateChatAttachment(root, attachment.size, hubUrl, recipient)) {
+					auto shared = ShareManager::getInstance()->resolveFile("TTH/" + attachment.tth, hubUrl, recipient);
 					paths.push_back(std::move(shared.realPath));
 				}
 			} else if(ShareManager::getInstance()->isTTHShared(root)) {
@@ -111,7 +111,7 @@ namespace {
 }
 
 struct Parser : SimpleXMLReader::CallBack {
-	Parser(dwt::RichTextBox* box, string hubUrl, const ThemeManager::Theme* theme);
+	Parser(dwt::RichTextBox* box, string hubUrl, const ThemeManager::Theme* theme, const CID& recipient);
 	void startTag(const string& name, StringPairList& attribs, bool simple);
 	void data(const string& data);
 	void endTag(const string& name);
@@ -167,17 +167,21 @@ private:
 	vector<bool> emoticonSuppressions;
 	vector<bool> inlineMediaSuppressions;
 	string hubUrl;
+	CID recipient;
 	const ThemeManager::Theme* theme;
 };
 
-tstring HtmlToRtf::convert(const string& html, dwt::RichTextBox* box, const string& hubUrl, const ThemeManager::Theme* theme) {
-	Parser parser(box, hubUrl, theme);
+tstring HtmlToRtf::convert(const string& html, dwt::RichTextBox* box, const string& hubUrl, const ThemeManager::Theme* theme,
+	const CID& recipient)
+{
+	Parser parser(box, hubUrl, theme, recipient);
 	try { SimpleXMLReader(&parser).parse(html); }
 	catch(const SimpleXMLException& e) { return Text::toT(e.getError()); }
 	return parser.finalize();
 }
 
-Parser::Parser(dwt::RichTextBox* box, string aHubUrl, const ThemeManager::Theme* aTheme) : hubUrl(std::move(aHubUrl)), theme(aTheme) {
+Parser::Parser(dwt::RichTextBox* box, string aHubUrl, const ThemeManager::Theme* aTheme, const CID& aRecipient) :
+	hubUrl(std::move(aHubUrl)), recipient(aRecipient), theme(aTheme) {
 	// create a default context with the Rich Edit control's current formatting.
 	contexts.emplace_back(box, *this);
 	const auto width = std::max(1L, box->getClientSize().x);
@@ -187,7 +191,7 @@ Parser::Parser(dwt::RichTextBox* box, string aHubUrl, const ThemeManager::Theme*
 void Parser::startTag(const string& name_, StringPairList& attribs, bool simple) {
 	auto name = trimCopy(name_);
 	if(name == "rtfimage") {
-		auto image = inlineMediaRtf(getAttrib(attribs, "src", 0), hubUrl);
+		auto image = inlineMediaRtf(getAttrib(attribs, "src", 0), hubUrl, recipient);
 		const bool rendered = !image.empty();
 		if(rendered) ret += std::move(image);
 		if(!simple) {

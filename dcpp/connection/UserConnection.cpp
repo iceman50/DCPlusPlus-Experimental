@@ -248,7 +248,8 @@ bool UserConnection::pm(const string& message, bool thirdPerson, bool explicitRi
 
 	string preparedMessage = message;
 	const bool richText = supportsRTF0() &&
-		RichText::prepareOutgoingMessage(preparedMessage, explicitRichText, getHubUrl());
+		RichText::prepareOutgoingMessage(preparedMessage, explicitRichText, getHubUrl(),
+			getUser() ? getUser()->getCID() : CID());
 	if(explicitRichText && !richText)
 		return false;
 

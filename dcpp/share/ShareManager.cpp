@@ -277,14 +277,14 @@ bool ShareManager::isFileAllowed(const Directory::File& file, const ShareAccess&
 	return isVirtualAllowed(directory->getName(), access);
 }
 
-string ShareManager::toVirtual(const TTHValue& tth, const string& hubUrl) const {
+string ShareManager::toVirtual(const TTHValue& tth, const string& hubUrl, const CID& user) const {
 	auto access = getShareAccess(hubUrl);
 	Lock l(cs);
 	auto i = tthIndex.find(tth);
 	if(i != tthIndex.end() && isFileAllowed(*i->second, access)) {
 		return i->second->getADCPath();
 	}
-	if(findTempShare(tth, &hubUrl)) return "TTH/" + tth.toBase32();
+	if(findTempShare(tth, &hubUrl, nullptr, user)) return "TTH/" + tth.toBase32();
 	throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 }
 
@@ -292,8 +292,8 @@ string ShareManager::toReal(const string& virtualFile) {
 	return toRealWithSize(virtualFile).first;
 }
 
-string ShareManager::toReal(const string& virtualFile, const string& hubUrl) {
-	return toRealWithSize(virtualFile, hubUrl).first;
+string ShareManager::toReal(const string& virtualFile, const string& hubUrl, const CID& user) {
+	return toRealWithSize(virtualFile, hubUrl, user).first;
 }
 
 pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile) {
@@ -324,12 +324,12 @@ pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile) {
 	return make_pair(f.getRealPath(), f.getSize());
 }
 
-pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile, const string& hubUrl) {
-	auto info = resolveFile(virtualFile, hubUrl);
+pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile, const string& hubUrl, const CID& user) {
+	auto info = resolveFile(virtualFile, hubUrl, user);
 	return make_pair(std::move(info.realPath), info.size);
 }
 
-ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFile, const string& hubUrl) {
+ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFile, const string& hubUrl, const CID& user) {
 	auto access = getShareAccess(hubUrl);
 	Lock l(cs);
 
@@ -343,7 +343,7 @@ ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFi
 		if(i != tthIndex.end() && isFileAllowed(*i->second, access) && !pft::isPrivatePath(i->second->getRealPath())) {
 			return { i->second->getRealPath(), i->second->getSize(), tth, false, 0, false };
 		}
-		if(const auto temp = findTempShare(tth, &hubUrl)) {
+		if(const auto temp = findTempShare(tth, &hubUrl, nullptr, user)) {
 			if(pft::isPrivatePath(temp->realPath))
 				throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 			return { temp->realPath, temp->size, temp->tth, true, temp->timestamp, temp->exactOnly };
@@ -391,7 +391,7 @@ StringList ShareManager::getRealPaths(const string& virtualPath) {
 	return ret;
 }
 
-StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl) const {
+StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl, const CID& user) const {
 	StringList ret;
 	auto access = getShareAccess(hubUrl);
 
@@ -419,7 +419,9 @@ StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl)
 			continue;
 		if(pft::isPrivatePath(temp.realPath))
 			continue;
-		if(temp.tth == tth && Util::stricmp(temp.hubUrl, hubUrl) == 0 &&
+		if(!temp.exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES))
+			continue;
+		if(temp.tth == tth && Util::stricmp(temp.hubUrl, hubUrl) == 0 && tempShareVisibleTo(temp, user) &&
 			std::none_of(ret.begin(), ret.end(), [&temp](const string& path) {
 				return Util::stricmp(path, temp.realPath) == 0;
 			}))
@@ -441,7 +443,7 @@ optional<TTHValue> ShareManager::getTTHFromReal(const string& realPath) noexcept
 }
 
 bool ShareManager::addTempShare(const string& realPath, int64_t size, uint32_t timestamp,
-	const TTHValue& tth, const string& hubUrl) noexcept
+	const TTHValue& tth, const string& hubUrl, const CID& recipient) noexcept
 {
 	if(!SETTING(ENABLE_RTF_TEMP_SHARES) || realPath.empty() || hubUrl.empty() || size < 0) return false;
 	try {
@@ -451,7 +453,7 @@ bool ShareManager::addTempShare(const string& realPath, int64_t size, uint32_t t
 		if(file.getSize() != size || file.getLastModified() != timestamp) return false;
 		const auto current = HashManager::getInstance()->getTTH(realPath, size, timestamp);
 		if(!current || *current != tth) return false;
-		return addValidatedTempShare(realPath, size, timestamp, tth, hubUrl, false);
+		return addValidatedTempShare(realPath, size, timestamp, tth, hubUrl, false, recipient);
 	} catch(...) {
 		return false;
 	}
@@ -478,7 +480,7 @@ bool ShareManager::addTTHOnlyShare(const string& realPath, int64_t size, uint32_
 }
 
 bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, uint32_t timestamp,
-	const TTHValue& tth, const string& hubUrl, bool exactOnly) noexcept
+	const TTHValue& tth, const string& hubUrl, bool exactOnly, const CID& recipient) noexcept
 {
 	if((!exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES)) || realPath.empty() || hubUrl.empty() || size < 0) return false;
 	try {
@@ -488,14 +490,17 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 		return false;
 	}
 	Lock l(cs);
+	// Protocol documents are for the whole hub; only chat attachments have a recipient.
+	const auto scope = exactOnly ? CID() : recipient;
 	auto existing = std::find_if(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
-		return item.tth == tth && item.exactOnly == exactOnly && Util::stricmp(item.hubUrl, hubUrl) == 0;
+		return item.tth == tth && item.exactOnly == exactOnly && Util::stricmp(item.hubUrl, hubUrl) == 0 &&
+			item.recipient == scope;
 	});
 	if(existing != tempShares.end()) {
 		// Reuse is an access: move the entry to the newest end so it isn't the next
 		// item evicted immediately after being inserted into another draft.
 		tempShares.erase(existing);
-		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly, GET_TICK() });
+		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly, GET_TICK(), scope });
 	} else {
 		const auto maxTempShares = exactOnly ? size_t(1024) :
 			static_cast<size_t>(std::max(1, SETTING(RTF_TEMP_SHARE_LIMIT)));
@@ -508,18 +513,18 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 			tempShares.erase(oldest);
 			--count;
 		}
-		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly, GET_TICK() });
+		tempShares.push_back({ realPath, hubUrl, tth, size, timestamp, exactOnly, GET_TICK(), scope });
 	}
 	return true;
 }
 
 bool ShareManager::isTempShare(const TTHValue& tth, const string& realPath,
-	const string& hubUrl) const noexcept
+	const string& hubUrl, const CID& recipient) const noexcept
 {
 	Lock l(cs);
 	return std::any_of(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
 		return !item.exactOnly && !tempShareExpired(item, GET_TICK()) && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
-			Util::stricmp(item.hubUrl, hubUrl) == 0;
+			Util::stricmp(item.hubUrl, hubUrl) == 0 && item.recipient == recipient;
 	});
 }
 
@@ -533,13 +538,13 @@ vector<ShareManager::TempShareInfo> ShareManager::getTempShares() const {
 }
 
 bool ShareManager::removeTempShare(const string& realPath, const TTHValue& tth,
-	const string& hubUrl) noexcept
+	const string& hubUrl, const CID& recipient) noexcept
 {
 	Lock l(cs);
 	const auto oldSize = tempShares.size();
 	tempShares.erase(std::remove_if(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
 		return !item.exactOnly && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
-			Util::stricmp(item.hubUrl, hubUrl) == 0;
+			Util::stricmp(item.hubUrl, hubUrl) == 0 && item.recipient == recipient;
 	}), tempShares.end());
 	return tempShares.size() != oldSize;
 }
@@ -587,6 +592,12 @@ size_t ShareManager::clearTempShares() noexcept {
 uint64_t ShareManager::prepareChatAttachment(const string& realPath, const string& hubUrl,
 	ChatAttachmentCallback callback) noexcept
 {
+	return prepareChatAttachment(realPath, hubUrl, CID(), std::move(callback));
+}
+
+uint64_t ShareManager::prepareChatAttachment(const string& realPath, const string& hubUrl,
+	const CID& recipient, ChatAttachmentCallback callback) noexcept
+{
 	auto requestId = nextChatAttachmentRequest.fetch_add(1);
 	if(requestId == 0) requestId = nextChatAttachmentRequest.fetch_add(1);
 	uint64_t generation;
@@ -594,7 +605,7 @@ uint64_t ShareManager::prepareChatAttachment(const string& realPath, const strin
 		Lock l(chatAttachmentCs);
 		generation = chatAttachmentGeneration;
 	}
-	PendingChatAttachment request { requestId, realPath, hubUrl, -1, 0, generation, 0, std::move(callback) };
+	PendingChatAttachment request { requestId, realPath, hubUrl, -1, 0, generation, 0, std::move(callback), recipient };
 
 	if(!request.callback) return requestId;
 	if(realPath.empty() || hubUrl.empty()) {
@@ -739,7 +750,7 @@ void ShareManager::finishChatAttachment(PendingChatAttachment request, const TTH
 		if(permanentlyVisible) {
 			if(stopIfUnavailable()) return;
 			ChatAttachmentInfo attachment { request.realPath, request.hubUrl, tth,
-				request.size, request.timestamp, false };
+				request.size, request.timestamp, false, request.recipient };
 			deliverChatAttachmentCallback(std::move(request), std::move(attachment), Util::emptyString);
 			return;
 		}
@@ -779,7 +790,8 @@ void ShareManager::finishChatAttachment(PendingChatAttachment request, const TTH
 				request.generation == chatAttachmentGeneration)
 			{
 				shared = addValidatedTempShare(
-					request.realPath, request.size, request.timestamp, tth, request.hubUrl);
+					request.realPath, request.size, request.timestamp, tth, request.hubUrl, false,
+					request.recipient);
 				if(shared) {
 					// Temp-share insertion and callback ownership are one operation. A
 					// later cancellation cannot suppress the result while leaving an
@@ -792,7 +804,7 @@ void ShareManager::finishChatAttachment(PendingChatAttachment request, const TTH
 		}
 		if(callbackClaimed) {
 			ChatAttachmentInfo attachment { request.realPath, request.hubUrl, tth,
-				request.size, request.timestamp, true };
+				request.size, request.timestamp, true, request.recipient };
 			invokeChatAttachmentCallback(std::move(request), std::move(attachment), Util::emptyString);
 			return;
 		}
@@ -857,7 +869,7 @@ void ShareManager::failChatAttachments(const string& realPath, int64_t size, uin
 }
 
 bool ShareManager::validateChatAttachment(const TTHValue& tth, int64_t size,
-	const string& hubUrl) const noexcept
+	const string& hubUrl, const CID& user) const noexcept
 {
 	try {
 		auto access = getShareAccess(hubUrl);
@@ -871,7 +883,7 @@ bool ShareManager::validateChatAttachment(const TTHValue& tth, int64_t size,
 			}
 			if(!hubUrl.empty()) {
 				const bool chatOnly = false;
-				if(const auto item = findTempShare(tth, &hubUrl, &chatOnly); item && item->size == size) temporary = *item;
+				if(const auto item = findTempShare(tth, &hubUrl, &chatOnly, user); item && item->size == size) temporary = *item;
 			}
 		}
 		if(!temporary) return false;
@@ -885,9 +897,9 @@ bool ShareManager::validateChatAttachment(const TTHValue& tth, int64_t size,
 
 		Lock l(cs);
 		const bool chatOnly = false;
-		const auto item = findTempShare(tth, &hubUrl, &chatOnly);
+		const auto item = findTempShare(tth, &hubUrl, &chatOnly, user);
 		return item && item->size == temporary->size && item->timestamp == temporary->timestamp &&
-			Util::stricmp(item->realPath, temporary->realPath) == 0;
+			Util::stricmp(item->realPath, temporary->realPath) == 0 && item->recipient == temporary->recipient;
 	} catch(...) {
 		return false;
 	}
@@ -909,13 +921,13 @@ optional<TTHValue> ShareManager::getTTH(const string& virtualFile) const {
 	return findFile(virtualFile).tth;
 }
 
-optional<TTHValue> ShareManager::getTTH(const string& virtualFile, const string& hubUrl) const {
+optional<TTHValue> ShareManager::getTTH(const string& virtualFile, const string& hubUrl, const CID& user) const {
 	auto access = getShareAccess(hubUrl);
 	Lock l(cs);
 	if(virtualFile.compare(0, 4, "TTH/") == 0) {
 		const TTHValue tth(virtualFile.substr(4));
 		auto i = tthIndex.find(tth);
-		if((i != tthIndex.end() && isFileAllowed(*i->second, access)) || findTempShare(tth, &hubUrl)) return tth;
+		if((i != tthIndex.end() && isFileAllowed(*i->second, access)) || findTempShare(tth, &hubUrl, nullptr, user)) return tth;
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	}
 	auto& file = findFile(virtualFile);
@@ -942,10 +954,10 @@ MemoryInputStream* ShareManager::getTree(const string& virtualFile) const {
 	return new MemoryInputStream(&buf[0], buf.size());
 }
 
-MemoryInputStream* ShareManager::getTree(const string& virtualFile, const string& hubUrl) const {
+MemoryInputStream* ShareManager::getTree(const string& virtualFile, const string& hubUrl, const CID& user) const {
 	TigerTree tree;
 	try {
-		auto tth = getTTH(virtualFile, hubUrl);
+		auto tth = getTTH(virtualFile, hubUrl, user);
 		if(!tth || !HashManager::getInstance()->getTree(*tth, tree)) {
 			return nullptr;
 		}
@@ -1009,7 +1021,7 @@ AdcCommand ShareManager::getFileInfo(const string& aFile) {
 	return cmd;
 }
 
-AdcCommand ShareManager::getFileInfo(const string& aFile, const string& hubUrl) {
+AdcCommand ShareManager::getFileInfo(const string& aFile, const string& hubUrl, const CID& user) {
 	auto access = getShareAccess(hubUrl);
 	if(aFile == Transfer::USER_LIST_NAME || aFile == Transfer::USER_LIST_NAME_BZ) {
 		if(access.unrestricted) {
@@ -1036,7 +1048,7 @@ AdcCommand ShareManager::getFileInfo(const string& aFile, const string& hubUrl) 
 	Lock l(cs);
 	auto i = tthIndex.find(val);
 	if(i == tthIndex.end() || !isFileAllowed(*i->second, access)) {
-		if(const auto temp = findTempShare(val, &hubUrl)) {
+		if(const auto temp = findTempShare(val, &hubUrl, nullptr, user)) {
 			AdcCommand cmd(AdcCommand::CMD_RES);
 			cmd.addParam("FN", aFile);
 			cmd.addParam("SI", Util::toString(temp->size));
@@ -1105,13 +1117,20 @@ bool ShareManager::tempShareExpired(const TempShareInfo& item, uint64_t tick) no
 	return !item.exactOnly && minutes > 0 && tick >= item.added && tick - item.added >= static_cast<uint64_t>(minutes) * 60 * 1000;
 }
 
+bool ShareManager::tempShareVisibleTo(const TempShareInfo& item, const CID& user) noexcept {
+	// An attachment sent in a private chat is for its recipient only; a missing
+	// (zero) user, as in searches and hub-less lookups, never matches one.
+	return !item.recipient || (user && item.recipient == user);
+}
+
 const ShareManager::TempShareInfo* ShareManager::findTempShare(const TTHValue& tth,
-	const string* hubUrl, const bool* exactOnly) const noexcept
+	const string* hubUrl, const bool* exactOnly, const CID& user) const noexcept
 {
 	for(auto i = tempShares.rbegin(); i != tempShares.rend(); ++i) {
 		if(tempShareExpired(*i, GET_TICK()))
 			continue;
 		if(!i->exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES)) continue;
+		if(!tempShareVisibleTo(*i, user)) continue;
 		if(i->tth == tth && (!hubUrl || Util::stricmp(i->hubUrl, *hubUrl) == 0) &&
 			(!exactOnly || i->exactOnly == *exactOnly)) return &*i;
 	}
@@ -2992,7 +3011,9 @@ void ShareManager::appendTempSearchResults(SearchResultList& results, SearchQuer
 	{
 		Lock l(cs);
 		for(const auto& item: tempShares) {
-			if(!tempShareExpired(item, GET_TICK()) && Util::stricmp(item.hubUrl, hubUrl) == 0)
+			// Private-chat attachments never answer searches: a search does not prove
+			// who is asking, and the recipient downloads straight from the message.
+			if(!tempShareExpired(item, GET_TICK()) && !item.recipient && Util::stricmp(item.hubUrl, hubUrl) == 0)
 				candidates.push_back(item);
 		}
 	}

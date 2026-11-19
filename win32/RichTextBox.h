@@ -21,6 +21,7 @@
 
 #include <dcpp/core/header/typedefs.h>
 #include <dcpp/util/Util.h>
+#include <dcpp/user/CID.h>
 
 #include <deque>
 #include <vector>
@@ -70,6 +71,8 @@ public:
 		time_t timestamp = 0;
 		string html;
 		string hubUrl;
+		/// The private-chat partner whose attachments may be previewed; zero in hub chat.
+		CID recipient = CID();
 	};
 
 	/// Append a UI batch while retaining message boundaries for context actions.
@@ -89,6 +92,7 @@ private:
 		time_t timestamp;
 		string html;
 		string hubUrl;
+		CID recipient;
 		bool separator;
 	};
 

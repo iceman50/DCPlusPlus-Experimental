@@ -1535,9 +1535,16 @@ void ConnectionManager::disconnect(const UserPtr& user, ConnectionType type) {
 }
 
 void ConnectionManager::disconnectUploads(const string& hubUrl) {
+	if(hubUrl.empty()) {
+		return;
+	}
+	// The hub's session may have been opened with its address written differently.
+	const auto key = Util::hubUrlKey(hubUrl);
 	Lock l(cs);
 	for(auto connection: userConnections) {
-		if(connection->isSet(UserConnection::FLAG_UPLOAD) && Util::stricmp(connection->getHubUrl(), hubUrl) == 0) {
+		if(connection->isSet(UserConnection::FLAG_UPLOAD) && (Util::stricmp(connection->getHubUrl(), hubUrl) == 0 ||
+			Util::hubUrlKey(connection->getHubUrl()) == key))
+		{
 			connection->disconnect(true);
 		}
 	}

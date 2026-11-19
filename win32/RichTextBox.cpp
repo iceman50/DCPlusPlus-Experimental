@@ -155,7 +155,7 @@ void RichTextBox::appendMessages(std::vector<RenderedMessage> batch) {
 	std::vector<tstring> documents;
 	documents.reserve(batch.size());
 	for(auto& message: batch) {
-		if(!message.html.empty()) message.rtf = HtmlToRtf::convert(message.html, this, message.hubUrl);
+		if(!message.html.empty()) message.rtf = HtmlToRtf::convert(message.html, this, message.hubUrl, nullptr, message.recipient);
 		tstring document = _T("{\\urtf1\n");
 		document += _T("\\pard\n");
 		document += message.rtf;
@@ -175,7 +175,7 @@ void RichTextBox::appendMessages(std::vector<RenderedMessage> batch) {
 		if(ranges[i].second - ranges[i].first != insertedLengths[i]) batch[i].html.clear();
 		messages.push_back({ nextMessageId++, ranges[i].first, ranges[i].second,
 			std::move(batch[i].plainText), std::move(batch[i].author), std::move(batch[i].userId), batch[i].timestamp,
-			std::move(batch[i].html), std::move(batch[i].hubUrl), oldLength != 0 || i != 0 });
+			std::move(batch[i].html), std::move(batch[i].hubUrl), batch[i].recipient, oldLength != 0 || i != 0 });
 	}
 }
 
@@ -202,7 +202,7 @@ void RichTextBox::refreshMessageStyles() {
 	for(size_t i = messages.size(); i-- > 0;) {
 		auto& message = messages[i];
 		if(message.html.empty()) continue;
-		const auto rtf = escapeUnicode(_T("{\\urtf1\n") + HtmlToRtf::convert(message.html, this, message.hubUrl) + _T("}"));
+		const auto rtf = escapeUnicode(_T("{\\urtf1\n") + HtmlToRtf::convert(message.html, this, message.hubUrl, nullptr, message.recipient) + _T("}"));
 		const auto previousLength = static_cast<int>(length());
 		setSelection(message.begin + (message.separator ? 1 : 0), message.end);
 		SETTEXTEX config { ST_SELECTION, CP_ACP };

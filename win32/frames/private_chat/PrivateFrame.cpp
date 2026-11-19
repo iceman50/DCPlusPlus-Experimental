@@ -685,7 +685,8 @@ void PrivateFrame::updateRichTextAvailability() {
 	if(!directRoute) {
 		available = ClientManager::getInstance()->supportsRichText(replyTo.getUser());
 	}
-	setChatAvailability(available, temporarySharing, routeHubUrl);
+	// Files dropped here are shared with this user only, never with the whole hub.
+	setChatAvailability(available, temporarySharing, routeHubUrl, replyTo.getUser().user->getCID());
 	updatePrivateSendAvailability();
 }
 
@@ -1246,7 +1247,8 @@ bool PrivateFrame::sendMessage(const tstring& msg, bool thirdPerson, bool explic
 	}
 	if(explicitRichText) {
 		auto checked = msg8;
-		if(!RichText::prepareOutgoingMessage(checked, true, replyTo.getUser().hint)) return false;
+		if(!RichText::prepareOutgoingMessage(checked, true, replyTo.getUser().hint,
+			replyTo.getUser().user->getCID())) return false;
 	}
 	const auto sent = ClientManager::getInstance()->privateMessage(replyTo.getUser(), msg8, thirdPerson,
 		replyTo.getUser().user->isNMDC(), explicitRichText);

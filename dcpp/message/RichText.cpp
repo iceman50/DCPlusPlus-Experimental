@@ -699,7 +699,7 @@ bool RichText::prepareIncomingMessage(string& text, bool markedRichText) {
 	return true;
 }
 
-bool RichText::prepareOutgoingMessage(string& text, bool explicitRichText, const string& hubUrl) {
+bool RichText::prepareOutgoingMessage(string& text, bool explicitRichText, const string& hubUrl, const CID& recipient) {
 	if(!explicitRichText || !SETTING(ENABLE_RICH_TEXT)) return false;
 	for(size_t i = 0; i < text.size(); ++i) {
 		if(text[i] != '\r') continue;
@@ -720,7 +720,7 @@ bool RichText::prepareOutgoingMessage(string& text, bool explicitRichText, const
 	for(const auto& attachment: parsed.attachments) {
 		try {
 			if(!ShareManager::getInstance()->validateChatAttachment(
-				TTHValue(attachment.tth), attachment.size, hubUrl)) return false;
+				TTHValue(attachment.tth), attachment.size, hubUrl, recipient)) return false;
 		} catch(const Exception&) {
 			return false;
 		}

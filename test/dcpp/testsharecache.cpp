@@ -21,9 +21,12 @@
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/share/ShareManager.h>
 #include <dcpp/hash/HashManager.h>
+#include <dcpp/transfer/upload/UploadManager.h>
 #undef private
 
 #include <dcpp/hub/ClientManager.h>
+#include <dcpp/message/RichText.h>
+#include <dcpp/user/CID.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/core/io/File.h>
 #include <dcpp/connection/http/HttpManager.h>
@@ -34,7 +37,8 @@
 #include <dcpp/core/io/db/SQLiteDB.h>
 #include <dcpp/core/io/stream/Streams.h>
 #include <dcpp/core/timer/TimerManager.h>
-#include <dcpp/transfer/upload/UploadManager.h>
+#include <dcpp/transfer/Transfer.h>
+#include <dcpp/transfer/upload/Upload.h>
 #include <dcpp/util/Util.h>
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
 
@@ -491,6 +495,229 @@ TEST_F(ShareCacheTest, temp_shares_are_searchable_and_downloadable_only_on_their
 	EXPECT_TRUE(sm->removeTempShare(path, tree.getRoot(), matchingRoute));
 	EXPECT_TRUE(sm->removeTempShare(path, tree.getRoot(), nmdcRoute));
 	EXPECT_TRUE(sm->getTempShares().empty());
+}
+
+TEST_F(ShareCacheTest, private_chat_attachments_are_only_for_their_recipient) {
+	auto sm = ShareManager::getInstance();
+	const string route = "adc://private.example.invalid";
+	const auto alice = CID::generate();
+	const auto bob = CID::generate();
+	const auto file = cacheFile(configPath + "passport scan.pdf", "private chat attachment");
+	const auto tth = "TTH/" + file.tth.toBase32();
+	ASSERT_TRUE(sm->addTempShare(file.path, file.size, file.timestamp, file.tth, route, alice));
+
+	// Nobody finds it by searching, not even by its exact TTH.
+	EXPECT_TRUE(sm->search("passport", SearchManager::SIZE_DONTCARE, 0, SearchManager::TYPE_ANY, 10, route).empty());
+	EXPECT_TRUE(sm->search(StringList { "ANpassport" }, 10, route).empty());
+	EXPECT_TRUE(sm->search(StringList { "TR" + file.tth.toBase32() }, 10, route).empty());
+
+	// Only the recipient can resolve, inspect or download it.
+	EXPECT_THROW(sm->resolveFile(tth, route), ShareException);
+	EXPECT_THROW(sm->resolveFile(tth, route, bob), ShareException);
+	const auto resolved = sm->resolveFile(tth, route, alice);
+	EXPECT_EQ(resolved.realPath, file.path);
+	EXPECT_TRUE(resolved.temporary);
+	EXPECT_THROW(sm->getTTH(tth, route, bob), ShareException);
+	EXPECT_EQ(sm->getTTH(tth, route, alice), file.tth);
+	EXPECT_THROW(sm->getFileInfo(tth, route, bob), ShareException);
+	EXPECT_NO_THROW(sm->getFileInfo(tth, route, alice));
+	EXPECT_THROW(sm->toVirtual(file.tth, route, bob), ShareException);
+	EXPECT_EQ(sm->toVirtual(file.tth, route, alice), tth);
+	EXPECT_TRUE(sm->getRealPaths(file.tth, route, bob).empty());
+	EXPECT_EQ(sm->getRealPaths(file.tth, route, alice), StringList { file.path });
+	EXPECT_EQ(std::unique_ptr<MemoryInputStream>(sm->getTree(tth, route, bob)), nullptr);
+	EXPECT_THROW(sm->toRealWithSize(tth), ShareException);
+	EXPECT_THROW(sm->getTTH(tth), ShareException);
+
+	// Messages may promise it only in the private chat it was shared in.
+	EXPECT_FALSE(sm->validateChatAttachment(file.tth, file.size, route));
+	EXPECT_FALSE(sm->validateChatAttachment(file.tth, file.size, route, bob));
+	EXPECT_TRUE(sm->validateChatAttachment(file.tth, file.size, route, alice));
+	const auto message = "**Attachment** " + RichText::makeAttachmentMarkdown("passport scan.pdf",
+		file.tth.toBase32(), file.size, false);
+	auto privateMessage = message;
+	EXPECT_TRUE(RichText::prepareOutgoingMessage(privateMessage, true, route, alice));
+	auto otherMessage = message;
+	EXPECT_FALSE(RichText::prepareOutgoingMessage(otherMessage, true, route, bob));
+	auto hubMessage = message;
+	EXPECT_FALSE(RichText::prepareOutgoingMessage(hubMessage, true, route));
+
+	const auto shares = sm->getTempShares();
+	ASSERT_EQ(shares.size(), 1U);
+	EXPECT_EQ(shares.front().recipient, alice);
+	EXPECT_FALSE(sm->isTempShare(file.tth, file.path, route));
+	EXPECT_TRUE(sm->isTempShare(file.tth, file.path, route, alice));
+
+	// The same file posted in the hub chat is for everyone there, as before.
+	ASSERT_TRUE(sm->addTempShare(file.path, file.size, file.timestamp, file.tth, route));
+	EXPECT_EQ(sm->resolveFile(tth, route, bob).realPath, file.path);
+	EXPECT_EQ(sm->search("passport", SearchManager::SIZE_DONTCARE, 0, SearchManager::TYPE_ANY, 10, route).size(), 1U);
+	EXPECT_EQ(sm->getTempShares().size(), 2U);
+
+	EXPECT_FALSE(sm->removeTempShare(file.path, file.tth, route, bob));
+	EXPECT_TRUE(sm->removeTempShare(file.path, file.tth, route, alice));
+	EXPECT_TRUE(sm->removeTempShare(file.path, file.tth, route));
+	EXPECT_TRUE(sm->getTempShares().empty());
+}
+
+TEST_F(ShareCacheTest, uploads_serve_a_private_chat_attachment_only_to_its_recipient) {
+	auto sm = ShareManager::getInstance();
+	auto um = UploadManager::getInstance();
+	const string route = "adc://private.example.invalid";
+	const auto alice = ClientManager::getInstance()->getUser(CID::generate());
+	const auto bob = ClientManager::getInstance()->getUser(CID::generate());
+	const auto file = cacheFile(configPath + "contract.pdf", "attachment for one recipient");
+	ASSERT_TRUE(sm->addTempShare(file.path, file.size, file.timestamp, file.tth, route, alice->getCID()));
+
+	// Returns the path the upload would read, or nothing when the request is refused.
+	auto request = [&](const UserPtr& user, Transfer::Type type) -> optional<string> {
+		UserConnection connection(false);
+		connection.setHubUrl(route);
+		if(user) connection.setUser(user);
+		if(!um->prepareFile(connection, Transfer::names[type], "TTH/" + file.tth.toBase32(), 0, -1)) {
+			return nullopt;
+		}
+		Upload* upload;
+		{
+			Lock l(um->cs);
+			upload = um->uploads.back();
+		}
+		auto path = upload->getPath();
+		um->removeUpload(upload);
+		return path;
+	};
+
+	EXPECT_FALSE(request(bob, Transfer::TYPE_FILE));
+	EXPECT_FALSE(request(nullptr, Transfer::TYPE_FILE));
+	EXPECT_FALSE(request(bob, Transfer::TYPE_TREE));
+	const auto served = request(alice, Transfer::TYPE_FILE);
+	ASSERT_TRUE(served);
+	EXPECT_EQ(*served, file.path);
+}
+
+TEST_F(ShareCacheTest, preparing_a_private_chat_attachment_shares_it_with_the_recipient_only) {
+	auto sm = ShareManager::getInstance();
+	const string route = "adc://private.example.invalid";
+	const auto alice = CID::generate();
+	const auto cached = cacheFile(configPath + "holiday.png", "private attachment preparation");
+	optional<ShareManager::ChatAttachmentResult> result;
+
+	sm->prepareChatAttachment(cached.path, route, alice,
+		[&result](ShareManager::ChatAttachmentResult value) { result = std::move(value); });
+
+	ASSERT_TRUE(result);
+	ASSERT_TRUE(result->attachment);
+	EXPECT_TRUE(result->attachment->temporary);
+	EXPECT_EQ(result->attachment->recipient, alice);
+	EXPECT_TRUE(sm->validateChatAttachment(cached.tth, cached.size, route, alice));
+	EXPECT_FALSE(sm->validateChatAttachment(cached.tth, cached.size, route, CID::generate()));
+	EXPECT_TRUE(sm->search("holiday", SearchManager::SIZE_DONTCARE, 0, SearchManager::TYPE_ANY, 10, route).empty());
+}
+
+TEST_F(ShareCacheTest, hub_url_keys_identify_a_hub_however_its_address_is_written) {
+	EXPECT_EQ(Util::hubUrlKey("hub.example.invalid"), "nmdc://hub.example.invalid:411");
+	EXPECT_EQ(Util::hubUrlKey("dchub://HUB.example.invalid"), "nmdc://hub.example.invalid:411");
+	EXPECT_EQ(Util::hubUrlKey(" nmdc://hub.example.invalid:411/ "), "nmdc://hub.example.invalid:411");
+	EXPECT_EQ(Util::hubUrlKey("DCHUB://hub.example.invalid:411"), "nmdc://hub.example.invalid:411");
+	EXPECT_EQ(Util::hubUrlKey("nmdcs://hub.example.invalid"), "nmdcs://hub.example.invalid:411");
+	EXPECT_EQ(Util::hubUrlKey("adcs://hub.example.invalid:1511/?kp=SHA256/ABC"), "adcs://hub.example.invalid:1511");
+	EXPECT_EQ(Util::hubUrlKey("adc://[2001:DB8::1]:411"), "adc://[2001:db8::1]:411");
+	EXPECT_NE(Util::hubUrlKey("adc://hub.example.invalid:1511"), Util::hubUrlKey("adcs://hub.example.invalid:1511"));
+	EXPECT_NE(Util::hubUrlKey("hub.example.invalid:411"), Util::hubUrlKey("nmdcs://hub.example.invalid:411"));
+	EXPECT_NE(Util::hubUrlKey("hub.example.invalid:411"), Util::hubUrlKey("hub.example.invalid:412"));
+}
+
+TEST_F(ShareCacheTest, share_profiles_apply_however_the_hub_address_is_written) {
+	populateShare();
+	auto sm = ShareManager::getInstance();
+	auto fm = FavoriteManager::getInstance();
+	FavoriteHubEntry hub;
+	hub.setServer("hub.example.invalid:411");
+	hub.setPassword("secret");
+	hub.setShareDirectories({});
+	fm->addFavorite(hub);
+
+	for(const string url: { "hub.example.invalid:411", "dchub://HUB.example.invalid", "nmdc://hub.example.invalid:411/" }) {
+		std::set<string> directories { "not cleared" };
+		EXPECT_TRUE(fm->getHubShareDirectories(url, directories)) << url;
+		EXPECT_TRUE(directories.empty()) << url;
+		EXPECT_EQ(sm->getSharedFiles(url), 0U) << url;
+		EXPECT_EQ(sm->getShareSizeForHub(url), 0) << url;
+		EXPECT_TRUE(sm->search("file", SearchManager::SIZE_DONTCARE, 0, SearchManager::TYPE_ANY, 10, url).empty()) << url;
+		EXPECT_THROW(sm->resolveFile("/Virtual/Child/file.bin", url), ShareException) << url;
+	}
+	// Other hubs keep the full share, and settings such as the password still
+	// follow only the exact address.
+	for(const string url: { "nmdcs://hub.example.invalid:411", "hub.example.invalid:412", "other.example.invalid" }) {
+		std::set<string> directories;
+		EXPECT_FALSE(fm->getHubShareDirectories(url, directories)) << url;
+		EXPECT_EQ(sm->getSharedFiles(url), 1U) << url;
+	}
+	EXPECT_NE(fm->getFavoriteHubEntry("hub.example.invalid:411"), nullptr);
+	EXPECT_EQ(fm->getFavoriteHubEntry("dchub://hub.example.invalid"), nullptr);
+}
+
+TEST_F(ShareCacheTest, editing_a_favorite_address_keeps_its_share_profile_for_the_old_address) {
+	auto fm = FavoriteManager::getInstance();
+	FavoriteHubEntry added;
+	added.setServer("adc://old.example.invalid:1511");
+	added.setPassword("secret");
+	added.setShareDirectories({ sharePath });
+	fm->addFavorite(added);
+	auto entry = fm->getFavoriteHubEntry("adc://old.example.invalid:1511");
+	ASSERT_NE(entry, nullptr);
+
+	fm->editFavorite(entry, [](FavoriteHubEntry& e) { e.setServer("adc://new.example.invalid:1511"); });
+	std::set<string> directories;
+	// A window still open on the old address keeps the profile...
+	EXPECT_TRUE(fm->getHubShareDirectories("adc://old.example.invalid:1511", directories));
+	EXPECT_EQ(directories, std::set<string> { sharePath });
+	EXPECT_TRUE(fm->getHubShareDirectories("adc://new.example.invalid:1511", directories));
+	// ...but the password does not follow the favorite to an address it no longer has.
+	EXPECT_EQ(fm->getFavoriteHubEntry("adc://old.example.invalid:1511"), nullptr);
+	EXPECT_EQ(fm->getFavoriteHubEntry("adc://new.example.invalid:1511"), entry);
+
+	// Clearing the profile clears it for the old address as well.
+	fm->editFavorite(entry, [](FavoriteHubEntry& e) { e.clearShareProfile(); });
+	EXPECT_FALSE(fm->getHubShareDirectories("adc://old.example.invalid:1511", directories));
+
+	fm->editFavorite(entry, [this](FavoriteHubEntry& e) { e.setShareDirectories({ sharePath }); });
+	fm->removeFavorite(entry);
+	EXPECT_FALSE(fm->getHubShareDirectories("adc://old.example.invalid:1511", directories));
+	EXPECT_FALSE(fm->getHubShareDirectories("adc://new.example.invalid:1511", directories));
+
+	// A favorite that is not stored yet (the Add dialog) is simply changed.
+	FavoriteHubEntry pending;
+	fm->editFavorite(&pending, [](FavoriteHubEntry& e) { e.setServer("adc://pending.example.invalid"); });
+	EXPECT_EQ(pending.getServer(), "adc://pending.example.invalid");
+	EXPECT_EQ(fm->getFavoriteHubEntry("adc://pending.example.invalid"), nullptr);
+}
+
+TEST_F(ShareCacheTest, favorite_list_changes_keep_share_profiles_consistent) {
+	auto fm = FavoriteManager::getInstance();
+	FavoriteHubEntry first, second;
+	first.setServer("adc://first.example.invalid");
+	second.setServer("adc://second.example.invalid");
+	second.setShareDirectories({});
+	fm->addFavorite(first);
+	fm->addFavorite(second);
+	auto hubs = fm->getFavoriteHubs();
+	ASSERT_EQ(hubs.size(), 2U);
+
+	// Only a reordering of the same favorites is accepted.
+	fm->reorderFavorites(FavoriteHubEntryList { hubs[1] });
+	EXPECT_EQ(fm->getFavoriteHubs(), hubs);
+	fm->reorderFavorites(FavoriteHubEntryList { hubs[1], hubs[0] });
+	EXPECT_EQ(fm->getFavoriteHubs(), (FavoriteHubEntryList { hubs[1], hubs[0] }));
+
+	// Failovers the hub announces carry its share profile too.
+	const StringList failovers { "adcs://failover.example.invalid:1511" };
+	EXPECT_TRUE(fm->setFailoverServers("adc://second.example.invalid", failovers));
+	EXPECT_FALSE(fm->setFailoverServers("adc://second.example.invalid", failovers));
+	EXPECT_FALSE(fm->setFailoverServers("adc://unknown.example.invalid", failovers));
+	std::set<string> directories;
+	EXPECT_TRUE(fm->getHubShareDirectories("ADCS://Failover.example.invalid:1511/", directories));
+	EXPECT_FALSE(fm->getHubShareDirectories("adc://first.example.invalid", directories));
 }
 
 TEST_F(ShareCacheTest, prepares_cached_unshared_attachment_with_exact_route_metadata) {

@@ -23,13 +23,17 @@
 /** Source-preserving ADC RTF0 editor with a separate rendered preview. */
 class RichTextEditorDlg : public GridDialog {
 public:
-	RichTextEditorDlg(dwt::Widget* parent, const string& hubUrl, const tstring& initialText, const tstring& useCaption = Util::emptyStringT);
+	/** recipient is the private-chat partner (zero in hub chat): attachments are
+	shared with that user only. */
+	RichTextEditorDlg(dwt::Widget* parent, const string& hubUrl, const tstring& initialText, const tstring& useCaption = Util::emptyStringT,
+		const CID& recipient = CID());
 	~RichTextEditorDlg();
 
 	const tstring& getText() const { return result; }
 
 private:
 	string hubUrl;
+	CID recipient;
 	tstring initialText;
 	tstring result;
 	tstring useCaption;
