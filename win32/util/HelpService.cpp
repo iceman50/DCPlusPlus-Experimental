@@ -93,7 +93,8 @@ dwt::Control* helpPopup = nullptr; // only have 1 help popup at any given time.
 
 /** Display a help popup.
 Help popups display RTF text within a Rich Edit control. They visually look similar to a regular
-tooltip, but with a yellow background and thicker borders.
+tooltip: with the system tooltip colors and thicker borders, or with the palette's tooltip colors
+and border when the application draws its own appearance (dark or custom palettes).
 @tparam tooltip Whether this help popup should act as an inactive tooltip that doesn't receive
 input but closes itself once its timer runs out. */
 template<bool tooltip>
@@ -115,6 +116,15 @@ public:
 		seed.location.size.y = 1; // so that Rich Edit 8 sends EN_REQUESTRESIZE
 		seed.events |= ENM_REQUESTRESIZE;
 		create(seed);
+
+		if(isManualAppearance()) {
+			// The 3D client edge is drawn in system colors; use a palette border instead.
+			addRemoveExStyle(WS_EX_CLIENTEDGE, false);
+			addRemoveStyle(WS_BORDER, true);
+			::SetWindowPos(handle(), 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+				SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+			onRaw([this](WPARAM, LPARAM) -> LRESULT { paintBorder(); return 0; }, dwt::Message(WM_NCPAINT));
+		}
 
 		const auto margins = sendMessage(EM_GETMARGINS);
 		sendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELONG(LOWORD(margins) + margin, HIWORD(margins) + margin));
@@ -155,13 +165,21 @@ private:
 
 		// adjust the size to account for borders and margins.
 		rect.pos = pos;
-		rect.size.x += ::GetSystemMetrics(SM_CXEDGE) * 2;
-		rect.size.y += ::GetSystemMetrics(SM_CYEDGE) * 2 + margin;
+		const auto edge = hasExStyle(WS_EX_CLIENTEDGE);
+		rect.size.x += ::GetSystemMetrics(edge ? SM_CXEDGE : SM_CXBORDER) * 2;
+		rect.size.y += ::GetSystemMetrics(edge ? SM_CYEDGE : SM_CYBORDER) * 2 + margin;
 
 		// make sure the window fits in within the desktop of the parent widget.
 		rect.ensureVisibility(getParent());
 
-		setColor(dwt::Color::predefined(COLOR_INFOTEXT), dwt::Color::predefined(COLOR_INFOBK));
+		// The same colors as tooltips: the palette's when the application draws its own
+		// appearance, the system's otherwise (including high contrast).
+		if(isManualAppearance()) {
+			const auto& palette = getAppearance().getPalette();
+			setColor(palette.text, palette.surface);
+		} else {
+			setColor(dwt::Color::predefined(COLOR_INFOTEXT), dwt::Color::predefined(COLOR_INFOBK));
+		}
 
 		if(tooltip) {
 			// this help popup acts as a tooltip; it will close by itself.
@@ -195,6 +213,18 @@ private:
 	bool close() {
 		BaseType::close(true);
 		return true;
+	}
+
+	void paintBorder() {
+		RECT bounds;
+		::GetWindowRect(handle(), &bounds);
+		::OffsetRect(&bounds, -bounds.left, -bounds.top);
+		if(auto dc = ::GetWindowDC(handle())) {
+			auto brush = ::CreateSolidBrush(getAppearance().getPalette().border);
+			::FrameRect(dc, &bounds, brush);
+			::DeleteObject(brush);
+			::ReleaseDC(handle(), dc);
+		}
 	}
 
 	static const long margin = 6;
