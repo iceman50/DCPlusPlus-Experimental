@@ -45,8 +45,19 @@ HRESULT closeThemeData(HTHEME theme) {
 	return ::CloseThemeData(theme);
 }
 
+namespace {
+thread_local unsigned settingWindowTheme = 0;
+}
+
 HRESULT setWindowTheme(HWND window, LPCWSTR application, LPCWSTR classes) {
-	return ::SetWindowTheme(window, application, classes);
+	++settingWindowTheme;
+	const auto result = ::SetWindowTheme(window, application, classes);
+	--settingWindowTheme;
+	return result;
+}
+
+bool isSettingWindowTheme() {
+	return settingWindowTheme > 0;
 }
 
 HRESULT drawThemeParentBackground(HWND window, HDC dc, RECT* rect) {

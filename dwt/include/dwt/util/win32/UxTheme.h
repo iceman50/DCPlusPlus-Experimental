@@ -45,6 +45,9 @@ BOOL isAppThemed();
 HTHEME openThemeData(HWND window, LPCWSTR classes);
 HRESULT closeThemeData(HTHEME theme);
 HRESULT setWindowTheme(HWND window, LPCWSTR application, LPCWSTR classes);
+/** True while setWindowTheme runs on this thread. The WM_THEMECHANGED it sends
+ * (synchronously) is about that one window, not a system theme change. */
+bool isSettingWindowTheme();
 HRESULT drawThemeParentBackground(HWND window, HDC dc, RECT* rect);
 HRESULT drawThemeBackground(HTHEME theme, HDC dc, int part, int state,
 	const RECT* rect, const RECT* clip);

@@ -39,6 +39,7 @@
 #include <dwt/resources/Pen.h>
 #include <dwt/widgets/Composite.h>
 #include <dwt/widgets/Control.h>
+#include <dwt/util/win32/UxTheme.h>
 #include <dwt/util/win32/Version.h>
 
 #include <algorithm>
@@ -609,6 +610,12 @@ COLORREF Appearance::getContentText() const {
 
 bool Appearance::isColorSchemeMessage(const MSG& msg) const {
 	if(applying) {
+		return false;
+	}
+	/* Theming one top-level window (a tooltip, for example) sends it WM_THEMECHANGED.
+	 * Treating that as a system theme change refreshed and repainted the whole
+	 * application each time a tooltip or help popup was created. */
+	if(msg.message == WM_THEMECHANGED && util::win32::uxtheme::isSettingWindowTheme()) {
 		return false;
 	}
 	if(msg.message == WM_THEMECHANGED || msg.message == WM_SYSCOLORCHANGE) {
