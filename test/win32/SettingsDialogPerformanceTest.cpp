@@ -8,6 +8,7 @@
 #include <win32/util/UiServices.h>
 #include <win32/util/ControlSeeds.h>
 #include <win32/util/IconManager.h>
+#include <win32/settings/base/PropPage.h>
 #include <win32/settings/base/SettingsDialog.h>
 #include <dcpp/DCPlusPlus.h>
 #include <dcpp/core/io/File.h>
@@ -48,6 +49,12 @@ std::map<std::pair<std::wstring, UINT>, long> received;
 HWND watched = nullptr;
 long watchedPaints = 0;
 int failures = 0;
+/* While a page switch settles, paints inside the page host must happen while the
+host is composited (double buffered); otherwise the page visibly erases and paints
+control by control. */
+HWND pageHost = nullptr;
+bool switching = false;
+long bufferedPaints = 0, unbufferedPaints = 0, unbufferedContainerPaints = 0;
 
 std::wstring className(HWND window);
 
@@ -56,6 +63,13 @@ void countMessage(HWND window, UINT message) {
 	if(message == WM_PAINT) {
 		++paints;
 		if(window && window == watched) ++watchedPaints;
+		if(switching && pageHost && window && (window == pageHost || IsChild(pageHost, window))) {
+			if(GetWindowLongPtr(pageHost, GWL_EXSTYLE) & WS_EX_COMPOSITED) ++bufferedPaints; else {
+				++unbufferedPaints;
+				// A window with children erases behind its controls: the visible flash.
+				if(GetWindow(window, GW_CHILD)) ++unbufferedContainerPaints;
+			}
+		}
 	}
 	if(recording && window) ++received[{ className(window), message }];
 }
@@ -113,6 +127,8 @@ std::wstring className(HWND window) {
 	return name;
 }
 
+std::atomic<bool> tickPending { false };
+
 struct Driver {
 	enum class Phase { Opening, Settle, Measure, CheckOverlay, Done } phase = Phase::Opening;
 	const bool measuring;
@@ -144,9 +160,11 @@ struct Driver {
 		ULONG64 cyclesBefore = 0, cyclesAfter = 0;
 		QueryThreadCycleTime(GetCurrentThread(), &cyclesBefore);
 		const auto messagesBefore = messages;
+		bufferedPaints = unbufferedPaints = unbufferedContainerPaints = 0;
+		switching = true;
 		const auto start = Clock::now();
 		TreeView_SelectItem(tree, item);
-		RedrawWindow(dialog, nullptr, nullptr, RDW_UPDATENOW | RDW_ALLCHILDREN);
+		pumpUntilIdle();
 		QueryThreadCycleTime(GetCurrentThread(), &cyclesAfter);
 		if(measuring) {
 			std::printf("%-28ls switch %6.1f ms %5.0f Mcycles %6ld messages %4ld new windows", page.c_str(),
@@ -155,6 +173,32 @@ struct Driver {
 			std::fflush(stdout);
 		}
 		enter(Phase::Settle);
+	}
+
+	/* Paint the switch the way the application does, through the message queue.
+	Bounded, because a page that repaints without end never leaves the queue idle;
+	the idle measurement then reports it. */
+	void pumpUntilIdle() {
+		const auto deadline = Clock::now() + std::chrono::seconds(1);
+		MSG msg;
+		while(Clock::now() < deadline && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+			if(msg.message == WM_TICK) {
+				tickPending = false;
+				continue;
+			}
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
+		}
+	}
+
+	// The window holding the settings pages.
+	void findPageHost() {
+		if(pageHost) return;
+		EnumChildWindows(dialog, [](HWND window, LPARAM) -> BOOL {
+			if(!dynamic_cast<PropPage*>(dwt::hwnd_cast<dwt::Widget*>(window))) return TRUE;
+			pageHost = GetParent(window);
+			return FALSE;
+		}, 0);
 	}
 
 	long windowCount() const {
@@ -229,6 +273,12 @@ struct Driver {
 				finish();
 				return;
 			}
+			findPageHost();
+			if(!pageHost) {
+				fail("settings page host not found");
+				finish();
+				return;
+			}
 			select(TreeView_GetRoot(tree));
 			return;
 		case Phase::Settle:
@@ -237,6 +287,17 @@ struct Driver {
 				return;
 			}
 			if(!elapsed(SETTLE)) return;
+			switching = false;
+			std::printf("  painted %3ld buffered %3ld unbuffered (%ld containers)", bufferedPaints, unbufferedPaints, unbufferedContainerPaints);
+			/* A lone control may still repaint itself afterwards, for example the
+			 * animation of a button that a page disables asynchronously; themed controls
+			 * draw those frames into their own buffer. */
+			if(unbufferedContainerPaints || unbufferedPaints > 10) {
+				char page8[128] {};
+				WideCharToMultiByte(CP_UTF8, 0, page.c_str(), -1, page8, sizeof(page8), nullptr, nullptr);
+				fail(std::string("switching to settings page '") + page8 + "' painted " + std::to_string(unbufferedPaints) +
+					" times without double buffering, so it flickers");
+			}
 			paints = 0;
 			received.clear();
 			recording = true;
@@ -297,7 +358,6 @@ struct Driver {
 };
 
 Driver* driver = nullptr;
-std::atomic<bool> tickPending { false };
 
 LRESULT CALLBACK tickProc(HWND window, UINT message, WPARAM w, LPARAM l) {
 	if(message == WM_TICK) {
@@ -375,7 +435,10 @@ int dwtMain(dwt::Application& app) {
 	UnhookWindowsHookEx(sent);
 	UnhookWindowsHookEx(posted);
 	DestroyWindow(ticker);
-	if(closed[1].gdi > closed[0].gdi + 5 || closed[1].user > closed[0].user + 5)
+	/* Windows and the theme engine cache a few objects while pages paint (repeated
+	 * opens settle within about 10 of each other); a leak would keep dozens of
+	 * objects per page alive. */
+	if(closed[1].gdi > closed[0].gdi + 20 || closed[1].user > closed[0].user + 20)
 		fail("reopening the settings dialog kept more GDI/USER objects alive");
 
 	DestroyWindow(owner->handle());

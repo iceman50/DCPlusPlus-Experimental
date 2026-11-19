@@ -87,6 +87,12 @@ private:
 	PageList pages;
 	PropPage* currentPage;
 	dwt::Control* pageHost = nullptr;
+	/* The page host composes (double buffers) its subtree only while a page switch
+	is painted; an idle composited host repaints list views and custom-drawn
+	scrollbars without end. */
+	bool composingSwitch = false;
+	bool composingPainted = false;
+	bool compositionEndQueued = false;
 
 	GridPtr grid;
 	TreePtr tree;
@@ -106,6 +112,8 @@ private:
 	void handleChildHelp(dwt::Control* widget);
 	bool handleClosing();
 	void handleSelectionChanged();
+	void setPageHostComposited(bool composited);
+	void queueCompositionEnd(int rounds);
 	void handleOKClicked();
 	void handleCtrlTab(bool shift);
 

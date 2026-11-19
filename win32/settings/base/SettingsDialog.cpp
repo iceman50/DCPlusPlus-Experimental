@@ -146,11 +146,39 @@ bool SettingsDialog::initDialog() {
 		cur->column(0).mode = GridInfo::FILL;
 		cur->setSpacing(grid->getSpacing());
 
-		// Not WS_EX_COMPOSITED: report-view list views and custom-drawn scrollbars
-		// repaint without end inside a composited window, keeping a CPU core and
-		// the GPU busy while the dialog is open. Page switches suppress redraw instead.
 		auto container = cur->addChild(dwt::ScrolledContainer::Seed(WS_BORDER));
 		pageHost = container;
+
+		/* A page switch is painted with the host composited, so the new page appears
+		 * in one step instead of erasing and painting control by control. Report-view
+		 * list views and custom-drawn scrollbars invalidate themselves while painting,
+		 * which inside a composited window repaints the whole page without end and
+		 * keeps a CPU core and the GPU busy. So after each composed paint, a posted
+		 * message (handled before any further WM_PAINT) discards what that paint
+		 * invalidated, and composition ends once the dialog is idle: after pages that
+		 * fill in content asynchronously have done so, composed as well. */
+		static const UINT composedPaint = ::RegisterWindowMessage(_T("dcpp.SettingsDialog.ComposedPagePaint"));
+		container->addCallback(dwt::Message(WM_PAINT), [this](const MSG&, LRESULT&) -> bool {
+			if(composingSwitch && !composingPainted && ::IsWindowVisible(pageHost->handle())) {
+				composingPainted = true;
+				::PostMessage(handle(), composedPaint, 0, 0);
+			}
+			return false;
+		});
+		addCallback(dwt::Message(composedPaint), [this](const MSG&, LRESULT& result) -> bool {
+			composingPainted = false;
+			/* WM_PAINT is only retrieved once no posted message is waiting, so only the
+			 * composed paint ran since this message was posted. Whatever is invalid now
+			 * was invalidated by that paint over finished content. */
+			pageHost->redrawWindow(RDW_VALIDATE | RDW_NOERASE | RDW_NOFRAME |
+				RDW_NOINTERNALPAINT | RDW_ALLCHILDREN);
+			if(!compositionEndQueued) {
+				compositionEndQueued = true;
+				queueCompositionEnd(3);
+			}
+			result = 0;
+			return true;
+		});
 
 		const size_t setting = SETTING(SETTINGS_PAGE);
 		auto addPage = [&](const tstring& title, const std::type_info& type, std::function<PropPage* ()> create, unsigned icon, HTREEITEM parent) -> HTREEITEM {
@@ -387,6 +415,7 @@ void SettingsDialog::handleSelectionChanged() {
 			return;
 		}
 
+		setPageHostComposited(true);
 		{
 			/* Suppress intermediate paints during page creation and layout.
 			 * Keep the new page hidden until the host's redraw is restored. */
@@ -411,6 +440,35 @@ void SettingsDialog::handleSelectionChanged() {
 		// Synchronous painting here can run inside the native tree's drawing cycle.
 		pageHost->redrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
 			RDW_ALLCHILDREN);
+		// Also ends composition when nothing gets painted, such as off screen.
+		if(!compositionEndQueued) {
+			compositionEndQueued = true;
+			queueCompositionEnd(3);
+		}
+	}
+}
+
+/* Asynchronous calls run only once no message, paints included, is waiting. Pages
+fill in content with asynchronous calls that queue further calls (Themes creates the
+User matching page, which updates its styles), so wait behind a few rounds of them. */
+void SettingsDialog::queueCompositionEnd(int rounds) {
+	callAsync([this, rounds] {
+		if(rounds > 1) {
+			queueCompositionEnd(rounds - 1);
+			return;
+		}
+		compositionEndQueued = false;
+		setPageHostComposited(false);
+	});
+}
+
+void SettingsDialog::setPageHostComposited(bool composited) {
+	composingSwitch = composited;
+	composingPainted = false;
+	const auto style = ::GetWindowLongPtr(pageHost->handle(), GWL_EXSTYLE);
+	const auto wanted = composited ? style | WS_EX_COMPOSITED : style & ~WS_EX_COMPOSITED;
+	if(wanted != style) {
+		::SetWindowLongPtr(pageHost->handle(), GWL_EXSTYLE, wanted);
 	}
 }
 

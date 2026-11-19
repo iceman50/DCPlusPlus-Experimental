@@ -107,8 +107,9 @@ bool clientNeedsPaint(HWND window) {
 void checkPresentedPage(PropPage* page) {
 	const auto host = page->getParent()->handle();
 	check(IsWindowVisible(page->handle()), "Selected settings page is hidden");
-	// List views and custom-drawn scrollbars repaint without end under a composited host.
-	check(!(GetWindowLongPtr(host, GWL_EXSTYLE) & WS_EX_COMPOSITED), "Settings page host is composited");
+	// Switches are composed; once settled, the host must not stay composited, because
+	// list views and custom-drawn scrollbars repaint without end under it.
+	check(!(GetWindowLongPtr(host, GWL_EXSTYLE) & WS_EX_COMPOSITED), "Settings page host stayed composited after the switch");
 	unsigned visiblePages = 0;
 	for(auto child = GetWindow(host, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
 		if(dynamic_cast<PropPage*>(dwt::hwnd_cast<dwt::Widget*>(child)) && IsWindowVisible(child)) ++visiblePages;
@@ -122,12 +123,10 @@ void checkPresentedPage(PropPage* page) {
 		pageBounds.bottom >= hostBounds.bottom, "Page switch left a gap or retained a previous scroll offset");
 }
 void settleSettingsMessages() {
-	MSG msg;
+	// Messages and asynchronous calls, as the application's message loop runs them.
 	unsigned count = 0;
-	while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+	while(dwt::Application::instance().dispatch()) {
 		check(++count < 2000, "Settings paint queue did not settle");
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
 	}
 }
 void checkThemeControlsReachable(ThemePage* page) {

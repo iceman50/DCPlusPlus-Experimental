@@ -761,8 +761,18 @@ bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) 
 			scheduleScrollDecorationRefresh(msg.hwnd, false);
 		}
 		break;
-	case WM_SHOWWINDOW:
 	case WM_STYLECHANGED:
+		/* Composition (double buffering) does not move scrollbars; refreshing the
+		 * overlays would repaint them right after a composed paint. */
+		if(msg.wParam == static_cast<WPARAM>(GWL_EXSTYLE) && msg.lParam) {
+			const auto& change = *reinterpret_cast<const STYLESTRUCT*>(msg.lParam);
+			if((change.styleOld ^ change.styleNew) == WS_EX_COMPOSITED) {
+				break;
+			}
+		}
+		scheduleScrollDecorationRefresh(msg.hwnd, true);
+		break;
+	case WM_SHOWWINDOW:
 		scheduleScrollDecorationRefresh(msg.hwnd, true);
 		break;
 	case WM_WINDOWPOSCHANGED:
