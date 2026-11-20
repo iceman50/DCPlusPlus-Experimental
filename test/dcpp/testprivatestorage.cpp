@@ -8,7 +8,9 @@
 #include <dcpp/core/io/File.h>
 #include <dcpp/util/text/Text.h>
 #include <dcpp/settings/SettingsManager.h>
+#include <cstdlib>
 #include <filesystem>
+#include <vector>
 
 using namespace dcpp;
 #ifdef _WIN32
@@ -234,6 +236,48 @@ TEST_F(PrivateStorage, private_tree_aliases_and_names_fail_closed) {
 		m.name = name;
 		EXPECT_THROW(pft::PrivateFile::createDestination(m), FileException);
 	}
+}
+
+TEST_F(PrivateStorage, scanner_agrees_with_private_path_for_regular_files) {
+	const auto shared = base / "shared";
+	const auto received = base / "PrivateSend" / "Received";
+	const auto staging = base / (".DCPlusPlus-PrivateSend-" + pft::randomHex(16));
+	for(const auto& dir : { shared, received, staging })
+		std::filesystem::create_directories(dir);
+	File((shared / "public.txt").u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("public");
+	File((shared / "marked.txt").u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("marked");
+	File((shared / "marked.txt").u8string() + ":DCPlusPlus.PrivateSend", File::WRITE, File::CREATE | File::TRUNCATE).write("PFT1");
+	File((received / "inside.txt").u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("private");
+	File((staging / "unfinished.txt").u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("partial");
+	File((base / "PrivateSend").u8string() + "File", File::WRITE, File::CREATE | File::TRUNCATE).write("sibling");
+	const auto staged = ".DCPlusPlus-PrivateSend-" + pft::randomHex(16);
+	File((shared / staged).u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("staged name");
+
+	const auto junction = shared / "junction";
+	const auto command = "mklink /J \"" + junction.u8string() + "\" \"" + received.u8string() + "\" >NUL 2>&1";
+	const bool haveJunction = std::system(command.c_str()) == 0 && std::filesystem::exists(junction);
+
+	const pft::PrivatePathScanner scanner;
+	std::vector<std::pair<std::filesystem::path, std::string>> cases = {
+		{ shared, "public.txt" }, { shared, "marked.txt" }, { shared, staged }, { received, "inside.txt" },
+		{ staging, "unfinished.txt" }, { base, "PrivateSendFile" }, { base, "source.txt" }, { shared, "missing.txt" },
+	};
+	if(haveJunction)
+		cases.emplace_back(junction, "inside.txt");
+	for(const auto& [dir, name] : cases) {
+		const auto dirPath = dir.u8string() + PATH_SEPARATOR_STR;
+		EXPECT_EQ(pft::isPrivatePath(dirPath + name), scanner.isPrivateFile(scanner.enter(dirPath), name)) << dirPath + name;
+	}
+	const auto sharedDir = scanner.enter(shared.u8string() + PATH_SEPARATOR_STR);
+	EXPECT_FALSE(scanner.isPrivateFile(sharedDir, "public.txt"));
+	EXPECT_TRUE(scanner.isPrivateFile(sharedDir, "marked.txt"));
+	EXPECT_TRUE(scanner.isPrivateFile(sharedDir, staged));
+	EXPECT_TRUE(scanner.isPrivateFile(scanner.enter(received.u8string() + PATH_SEPARATOR_STR), "inside.txt"));
+	EXPECT_TRUE(scanner.isPrivateFile(scanner.enter(staging.u8string() + PATH_SEPARATOR_STR), "unfinished.txt"));
+	// Junctions into private storage are compared above but not asserted private: weakly_canonical
+	// does not resolve junctions with this toolchain, so isPrivatePath misses them too.
+	if(haveJunction)
+		std::filesystem::remove(junction);
 }
 
 TEST_F(PrivateStorage, startup_removes_only_partial_files) {

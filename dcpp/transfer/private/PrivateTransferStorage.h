@@ -19,6 +19,28 @@ std::string storageRoot();
 std::string defaultDownloadPath(const std::string& name);
 bool isPrivatePath(const std::string& path);
 
+/** isPrivatePath for share scans. It canonicalizes the private root once and each scanned directory
+ * once instead of per file, which on a network drive costs several round trips per file. For a
+ * regular file isPrivateFile(enter(dir), name) == isPrivatePath(dir + name); a file that is itself a
+ * reparse point (symlink) must go through isPrivatePath. */
+class PrivatePathScanner {
+public:
+	struct Directory {
+		std::string path;      ///< As given; ends with a separator.
+		std::string canonical; ///< With a trailing separator; empty if canonicalization failed.
+		bool staging = false;  ///< A component of the path or its canonical form is publication staging.
+	};
+
+	PrivatePathScanner();
+	/** @param directory Real directory path ending with a separator. */
+	Directory enter(const std::string& directory) const;
+	bool isPrivateFile(const Directory& dir, const std::string& name) const;
+
+private:
+	std::string root;
+	std::string canonicalRoot;
+};
+
 /** Startup only: old grants cannot survive restart; remove owned partials
  * without following reparse points or touching completed received files. */
 bool purgeUnfinished() noexcept;

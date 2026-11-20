@@ -1105,8 +1105,7 @@ const ShareManager::Directory::File& ShareManager::findFile(const string& virtua
 	}
 
 	auto v = splitVirtual(virtualFile);
-	auto it = find_if(v.first->files.begin(), v.first->files.end(),
-		Directory::File::StringComp(v.second));
+	auto it = v.first->findFile(v.second);
 	if(it == v.first->files.end())
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	return *it;
@@ -1511,6 +1510,16 @@ size_t ShareManager::getSharedFiles(const string& hubUrl) const {
 ShareManager::Directory::Ptr ShareManager::buildTree(const string& realPath, optional<std::reference_wrapper<const string>> dirName,
 	const Directory::Ptr& parent, time_t lastWrite)
 {
+	const pft::PrivatePathScanner privacy;
+	return scanTree(privacy, realPath, dirName, parent, lastWrite);
+}
+
+ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanner& privacy, const string& realPath,
+	optional<std::reference_wrapper<const string>> dirName, const Directory::Ptr& parent, time_t lastWrite)
+{
+	// Canonicalized lazily: only directories that contain files need it.
+	optional<pft::PrivatePathScanner::Directory> privateDir;
+
 	if(lastWrite == 0) {
 		FileFindIter directoryInfo(realPath.substr(0, realPath.size() - 1));
 		if(directoryInfo != FileFindIter()) {
@@ -1562,7 +1571,7 @@ ShareManager::Directory::Ptr ShareManager::buildTree(const string& realPath, opt
 				} while(dir->nameInUse(virtualName));
 			}
 
-			dir->directories[virtualName] = buildTree(newRealPath, std::cref(virtualName), dir, i->getLastWriteTime());
+			dir->directories[virtualName] = scanTree(privacy, newRealPath, std::cref(virtualName), dir, i->getLastWriteTime());
 
 			if(virtualName != name) {
 				dir->directories[virtualName]->setRealName(move(name));
@@ -1574,8 +1583,16 @@ ShareManager::Directory::Ptr ShareManager::buildTree(const string& realPath, opt
 
 			auto size = i->getSize();
 			auto fileName = realPath + name;
-			if(pft::isPrivatePath(fileName))
-				continue;
+			// A link file can point anywhere, so only regular files may use the per-directory check.
+			if(i->isReparsePoint()) {
+				if(pft::isPrivatePath(fileName))
+					continue;
+			} else {
+				if(!privateDir)
+					privateDir = privacy.enter(realPath);
+				if(privacy.isPrivateFile(*privateDir, name))
+					continue;
+			}
 
 			if(!checkInvalidFileName(name))
 				continue;

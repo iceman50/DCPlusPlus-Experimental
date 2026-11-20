@@ -1357,6 +1357,30 @@ TEST_F(ShareCacheTest, private_markers_block_stale_resolution_refresh_and_cache_
 	ASSERT_TRUE(sm->loadShareCache());
 	EXPECT_TRUE(sm->tthIndex.empty());
 }
+
+TEST_F(ShareCacheTest, scan_excludes_file_symlinks_into_private_storage) {
+	// The scan checks regular files per directory; a file symlink must still be resolved to its
+	// target, so it may not expose private storage.
+	auto sm = ShareManager::getInstance();
+	const auto root = pft::storageRoot();
+	std::filesystem::create_directories(root + "Received");
+	std::ofstream(root + "Received" PATH_SEPARATOR_STR "private.txt") << "private";
+	std::ofstream(sharePath + "public.txt") << "public";
+
+	const auto link = sharePath + "link.txt";
+	if(!CreateSymbolicLinkW(Text::toT(link).c_str(), Text::toT(root + "Received" PATH_SEPARATOR_STR "private.txt").c_str(),
+		SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+		GTEST_SKIP() << "Creating a symlink needs Developer Mode or elevation";
+
+	FileFindIter it(link);
+	ASSERT_NE(it, FileFindIter());
+	EXPECT_TRUE(it->isReparsePoint());
+
+	const auto tree = sm->buildTree(sharePath);
+	EXPECT_NE(tree->findFile("public.txt"), tree->files.end());
+	EXPECT_EQ(tree->findFile("link.txt"), tree->files.end());
+	std::filesystem::remove(link);
+}
 #endif
 
 namespace {

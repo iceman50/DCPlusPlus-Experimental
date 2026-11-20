@@ -67,6 +67,7 @@ class SQLiteDB;
 class SQLiteStatement;
 
 struct ShareLoader;
+namespace pft { class PrivatePathScanner; }
 class ShareManager : public Singleton<ShareManager>, private SettingsManagerListener, private Thread, private TimerManagerListener,
 	private HashManagerListener, private QueueManagerListener
 {
@@ -260,13 +261,13 @@ private:
 				return getParent() == rhs.getParent() && (Util::stricmp(getName(), rhs.getName()) == 0);
 			}
 
-			struct StringComp {
-				StringComp(const string& s) : a(s) { }
-				bool operator()(const File& b) const { return Util::stricmp(a, b.getName()) == 0; }
-				const string& a;
-			};
+			/** Transparent, so a name looks a file up in O(log n) instead of a linear scan; the
+			match is the same case-insensitive equality the set already orders by. */
 			struct FileLess {
+				using is_transparent = void;
 				bool operator()(const File& a, const File& b) const { return (Util::stricmp(a.getName(), b.getName()) < 0); }
+				bool operator()(const File& a, const string& b) const { return (Util::stricmp(a.getName(), b) < 0); }
+				bool operator()(const string& a, const File& b) const { return (Util::stricmp(a, b.getName()) < 0); }
 			};
 
 			/** Store this file's real path and ensure its virtual name doesn't clash with the names
@@ -314,7 +315,7 @@ private:
 		void toXml(OutputStream& xmlFile, string& indent, string& tmp2, int8_t level, bool addFileDates) const;
 		void filesToXml(OutputStream& xmlFile, string& indent, string& tmp2, bool addDates) const;
 
-		auto findFile(const string& aFile) const -> decltype(files.cbegin()) { return find_if(files.begin(), files.end(), File::StringComp(aFile)); }
+		auto findFile(const string& aFile) const -> decltype(files.cbegin()) { return files.find(aFile); }
 
 		void merge(const Ptr& source, const string& realPath);
 
@@ -453,6 +454,8 @@ private:
 
 	Directory::Ptr buildTree(const string& realPath, optional<std::reference_wrapper<const string>> dirName = nullopt,
 		const Directory::Ptr& parent = nullptr, time_t lastWrite = 0);
+	Directory::Ptr scanTree(const pft::PrivatePathScanner& privacy, const string& realPath,
+		optional<std::reference_wrapper<const string>> dirName, const Directory::Ptr& parent, time_t lastWrite);
 	bool checkHidden(const string& realPath) const;
 	bool checkInvalidFileName(const string& realPath) const;
 	bool checkInvalidPaths(const string& realPath) const;

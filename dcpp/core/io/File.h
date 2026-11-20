@@ -146,6 +146,9 @@ public:
 		bool isDirectory();
 		bool isHidden();
 		bool isLink();
+		/** True for symlinks, junctions and other reparse points on every platform (isLink is
+		 * always false on Windows, where FOLLOW_LINKS has never applied). */
+		bool isReparsePoint();
 		int64_t getSize();
 		uint32_t getLastWriteTime();
 		#ifndef _WIN32

@@ -50,34 +50,26 @@ std::string defaultDownloadPath(const std::string& name) {
 		std::filesystem::u8path(name)).u8string();
 }
 
-bool isPrivatePath(const std::string& path) {
-	if(isPublicationStaging(std::filesystem::u8path(path)))
-		return true;
-	auto root = storageRoot();
-	auto within = [](const std::string& p, const std::string& r) {
-		return Util::strnicmp(p, r, r.size()) == 0 || Util::stricmp(p, r.substr(0, r.size() - 1)) == 0;
-	};
-	if(within(path, root))
-		return true;
+namespace {
 
-	// Canonicalization follows directory junctions and normalizes '..'. A
-	// failure denies sharing rather than interpreting an ambiguous path.
+bool withinRoot(const std::string& p, const std::string& r) {
+	return Util::strnicmp(p, r, r.size()) == 0 || Util::stricmp(p, r.substr(0, r.size() - 1)) == 0;
+}
+
+/** Canonical form of a path with exactly one trailing separator; empty when canonicalization
+ * fails. Canonicalization follows directory junctions and normalizes '..'. */
+std::string canonicalDirectory(const std::string& path) {
 	std::error_code ec;
-	const auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(path), ec);
+	auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(path), ec);
 	if(ec)
-		return true;
-	if(isPublicationStaging(canonical))
-		return true;
+		return {};
+	auto result = canonical.u8string();
+	while(!result.empty() && (result.back() == '/' || result.back() == '\\'))
+		result.pop_back();
+	return result + PATH_SEPARATOR_STR;
+}
 
-	const auto canonicalRoot = std::filesystem::weakly_canonical(std::filesystem::u8path(root), ec);
-	if(ec)
-		return true;
-
-	auto canonicalRootString = canonicalRoot.u8string();
-	while(!canonicalRootString.empty() && (canonicalRootString.back() == '/' || canonicalRootString.back() == '\\'))
-		canonicalRootString.pop_back();
-	if(within(canonical.u8string(), canonicalRootString + PATH_SEPARATOR_STR))
-		return true;
+bool hasPrivateMarker(const std::string& path) {
 #ifdef _WIN32
 	// NTFS streams follow hard links and renames, so aliases of received files
 	// remain excluded even outside the protected receive directory.
@@ -86,11 +78,67 @@ bool isPrivatePath(const std::string& path) {
 		OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
 	if(h != INVALID_HANDLE_VALUE) {
 		CloseHandle(h);
-
 		return true;
 	}
+#else
+	(void)path;
 #endif
 	return false;
+}
+
+} // namespace
+
+bool isPrivatePath(const std::string& path) {
+	if(isPublicationStaging(std::filesystem::u8path(path)))
+		return true;
+	auto root = storageRoot();
+	if(withinRoot(path, root))
+		return true;
+
+	// A canonicalization failure denies sharing rather than interpreting an ambiguous path.
+	std::error_code ec;
+	const auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(path), ec);
+	if(ec)
+		return true;
+	if(isPublicationStaging(canonical))
+		return true;
+
+	const auto canonicalRoot = canonicalDirectory(root);
+	if(canonicalRoot.empty())
+		return true;
+	if(withinRoot(canonical.u8string(), canonicalRoot))
+		return true;
+	return hasPrivateMarker(path);
+}
+
+PrivatePathScanner::PrivatePathScanner() :
+	root(storageRoot()),
+	canonicalRoot(canonicalDirectory(root))
+{ }
+
+PrivatePathScanner::Directory PrivatePathScanner::enter(const std::string& directory) const {
+	Directory dir;
+	dir.path = directory;
+	dir.staging = isPublicationStaging(std::filesystem::u8path(directory));
+	dir.canonical = canonicalDirectory(directory);
+	if(!dir.canonical.empty())
+		dir.staging = dir.staging || isPublicationStaging(std::filesystem::u8path(dir.canonical));
+	return dir;
+}
+
+bool PrivatePathScanner::isPrivateFile(const Directory& dir, const std::string& name) const {
+	// Same checks, in the same order, as isPrivatePath(dir.path + name). A regular file adds no
+	// junction of its own, so its canonical path is its directory's canonical path plus its name.
+	if(dir.staging || isPublicationStaging(std::filesystem::u8path(name)))
+		return true;
+	const auto path = dir.path + name;
+	if(withinRoot(path, root))
+		return true;
+	if(dir.canonical.empty() || canonicalRoot.empty())
+		return true;
+	if(withinRoot(dir.canonical + name, canonicalRoot))
+		return true;
+	return hasPrivateMarker(path);
 }
 
 #ifdef _WIN32

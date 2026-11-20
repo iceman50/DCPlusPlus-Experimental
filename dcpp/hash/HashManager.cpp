@@ -311,14 +311,7 @@ void HashManager::HashStore::addFile(const string& aFileName, uint32_t aTimeStam
 
 	auto fname = Util::getFileName(aFileName), fpath = Util::getFilePath(aFileName);
 
-	auto& fileList = fileIndex[fpath];
-
-	auto j = find(fileList.begin(), fileList.end(), fname);
-	if (j != fileList.end()) {
-		fileList.erase(j);
-	}
-
-	fileList.emplace_back(fname, tth.getRoot(), aTimeStamp, aUsed);
+	fileIndex[fpath].insert_or_assign(std::move(fname), FileInfo(tth.getRoot(), aTimeStamp, aUsed));
 	saveFile(aFileName, aTimeStamp, tth);
 }
 
@@ -623,9 +616,9 @@ optional<TTHValue> HashManager::HashStore::getTTH(const string& aFileName, int64
 
 	auto i = fileIndex.find(fpath);
 	if (i != fileIndex.end()) {
-		auto j = find(i->second.begin(), i->second.end(), fname);
+		auto j = i->second.find(fname);
 		if (j != i->second.end()) {
-			FileInfo& fi = *j;
+			FileInfo& fi = j->second;
 			const auto& root = fi.getRoot();
 			auto ti = treeIndex.find(root);
 			if(ti != treeIndex.end() && ti->second.getSize() == aSize && fi.getTimeStamp() == aTimeStamp) {
@@ -649,7 +642,7 @@ void HashManager::HashStore::rebuild() {
 		unordered_map<TTHValue, TigerTree> newTrees;
 
 		for (auto& i: fileIndex) {
-			for (auto& j: i.second) {
+			for (auto& [name, j]: i.second) {
 				if (!j.getUsed())
 					continue;
 
@@ -672,11 +665,11 @@ void HashManager::HashStore::rebuild() {
 		}
 
 		for (auto& i: fileIndex) {
-			decltype(fileIndex)::mapped_type newFileList;
+			FileList newFileList;
 
-			for (auto& j: i.second) {
+			for (auto& [name, j]: i.second) {
 				if (newTreeIndex.find(j.getRoot()) != newTreeIndex.end() && j.getUsed()) {
-					newFileList.push_back(j);
+					newFileList.emplace(name, j);
 				}
 			}
 
@@ -696,10 +689,10 @@ void HashManager::HashStore::rebuild() {
 			}
 			for (auto& i: fileIndex) {
 				const string& dir = i.first;
-				for (auto& fi: i.second) {
+				for (auto& [name, fi]: i.second) {
 					auto tree = newTrees.find(fi.getRoot());
 					if(tree != newTrees.end()) {
-						writeFileRow(dir + fi.getFileName(), fi.getTimeStamp(), tree->second);
+						writeFileRow(dir + name, fi.getTimeStamp(), tree->second);
 					}
 				}
 			}
@@ -884,7 +877,7 @@ void HashManager::HashStore::loadDb(function<void (float)> progressF) {
 	uint64_t orphanFiles = 0;
 	auto files = db.prepare("SELECT path, timestamp, root FROM files ORDER BY path");
 	string lastPath;
-	vector<FileInfo>* currentFileList = nullptr;
+	FileList* currentFileList = nullptr;
 	uint64_t loaded = 0;
 	while(files.step()) {
 		auto file = files.columnText(0);
@@ -906,11 +899,11 @@ void HashManager::HashStore::loadDb(function<void (float)> progressF) {
 
 		auto fname = Util::getFileName(file), fpath = Util::getFilePath(file);
 		if(!currentFileList || fpath != lastPath) {
-			auto result = fileIndex.emplace(fpath, decltype(fileIndex)::mapped_type());
+			auto result = fileIndex.emplace(fpath, FileList());
 			lastPath = std::move(fpath);
 			currentFileList = &result.first->second;
 		}
-		currentFileList->emplace_back(std::move(fname), root, timeStamp, false);
+		currentFileList->try_emplace(std::move(fname), root, timeStamp, false);
 		if((++loaded % 1024) == 0) {
 			progressF(0);
 		}
@@ -1003,7 +996,7 @@ bool HashManager::HashStore::migrateLegacy(function<void (float)> progressF) {
 			for(auto j = fileList.begin(); j != fileList.end();) {
 				// Drop file records whose tree failed validation so SQLite never receives rows that
 				// cannot satisfy later tree requests.
-				if(validTrees.find(j->getRoot()) == validTrees.end()) {
+				if(validTrees.find(j->second.getRoot()) == validTrees.end()) {
 					orphanFiles++;
 					j = fileList.erase(j);
 				} else {
@@ -1039,10 +1032,10 @@ bool HashManager::HashStore::migrateLegacy(function<void (float)> progressF) {
 		}
 		for(auto& i: fileIndex) {
 			const string& dir = i.first;
-			for(auto& fi: i.second) {
+			for(auto& [name, fi]: i.second) {
 				auto tree = validTrees.find(fi.getRoot());
 				if(tree != validTrees.end()) {
-					writeFileRow(dir + fi.getFileName(), fi.getTimeStamp(), tree->second);
+					writeFileRow(dir + name, fi.getTimeStamp(), tree->second);
 					migratedFiles++;
 				}
 				rowWritten();
@@ -1289,7 +1282,7 @@ void HashLoader::startTag(const string& name, StringPairList& attribs, bool simp
 			const auto& root = getAttrib(attribs, sRoot, 2);
 			if(!file.empty() && timeStamp > 0 && !root.empty() && (version != 2 || upgradeFromV2(file))) {
 				auto fname = Util::getFileName(file), fpath = Util::getFilePath(file);
-				store.fileIndex[fpath].emplace_back(fname, TTHValue(root), timeStamp, false);
+				store.fileIndex[fpath].try_emplace(fname, TTHValue(root), timeStamp, false);
 			}
 		} else if (name == sTrees) {
 			inTrees = !simple;

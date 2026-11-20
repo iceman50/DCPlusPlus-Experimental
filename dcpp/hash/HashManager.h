@@ -272,15 +272,12 @@ private:
 			GETSET(int64_t, blockSize, BlockSize);
 		};
 
-		/** File -> root mapping info */
+		/** File -> root mapping info; the file name is its key in the directory's FileList. */
 		struct FileInfo {
 		public:
-			FileInfo(string aFileName, const TTHValue& aRoot, uint32_t aTimeStamp, bool aUsed) :
-				fileName(std::move(aFileName)), root(aRoot), timeStamp(aTimeStamp), used(aUsed) { }
+			FileInfo(const TTHValue& aRoot, uint32_t aTimeStamp, bool aUsed) :
+				root(aRoot), timeStamp(aTimeStamp), used(aUsed) { }
 
-			bool operator==(const string& name) { return name == fileName; }
-
-			GETSET(string, fileName, FileName);
 			GETSET(TTHValue, root, Root);
 			GETSET(uint32_t, timeStamp, TimeStamp);
 			GETSET(bool, used, Used);
@@ -288,7 +285,10 @@ private:
 
 		friend class HashLoader;
 
-		unordered_map<string, vector<FileInfo>> fileIndex;
+		/** Keyed by file name, so a share scan's per-file lookup stays O(1) in folders holding
+		 * hundreds of thousands of files (a linear search made scans quadratic per folder). */
+		typedef unordered_map<string, FileInfo> FileList;
+		unordered_map<string, FileList> fileIndex;
 		unordered_map<TTHValue, TreeInfo> treeIndex;
 
 		SQLiteDB db;

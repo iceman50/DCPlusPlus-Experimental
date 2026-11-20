@@ -535,6 +535,10 @@ bool FileFindIter::DirData::isLink() {
 	return false;
 }
 
+bool FileFindIter::DirData::isReparsePoint() {
+	return (dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
+
 int64_t FileFindIter::DirData::getSize() {
 	return (int64_t)nFileSizeLow | ((int64_t)nFileSizeHigh)<<32;
 }
@@ -608,6 +612,14 @@ bool FileFindIter::DirData::isLink() {
 	struct stat inode;
 	if (!ent) return false;
 	if (lstat((base + PATH_SEPARATOR + ent->d_name).c_str(), &inode) == -1) return false;
+	return S_ISLNK(inode.st_mode);
+}
+
+bool FileFindIter::DirData::isReparsePoint() {
+	struct stat inode;
+	if (!ent) return true;
+	// Callers use this to decide whether a file needs its own path resolution; fail closed.
+	if (lstat((base + PATH_SEPARATOR + ent->d_name).c_str(), &inode) == -1) return true;
 	return S_ISLNK(inode.st_mode);
 }
 
