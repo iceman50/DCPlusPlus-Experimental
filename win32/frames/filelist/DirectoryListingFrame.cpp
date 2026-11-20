@@ -1500,7 +1500,43 @@ void DirectoryListingFrame::findFile(bool reverse) {
 	matcher.setMethod(method);
 	matcher.prepare();
 
-	vector<HTREEITEM> collapse;
+	/* Walk the directory tree in the order it is shown (pre-order, as the tree pane lists the
+	directories), but test the names in memory: the list pane is only filled for a directory that
+	really holds a match. The old loop expanded every tree node it passed and filled the list pane
+	for every directory (changeDir), which froze the window for minutes on file lists with
+	100,000+ files when the match was far away or there was none. */
+	auto nextItem = [this](HTREEITEM i) -> HTREEITEM {
+		if(auto c = dirs->getChild(i)) return c;
+		for(; i; i = dirs->getParent(i)) {
+			if(auto n = dirs->getNextSibling(i)) return n;
+		}
+		return nullptr;
+	};
+	auto lastDescendant = [this](HTREEITEM i) {
+		for(auto c = dirs->getChild(i); c; c = dirs->getChild(i)) {
+			i = c;
+			for(HTREEITEM n; (n = dirs->getNextSibling(i)); ) i = n;
+		}
+		return i;
+	};
+	auto prevItem = [this, &lastDescendant](HTREEITEM i) -> HTREEITEM {
+		if(auto p = dirs->getNext(i, TVGN_PREVIOUS)) return lastDescendant(p);
+		return dirs->getParent(i);
+	};
+	auto holdsMatch = [&matcher](DirectoryListing::Directory* d) {
+		for(auto i: d->directories) {
+			if(matcher.match(i->getName())) return true;
+		}
+		const bool release = !d->areFilesLoaded();
+		try { d->ensureFiles(); } catch(const Exception&) { return false; }
+		bool found = false;
+		for(auto i: d->files) {
+			if(matcher.match(i->getName())) { found = true; break; }
+		}
+		if(release) d->releaseFiles();
+		return found;
+	};
+
 	bool cycle = false;
 	bool incomplete = false;
 	const auto fileSel = files->getSelected();
@@ -1508,13 +1544,13 @@ void DirectoryListingFrame::findFile(bool reverse) {
 	HTREEITEM item = start;
 	auto pos = fileSel;
 
-	while(true) {
-		if(!incomplete && item) {
-			auto data = dirs->getData(item);
-			if(data && !data->dir->getComplete())
-				incomplete = true;
-		}
+	if(item) {
+		auto data = dirs->getData(item);
+		if(data && !data->dir->getComplete())
+			incomplete = true;
+	}
 
+	while(true) {
 		// try to match the names currently in the list pane
 		const int n = static_cast<int>(files->size());
 		if(reverse && pos == -1)
@@ -1530,21 +1566,23 @@ void DirectoryListingFrame::findFile(bool reverse) {
 		if(found)
 			break;
 
-		// flow to the next directory
-		if(!reverse && dirs->getChild(item) && !dirs->isExpanded(item)) {
-			dirs->expand(item);
-			collapse.push_back(item);
-		}
-		HTREEITEM next = dirs->getNext(item, reverse ? TVGN_PREVIOUSVISIBLE : TVGN_NEXTVISIBLE);
-		if(!next) {
-			next = reverse ? dirs->getLast() : treeRoot;
-			cycle = true;
-		}
-		while(reverse && dirs->getChild(next) && !dirs->isExpanded(next)) {
-			dirs->expand(next);
-			collapse.push_back(next);
-			if(!(next = dirs->getNext(item, TVGN_PREVIOUSVISIBLE)))
-				next = dirs->getLast();
+		// flow to the next directory that holds a match, without touching the window
+		HTREEITEM next = item;
+		while(true) {
+			next = reverse ? prevItem(next) : nextItem(next);
+			if(!next) {
+				next = reverse ? lastDescendant(treeRoot) : treeRoot;
+				cycle = true;
+			}
+			if(next == start)
+				break;
+			auto data = dirs->getData(next);
+			if(!data || !data->dir)
+				continue;
+			if(!incomplete && !data->dir->getComplete())
+				incomplete = true;
+			if(holdsMatch(data->dir))
+				break;
 		}
 		if(next == start) {
 			item = nullptr;
@@ -1557,9 +1595,6 @@ void DirectoryListingFrame::findFile(bool reverse) {
 		item = next;
 		pos = -1;
 	}
-
-	for(auto& i: collapse)
-		dirs->collapse(i);
 
 	if(item) {
 		selectDir(item);

@@ -1,4 +1,5 @@
 == Unreleased - after 0.8842-RC3 !!!Experimental!!! ==
+* Search a file list window without freezing it: Find and Find next opened every folder they passed, so a search through a list of 200,000 files took about 13 seconds when the match was far away or there was none, and 6-7 seconds for each Find next. Both now take a fraction of a second and find the same items (iceman50)
 * Keep the keyboard focus where it was when a help popup opens in a dark or custom theme: the popup took the focus, showed a text cursor in the help text and made the settings window flash as it lost activation (iceman50)
 * Stop the whole window from flickering when a tooltip or help popup appears: creating one was mistaken for a Windows theme change, which redrew every control in the application (iceman50)
 * Show the help popups (F1 and the settings window's help tooltips) in the colors and border of a dark or custom theme instead of yellow with a light 3D border; light themes keep the Windows tooltip colors (iceman50)
