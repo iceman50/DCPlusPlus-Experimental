@@ -36,10 +36,12 @@
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/core/io/db/SQLiteDB.h>
 #include <dcpp/core/io/stream/Streams.h>
+#include <dcpp/core/io/xml/SimpleXML.h>
 #include <dcpp/core/timer/TimerManager.h>
 #include <dcpp/transfer/Transfer.h>
 #include <dcpp/transfer/upload/Upload.h>
 #include <dcpp/util/Util.h>
+#include <dcpp/util/text/Text.h>
 #include <dcpp/transfer/private/PrivateTransferStorage.h>
 
 using namespace dcpp;
@@ -189,6 +191,23 @@ public:
 		EXPECT_EQ(size, static_cast<int64_t>(contents.size()));
 		EXPECT_TRUE(HashManager::getInstance()->verifyFileTTH(path, size, tree.getRoot()));
 		return { path, size, timestamp, tree.getRoot() };
+	}
+
+	/** @param padding Bytes of ignored empty elements after the item; the queue loader only reports
+	 * progress when it reads a new 64 KiB chunk, so padding guarantees a progress callback while
+	 * loading continues after the item's add. (Plain whitespace would overflow the XML reader's
+	 * 64 KiB content limit.) */
+	void writeQueueFile(const string& target, int64_t size, const TTHValue& tth, size_t padding = 0) {
+		string escaped;
+		string base32;
+		string filler;
+		for(size_t i = 0; i < padding / 4; ++i) {
+			filler += "<P/>";
+		}
+		std::ofstream(QueueManager::getInstance()->getQueueFile(), std::ios::binary | std::ios::trunc)
+			<< SimpleXML::utf8Header << "<Downloads Version=\"1\">\r\n\t<Download Target=\""
+			<< SimpleXML::escape(target, escaped, true) << "\" Size=\"" << size
+			<< "\" Priority=\"3\" Added=\"1\" TTH=\"" << tth.toBase32(base32) << "\"/>\r\n" << filler << "</Downloads>\r\n";
 	}
 
 	string configPath;
@@ -399,15 +418,85 @@ TEST_F(ShareCacheTest, rejects_cache_when_share_settings_change) {
 	EXPECT_EQ(ShareManager::getInstance()->getSharedFiles(), 0U);
 }
 
-TEST_F(ShareCacheTest, skips_cache_when_queue_duplicate_removal_requires_fresh_share) {
+TEST_F(ShareCacheTest, loads_cache_when_already_shared_downloads_are_blocked) {
 	populateShare();
 	ShareManager::getInstance()->saveShareCache();
 
 	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_SHARED, true);
 	clearLoadedShare();
 
-	EXPECT_FALSE(ShareManager::getInstance()->loadShareCache());
-	EXPECT_EQ(ShareManager::getInstance()->getSharedFiles(), 0U);
+	EXPECT_TRUE(ShareManager::getInstance()->loadShareCache());
+	EXPECT_EQ(ShareManager::getInstance()->getSharedFiles(), 1U);
+}
+
+TEST_F(ShareCacheTest, keeps_queued_file_listed_only_by_stale_cache) {
+	// The cache says AAAA... is shared, but the real file on disk was never hashed, so the
+	// live scan will not share it: the queued download must survive both queue load and scan.
+	auto sm = ShareManager::getInstance();
+	auto qm = QueueManager::getInstance();
+	populateShare();
+	sm->saveShareCache();
+	clearLoadedShare();
+	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_SHARED, true);
+
+	const TTHValue cachedTTH("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+	writeQueueFile(configPath + "stale.bin", 1234, cachedTTH);
+
+	ASSERT_TRUE(sm->loadShareCache());
+	sm->cacheUnverified = true; // what startupRefresh sets before its background scan
+	ASSERT_TRUE(sm->isTTHShared(cachedTTH));
+
+	qm->loadQueue([](float) { });
+	EXPECT_EQ(1U, qm->getTargets(cachedTTH).size());
+
+	sm->refresh(true, false, true);
+	EXPECT_TRUE(sm->isShareVerified());
+	EXPECT_FALSE(sm->isTTHShared(cachedTTH));
+	EXPECT_EQ(1U, qm->getTargets(cachedTTH).size());
+}
+
+TEST_F(ShareCacheTest, removes_queued_file_once_live_scan_confirms_it_is_shared) {
+	auto sm = ShareManager::getInstance();
+	auto qm = QueueManager::getInstance();
+	const auto shared = cacheFile(sharePath + "real.bin", "really shared contents");
+	sm->shares[sharePath] = "Virtual";
+	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_SHARED, true);
+	writeQueueFile(configPath + "wanted.bin", shared.size, shared.tth);
+
+	sm->cacheUnverified = true;
+	qm->loadQueue([](float) { });
+	EXPECT_EQ(1U, qm->getTargets(shared.tth).size());
+
+	sm->refresh(true, false, true);
+	EXPECT_TRUE(sm->isShareVerified());
+	EXPECT_TRUE(sm->isTTHShared(shared.tth));
+	EXPECT_TRUE(qm->getTargets(shared.tth).empty());
+}
+
+TEST_F(ShareCacheTest, queue_load_checks_deferred_items_when_scan_finished_first) {
+	// The scan finished between an item's deferral and the end of queue load, so the share's
+	// own pass ran too early to see it; loadQueue's closing check must catch it.
+	auto sm = ShareManager::getInstance();
+	auto qm = QueueManager::getInstance();
+	const auto shared = cacheFile(sharePath + "real.bin", "shared while queue loads");
+	sm->shares[sharePath] = "Virtual";
+	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_SHARED, true);
+	writeQueueFile(configPath + "late.bin", shared.size, shared.tth, 128 * 1024);
+
+	sm->refresh(true, false, true);
+	ASSERT_TRUE(sm->isTTHShared(shared.tth));
+
+	// The item is deferred while the flag is set; the scan "finishes" right after it is added.
+	sm->cacheUnverified = true;
+	bool sawItem = false;
+	qm->loadQueue([&](float) {
+		if(!sawItem && !qm->getTargets(shared.tth).empty()) {
+			sawItem = true;
+			sm->cacheUnverified = false;
+		}
+	});
+	ASSERT_TRUE(sawItem);
+	EXPECT_TRUE(qm->getTargets(shared.tth).empty());
 }
 
 TEST_F(ShareCacheTest, skips_cache_for_unc_share_roots) {

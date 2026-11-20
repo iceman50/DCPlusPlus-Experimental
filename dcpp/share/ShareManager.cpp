@@ -1839,13 +1839,6 @@ bool ShareManager::loadShareCache() noexcept {
 	if(!SETTING(SHARE_CACHE)) {
 		return false;
 	}
-	// Queue duplicate removal must see the freshly scanned filesystem; a stale
-	// snapshot could otherwise remove valid queued files during startup.
-	if(SETTING(DONT_DL_ALREADY_SHARED)) {
-		LogManager::getInstance()->message(_("Share cache skipped because queued duplicate removal requires a fresh share scan"),
-			LogMessage::SEV_INFO, _("Share cache"));
-		return false;
-	}
 	{
 		Lock l(cs);
 		if(any_of(shares.begin(), shares.end(), [](const auto& share) { return isUncPath(share.first); })) {
@@ -2160,6 +2153,8 @@ void ShareManager::startupRefresh(function<void (float)> progressF) noexcept {
 		// Cached data is immediately usable for share size, search, file lists
 		// and upload path resolution; the background refresh reconciles it with
 		// the live filesystem and broadcasts updated hub info when it finishes.
+		// Set before the refresh starts so its completion cannot race ahead of it.
+		cacheUnverified = true;
 		refresh(true, true, false);
 		return;
 	}
@@ -2230,6 +2225,8 @@ void ShareManager::runRefresh(function<void (float)> progressF) {
 			pendingDirectories.clear();
 		}
 	}
+	// A full refresh with nothing shared still leaves an accurate (empty) index.
+	const bool scannedAllRoots = refreshDirs;
 	// Don't need to refresh if no directories are shared
 	if(dirs.empty())
 		refreshDirs = false;
@@ -2297,6 +2294,12 @@ void ShareManager::runRefresh(function<void (float)> progressF) {
 	refreshActive = false;
 	if(refreshedDirs) {
 		saveShareCache();
+	}
+
+	// The queue skipped its "already in share" check while the share index was only the
+	// startup cache, which can list files deleted since the last run; run it now.
+	if(scannedAllRoots && cacheUnverified.exchange(false) && SETTING(DONT_DL_ALREADY_SHARED)) {
+		QueueManager::getInstance()->removeSharedDownloads();
 	}
 }
 

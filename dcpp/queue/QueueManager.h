@@ -115,6 +115,8 @@ public:
 	void move(const string& aSource, const string& aTarget) noexcept;
 
 	void remove(const string& aTarget) noexcept;
+	/** Remove queued files whose TTH is already shared ("Don't download files already in share"). */
+	void removeSharedDownloads() noexcept;
 	void removeSource(const string& aTarget, const UserPtr& aUser, int reason, bool removeConn = true) noexcept;
 	void removeSource(const UserPtr& aUser, int reason) noexcept;
 

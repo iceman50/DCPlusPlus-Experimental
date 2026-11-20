@@ -1450,6 +1450,29 @@ void QueueManager::remove(const string& aTarget) noexcept {
 	}
 }
 
+void QueueManager::removeSharedDownloads() noexcept {
+	vector<pair<string, TTHValue>> candidates;
+	{
+		Lock l(cs);
+		for(auto& i: fileQueue.getQueue()) {
+			auto qi = i.second;
+			if(!qi->isSet(QueueItem::FLAG_USER_LIST) && !qi->isFinished()) {
+				candidates.emplace_back(qi->getTarget(), qi->getTTH());
+			}
+		}
+	}
+
+	// Ask the share outside the queue lock so the two managers' locks never nest.
+	auto sm = ShareManager::getInstance();
+	for(auto& candidate: candidates) {
+		if(sm->isTTHShared(candidate.second)) {
+			LogManager::getInstance()->message(str(F_("The queued file %1% already exists in your share, removing from the queue")
+				% Util::addBrackets(candidate.first)), LogMessage::SEV_INFO, _("Queue"));
+			remove(candidate.first);
+		}
+	}
+}
+
 #define MAX_SIZE_WO_TREE 20*1024*1024
 
 void QueueManager::removeSource(const string& aTarget, const UserPtr& aUser, int reason, bool removeConn /* = true */) noexcept {
@@ -1691,13 +1714,15 @@ void QueueManager::saveQueue(bool force) noexcept {
 
 class QueueLoader : public SimpleXMLReader::CallBack {
 public:
-	QueueLoader(const CountedInputStream<false>& countedStream, uint64_t fileSize, function<void (float)> progressF) :
+	QueueLoader(const CountedInputStream<false>& countedStream, uint64_t fileSize, function<void (float)> progressF,
+		bool& deferredSharedCheck) :
 		countedStream(countedStream),
 		streamPos(0),
 		fileSize(fileSize),
 		progressF(progressF),
 		cur(nullptr),
-		inDownloads(false)
+		inDownloads(false),
+		deferredSharedCheck(deferredSharedCheck)
 	{ }
 	void startTag(const string& name, StringPairList& attribs, bool simple);
 	void endTag(const string& name);
@@ -1712,19 +1737,27 @@ private:
 
 	QueueItem* cur;
 	bool inDownloads;
+	bool& deferredSharedCheck;
 };
 
 void QueueManager::loadQueue(function<void (float)> progressF) noexcept {
+	bool deferredSharedCheck = false;
 	try {
 		Util::migrate(getQueueFile());
 
 		File f(getQueueFile(), File::READ, File::OPEN);
 		CountedInputStream<false> countedStream(&f);
-		QueueLoader l(countedStream, f.getSize(), progressF);
+		QueueLoader l(countedStream, f.getSize(), progressF, deferredSharedCheck);
 		SimpleXMLReader(&l).parse(countedStream);
 		dirty = false;
 	} catch(const Exception&) {
 		// ...
+	}
+
+	// If the share's full scan finished while the queue was loading, its own pass may have
+	// missed items added after it looked; nothing else will check them, so do it here.
+	if(deferredSharedCheck && SETTING(DONT_DL_ALREADY_SHARED) && ShareManager::getInstance()->isShareVerified()) {
+		removeSharedDownloads();
 	}
 }
 
@@ -1781,7 +1814,11 @@ void QueueLoader::startTag(const string& name, StringPairList& attribs, bool sim
 				downloaded = 0;
 
 			if(SETTING(DONT_DL_ALREADY_SHARED)){
-				if (ShareManager::getInstance()->isTTHShared(TTHValue(tthRoot))){
+				// A share loaded from the startup cache can still list files deleted since the
+				// last run; keep the item until the full scan confirms it is really shared.
+				if(!ShareManager::getInstance()->isShareVerified()) {
+					deferredSharedCheck = true;
+				} else if (ShareManager::getInstance()->isTTHShared(TTHValue(tthRoot))){
 					LogManager::getInstance()->message(str(F_("The queued file %1% already exists in your share, removing from the queue")
 						% Util::addBrackets(target)), LogMessage::SEV_INFO, _("Queue"));
 					return;

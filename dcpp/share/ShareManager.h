@@ -171,6 +171,9 @@ public:
 	void startupRefresh(function<void (float)> progressF = nullptr) noexcept;
 	/** True while a share refresh is building or applying a live filesystem view. */
 	bool isRefreshing() const noexcept { return refreshActive; }
+	/** False while the share index is the startup cache and the full scan that reconciles it
+	 * with the filesystem has not finished; the index may still list deleted files. */
+	bool isShareVerified() const noexcept { return !cacheUnverified; }
 	/** True while added share folders are still waiting for, or in, their background scan. */
 	bool hasPendingDirectories() const noexcept;
 	/** True while this share root is waiting for, or in, its background scan. */
@@ -373,6 +376,7 @@ private:
 
 	static std::atomic_flag refreshing;
 	static std::atomic<bool> refreshActive;
+	std::atomic<bool> cacheUnverified { false };
 
 	uint64_t lastXmlUpdate;
 	uint64_t lastFullUpdate;
