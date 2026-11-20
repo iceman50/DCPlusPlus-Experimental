@@ -39,12 +39,16 @@ HWND findPopup() {
 }
 
 void checkPopup(dwt::Application& app, dwt::TextBoxPtr box, const char* name, bool manual) {
+	box->setFocus();
 	while(app.dispatch()) { }
 	HelpService::helpId(box, IDH_CSHELP_BEGIN);
 	// The popup sizes, colors and shows itself when Rich Edit requests a size.
 	while(app.dispatch()) { }
 	const auto popup = findPopup();
 	check(popup != nullptr, "The help popup did not open");
+	// Like a tooltip, it must never be activated: that deactivates the dialog (a visible
+	// flash) and gives the read-only help text a caret.
+	check(GetFocus() == box->handle(), "Opening the help popup took the keyboard focus");
 	auto control = dwt::hwnd_cast<dwt::RichTextBox*>(popup);
 	const auto& appearance = app.getAppearance();
 	check(appearance.isManual() == manual, "Unexpected appearance mode");

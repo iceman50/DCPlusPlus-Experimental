@@ -118,9 +118,12 @@ public:
 		create(seed);
 
 		if(isManualAppearance()) {
-			// The 3D client edge is drawn in system colors; use a palette border instead.
-			addRemoveExStyle(WS_EX_CLIENTEDGE, false);
-			addRemoveStyle(WS_BORDER, true);
+			/* The 3D client edge is drawn in system colors; use a palette border instead.
+			 * Set the styles directly: addRemoveStyle applies them with a SetWindowPos that
+			 * activates the popup, which takes the focus (showing a caret in the help text)
+			 * and deactivates the dialog. */
+			::SetWindowLongPtr(handle(), GWL_EXSTYLE, ::GetWindowLongPtr(handle(), GWL_EXSTYLE) & ~WS_EX_CLIENTEDGE);
+			::SetWindowLongPtr(handle(), GWL_STYLE, ::GetWindowLongPtr(handle(), GWL_STYLE) | WS_BORDER);
 			::SetWindowPos(handle(), 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
 				SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 			onRaw([this](WPARAM, LPARAM) -> LRESULT { paintBorder(); return 0; }, dwt::Message(WM_NCPAINT));
