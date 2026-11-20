@@ -33,6 +33,7 @@
 #include <dwt/util/HoldRedraw.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/ScrolledContainer.h>
+#include <dwt/widgets/Table.h>
 #include <dwt/widgets/ToolTip.h>
 
 
@@ -161,11 +162,17 @@ bool SettingsDialog::initDialog() {
 		container->addCallback(dwt::Message(WM_PAINT), [this](const MSG&, LRESULT&) -> bool {
 			if(composingSwitch && !composingPainted && ::IsWindowVisible(pageHost->handle())) {
 				composingPainted = true;
-				::PostMessage(handle(), composedPaint, 0, 0);
+				::PostMessage(handle(), composedPaint, composedPaintGeneration, 0);
 			}
 			return false;
 		});
-		addCallback(dwt::Message(composedPaint), [this](const MSG&, LRESULT& result) -> bool {
+		addCallback(dwt::Message(composedPaint), [this](const MSG& msg, LRESULT& result) -> bool {
+			result = 0;
+			/* Posted by a paint from before the page was invalidated for its switch;
+			 * discarding now would drop that whole repaint (see handleSelectionChanged). */
+			if(msg.wParam != composedPaintGeneration) {
+				return true;
+			}
 			composingPainted = false;
 			/* WM_PAINT is only retrieved once no posted message is waiting, so only the
 			 * composed paint ran since this message was posted. Whatever is invalid now
@@ -176,7 +183,6 @@ bool SettingsDialog::initDialog() {
 				compositionEndQueued = true;
 				queueCompositionEnd(3);
 			}
-			result = 0;
 			return true;
 		});
 
@@ -436,6 +442,13 @@ void SettingsDialog::handleSelectionChanged() {
 		// stale contents from the previous page. Deliver the show transition
 		// only once the host is visible again.
 		currentPage->setVisible(true);
+		/* Showing a page with a report-view table paints the composited host right away,
+		 * and that paint posts its discard message. Handled after the invalidation below,
+		 * it would validate the whole new page before it is painted, leaving the page's
+		 * background in the default light colour on its first visit. Ignore that message
+		 * and let the next composed paint post its own. */
+		++composedPaintGeneration;
+		composingPainted = false;
 		// Paint the completed subtree together after the tree notification returns.
 		// Synchronous painting here can run inside the native tree's drawing cycle.
 		pageHost->redrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
@@ -459,7 +472,26 @@ void SettingsDialog::queueCompositionEnd(int rounds) {
 		}
 		compositionEndQueued = false;
 		setPageHostComposited(false);
+		repaintPageTables();
 	});
+}
+
+/* Inside a composited window a table paints only its background and asks to be painted
+again for its rows, every time, so the composed-paint handler discards its rows along
+with the loop and they would stay blank until something repaints them. Once composition
+has ended, each table paints its rows once; tables buffer their own painting
+(LVS_EX_DOUBLEBUFFER), so this draws the rows in one step without erasing. The buffered
+paint covers the header's strip too, so the header child is repainted after it. */
+void SettingsDialog::repaintPageTables() {
+	if(!::IsWindowVisible(pageHost->handle())) {
+		return;
+	}
+	::EnumChildWindows(pageHost->handle(), [](HWND window, LPARAM) -> BOOL {
+		if(::IsWindowVisible(window) && dynamic_cast<dwt::Table*>(dwt::hwnd_cast<dwt::Widget*>(window))) {
+			::RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_NOERASE | RDW_ALLCHILDREN);
+		}
+		return TRUE;
+	}, 0);
 }
 
 void SettingsDialog::setPageHostComposited(bool composited) {

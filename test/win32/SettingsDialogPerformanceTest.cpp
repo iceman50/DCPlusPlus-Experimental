@@ -58,13 +58,22 @@ long bufferedPaints = 0, unbufferedPaints = 0, unbufferedContainerPaints = 0;
 
 std::wstring className(HWND window);
 
+/* A list view with LVS_EX_DOUBLEBUFFER paints into its own buffer, so painting it does
+not erase on screen even outside the composited host. The dialog repaints table rows
+that way after a switch, because a table never draws its rows inside a composited paint. */
+bool selfBuffered(HWND window) {
+	const auto name = className(window);
+	if(name != WC_LISTVIEWW && name.find(L"dwt5Table") == std::wstring::npos) return false;
+	return (ListView_GetExtendedListViewStyle(window) & LVS_EX_DOUBLEBUFFER) != 0;
+}
+
 void countMessage(HWND window, UINT message) {
 	++messages;
 	if(message == WM_PAINT) {
 		++paints;
 		if(window && window == watched) ++watchedPaints;
 		if(switching && pageHost && window && (window == pageHost || IsChild(pageHost, window))) {
-			if(GetWindowLongPtr(pageHost, GWL_EXSTYLE) & WS_EX_COMPOSITED) ++bufferedPaints; else {
+			if((GetWindowLongPtr(pageHost, GWL_EXSTYLE) & WS_EX_COMPOSITED) || selfBuffered(window)) ++bufferedPaints; else {
 				++unbufferedPaints;
 				// A window with children erases behind its controls: the visible flash.
 				if(GetWindow(window, GW_CHILD)) ++unbufferedContainerPaints;

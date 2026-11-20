@@ -93,6 +93,9 @@ private:
 	bool composingSwitch = false;
 	bool composingPainted = false;
 	bool compositionEndQueued = false;
+	/* Tags each posted "discard what the composed paint invalidated" message, so one
+	posted before a switch invalidated the page cannot discard that repaint. */
+	WPARAM composedPaintGeneration = 0;
 
 	GridPtr grid;
 	TreePtr tree;
@@ -114,6 +117,8 @@ private:
 	void handleSelectionChanged();
 	void setPageHostComposited(bool composited);
 	void queueCompositionEnd(int rounds);
+	/** Repaints the rows of the current page's tables after a composed page switch. */
+	void repaintPageTables();
 	void handleOKClicked();
 	void handleCtrlTab(bool shift);
 
