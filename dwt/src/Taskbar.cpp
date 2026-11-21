@@ -218,6 +218,7 @@ taskbar(0),
 taskbar4(0),
 window(0),
 taskbarReady(false),
+tabsHidden(false),
 activeTab(nullptr)
 {
 }
@@ -261,13 +262,38 @@ void Taskbar::taskbarButtonCreated() {
 	taskbarReady = true;
 	// Explorer loses all registrations when it recreates the taskbar. Keep the
 	// same proxies (and their titles/icons), restoring the current strip order.
+	if(tabsShown()) registerTabs();
+}
+
+void Taskbar::registerTabs() {
 	for(auto tab : tabOrder) {
 		auto i = tabs.find(tab);
-		if(i != tabs.end() && SUCCEEDED(taskbar->RegisterTab(i->second->handle(), window->handle()))) {
+		if(i != tabs.end() && i->second && SUCCEEDED(taskbar->RegisterTab(i->second->handle(), window->handle()))) {
 			taskbar->SetTabOrder(i->second->handle(), nullptr);
 		}
 	}
 	setActiveOnTaskbar(activeTab);
+}
+
+void Taskbar::setTabsHidden(bool hidden) {
+	if(tabsHidden == hidden) return;
+	const bool wasShown = tabsShown();
+	tabsHidden = hidden;
+	if(!hidden) {
+		if(tabsShown()) registerTabs();
+		return;
+	}
+	if(!wasShown) return;
+	// Same calls as closing each tab, without destroying the proxies, so the previews can come
+	// back with their titles and icons.
+	const auto order = tabOrder;
+	for(auto tab : order) {
+		auto i = tabs.find(tab);
+		if(i == tabs.end() || !i->second) continue;
+		const auto proxy = i->second->handle();
+		taskbar->UnregisterTab(proxy);
+		if(tabs.find(tab) != tabs.end()) taskbar->DeleteTab(proxy);
+	}
 }
 
 HRESULT Taskbar::setCurrentAppId(const tstring& appId) {
@@ -446,7 +472,7 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 		tabs.erase(i);
 		tabOrder.erase(std::remove(tabOrder.begin(), tabOrder.end(), tab), tabOrder.end());
 		if(activeTab == tab) activeTab = nullptr;
-		if(taskbar && taskbarReady) {
+		if(tabsShown()) {
 			taskbar->UnregisterTab(proxy->handle());
 			taskbar->DeleteTab(proxy->handle());
 		}
@@ -522,7 +548,7 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 	util::win32::dwm::setWindowAttribute(proxy->handle(), DWMWA_FORCE_ICONIC_REPRESENTATION, &attrib, sizeof(attrib));
 	util::win32::dwm::setWindowAttribute(proxy->handle(), DWMWA_HAS_ICONIC_BITMAP, &attrib, sizeof(attrib));
 
-	if(taskbarReady && SUCCEEDED(taskbar->RegisterTab(proxy->handle(), window->handle()))) {
+	if(tabsShown() && SUCCEEDED(taskbar->RegisterTab(proxy->handle(), window->handle()))) {
 		taskbar->SetTabOrder(proxy->handle(), nullptr);
 	}
 }
@@ -536,7 +562,7 @@ void Taskbar::removeFromTaskbar(ContainerPtr tab) {
 	tabs.erase(i);
 	tabOrder.erase(std::remove(tabOrder.begin(), tabOrder.end(), tab), tabOrder.end());
 	if(activeTab == tab) activeTab = nullptr;
-	if(taskbar && taskbarReady) {
+	if(tabsShown()) {
 		taskbar->UnregisterTab(proxy);
 		// Remove any shell button as well as the registered tab thumbnail, before
 		// freeing the HWND. Bulk closes must not leave blank standalone entries.
@@ -550,7 +576,7 @@ void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
 	if(i == tabs.end() || tab == rightNeighbor) return;
 	tabOrder.erase(std::remove(tabOrder.begin(), tabOrder.end(), tab), tabOrder.end());
 	tabOrder.insert(std::find(tabOrder.begin(), tabOrder.end(), rightNeighbor), tab);
-	if(taskbar && taskbarReady && i->second) {
+	if(tabsShown() && i->second) {
 		auto right = rightNeighbor ? tabs.find(rightNeighbor) : tabs.end();
 		taskbar->SetTabOrder(i->second->handle(),
 			right != tabs.end() && right->second ? right->second->handle() : 0);
@@ -560,7 +586,7 @@ void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
 void Taskbar::setActiveOnTaskbar(ContainerPtr tab) {
 	activeTab = tab;
 	auto i = tabs.find(tab);
-	if(taskbar && taskbarReady && window && i != tabs.end() && i->second) {
+	if(tabsShown() && window && i != tabs.end() && i->second) {
 		taskbar->SetTabActive(i->second->handle(), window->handle(), 0);
 	}
 }

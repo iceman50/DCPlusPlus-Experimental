@@ -95,6 +95,9 @@ public:
 	void initTaskbar(WindowPtr window_);
 	/// Call for each TaskbarButtonCreated notification, including Explorer restarts.
 	void taskbarButtonCreated();
+	/** Take every tab preview off the taskbar (true), leaving only the window's own button, or put
+	 * them back in order (false). Tabs opened or closed meanwhile are tracked as usual. */
+	void setTabsHidden(bool hidden);
 
 	void setOverlayIcon(ContainerPtr tab, const IconPtr& icon, const tstring& description);
 	void setProgressState(TBPFLAG state);
@@ -126,6 +129,9 @@ protected:
 
 private:
 	BitmapPtr getBitmap(ContainerPtr tab, LPARAM thumbnailSize);
+	/// Whether tab previews should be registered with the shell right now.
+	bool tabsShown() const { return taskbar && taskbarReady && !tabsHidden; }
+	void registerTabs();
 	HWND getTaskbarWindow(ContainerPtr tab) const;
 
 	/// function called when the user activates a tab using the taskbar.
@@ -133,6 +139,7 @@ private:
 
 	WindowPtr window;
 	bool taskbarReady;
+	bool tabsHidden;
 	ContainerPtr activeTab;
 	std::unordered_map<ContainerPtr, FramePtr> tabs;
 	std::vector<ContainerPtr> tabOrder;

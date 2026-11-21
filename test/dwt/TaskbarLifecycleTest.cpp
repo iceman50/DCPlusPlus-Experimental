@@ -228,12 +228,67 @@ int dwtMain(dwt::Application& app) {
 			check(calls.registered.size() == 1, "Failed registration was not retried when the taskbar returned");
 			DestroyWindow(page->handle());
 		}
+		{
+			// Hiding the previews (the client's lock) takes every tab off the taskbar without
+			// destroying it; showing them again restores the same proxies in the current order.
+			const auto addTracked = [&](HWND& proxy) {
+				const auto before = calls.registered;
+				auto page = addPage();
+				proxy = nullptr;
+				for(auto h: calls.registered) if(!before.count(h)) proxy = h;
+				return page;
+			};
+			HWND proxy[3] = { };
+			std::vector<dwt::Container*> pages;
+			for(auto& h: proxy) pages.push_back(addTracked(h));
+			check(proxy[0] && proxy[1] && proxy[2], "Pages for the hiding test were not registered");
+
+			host.setTabsHidden(true);
+			check(calls.registered.empty() && calls.buttons.empty(), "Hidden previews stayed on the taskbar");
+			for(auto h: proxy) check(IsWindow(h), "Hiding the previews destroyed a proxy");
+			// The shell forgets the order and selection of tabs it no longer has.
+			calls.order.clear();
+			calls.active = nullptr;
+			const auto registrations = calls.registrations;
+			host.setTabsHidden(true);
+
+			// Tabs opened, moved, selected and closed while hidden reach the shell only once shown.
+			auto late = addPage();                     // p0 p1 p2 late
+			host.moveOnTaskbar(pages[0], nullptr);     // p1 p2 late p0
+			host.moveOnTaskbar(late, pages[1]);        // late p1 p2 p0
+			host.setActiveOnTaskbar(pages[2]);
+			host.removeFromTaskbar(pages[1]);          // late p2 p0
+			DestroyWindow(pages[1]->handle());
+			check(!IsWindow(proxy[1]), "A page closed while hidden kept its proxy");
+			if(!shell) SendMessage(window->handle(), buttonCreated, 0, 0);
+			check(calls.registrations == registrations && calls.registered.empty() && calls.buttons.empty() &&
+				calls.order.empty() && !calls.active, "A tab reached the taskbar while the previews were hidden");
+
+			host.setTabsHidden(false);
+			check(calls.registered.size() == 3 && calls.order.size() == 3, "Shown previews are missing tabs");
+			check(calls.order[1] == proxy[2] && calls.order[2] == proxy[0] &&
+				calls.order[0] != proxy[0] && calls.order[0] != proxy[2] && IsWindow(calls.order[0]),
+				"Shown previews are not in the current tab order");
+			check(calls.active == proxy[2], "The tab selected while hidden is not selected once shown");
+			host.setTabsHidden(false);
+			check(calls.registrations == registrations + 3, "Showing the previews twice registered them twice");
+
+			for(auto page: { pages[0], pages[2], late }) DestroyWindow(page->handle());
+			check(calls.registered.empty() && calls.buttons.empty(), "Pages closed after showing left shell entries");
+
+			// A page closed while hidden doesn't come back.
+			auto hiddenPage = addPage();
+			host.setTabsHidden(true);
+			DestroyWindow(hiddenPage->handle());
+			host.setTabsHidden(false);
+			check(calls.registered.empty() && calls.buttons.empty(), "A page closed while hidden came back");
+		}
 		for(int i = 0; i < 10; ++i) addPage();
 		DestroyWindow(window->handle());
 		check(calls.registered.empty() && calls.buttons.empty(), "Owner shutdown retained previews");
 		check(!calls.invalidHandle, "Preview was unregistered after its HWND was freed");
 		check(!calls.nativeFailure, "Windows rejected a preview registration or cleanup call");
-		std::printf("PASS: startup previews, taskbar recreation, 300 bulk closes, proxy lifetimes, late updates, reentrancy and owner shutdown (%s).\n", shell ? "Windows taskbar" : "recorded taskbar");
+		std::printf("PASS: startup previews, taskbar recreation, 300 bulk closes, proxy lifetimes, late updates, reentrancy, hidden previews and owner shutdown (%s).\n", shell ? "Windows taskbar" : "recorded taskbar");
 		return 0;
 	} catch(const std::exception& error) {
 		std::fprintf(stderr, "%s\n", error.what());
