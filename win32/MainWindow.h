@@ -26,6 +26,7 @@
 #include <win32/frames/private_transfer/PrivateSendNotifications.h>
 #include <win32/util/ThemeManager.h>
 #include <atomic>
+#include <vector>
 
 #include <dcpp/forward.h>
 
@@ -92,6 +93,16 @@ public:
 	void openPrivateSend(const HintedUser& peer, const string& transfer = Util::emptyString);
 
 	bool closing() const { return stopperThread != 0; }
+
+	/** Hide the client behind the password panel until the lock password is entered. Returns
+	 * false when no lock password is set. While a modal dialog is open, the lock waits for it to
+	 * close. */
+	bool lock();
+	bool isLocked() const { return locked; }
+	/// Whether a usable lock password is stored.
+	static bool hasLockPassword();
+	/// Whether the text is the lock password.
+	static bool checkLockPassword(const tstring& password);
 
 private:
 	class DirectoryListInfo {
@@ -168,7 +179,24 @@ private:
 	PrivateSendNotifications privateSendNotifications;
 
 	dwt::Application::FilterIter filterIter;
+	dwt::Application::FilterIter keyboardFilterIter;
 	dwt::NotificationPtr notifier;
+
+	// Password lock. While locked, the menu, toolbar, tabs, transfers and status bar are hidden
+	// and lockPanel fills the window.
+	GridPtr lockPanel;
+	LabelPtr lockTitle;
+	LabelPtr lockHint;
+	TextBoxPtr lockPassword;
+	ButtonPtr lockButton;
+	LabelPtr lockError;
+	dwt::FontPtr lockTitleFont;
+	bool locked;
+	bool lockPending; ///< lock once the open modal dialog closes
+	bool lockedRebar; ///< whether to show the rebar again on unlock
+	bool lockedStatus; ///< whether to show the status bar again on unlock
+	tstring tabsTitle; ///< the active tab's title, kept for the caption while locked
+	std::vector<function<void ()>> afterUnlock; ///< actions held back until the client is unlocked
 
 	void initWindow();
 	void initMenu();
@@ -222,6 +250,16 @@ private:
 	LRESULT handleWhereAreYou();
 
 	void handleTabsTitleChanged(const tstring& title);
+	void updateTitle();
+
+	void initLockPanel();
+	void refreshLockFonts();
+	void lockOnMinimize();
+	void tryUnlock();
+	void unlock();
+	void runUnlocked(function<void ()> f);
+	bool filterLockedKeys(MSG& msg);
+	bool confirmExit();
 
 	void handleTrayContextMenu();
 	void handleTrayClicked();

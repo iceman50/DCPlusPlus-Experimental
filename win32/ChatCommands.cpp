@@ -76,6 +76,7 @@ static const map<tstring, tstring> cmdMap = {
 	{_T("/dc++"),									  T_("Sends a random DC++ advertising message to the chat, including a link to the DC++ homepage and the version number.")},
 	{_T("/away [message]"),							  T_("Sets Away status. New private message windows will be responded to, once, with the message you specified, or the default away message configured in the Personal information settings page.")},
 	{_T("/back"),									  T_("Un-sets Away status.")},
+	{_T("/lock"),									  T_("Locks DC++ until the lock password is entered. Set the password in Settings > Windows > Password lock.")},
 	{_T("/d <search string>"),						  T_("Launches your default web browser to the DuckDuckGo search engine with the specified search.")},
 	{_T("/g <search string>"),						  T_("Launches your default web browser to the Google search engine with the specified search.")},
 	{_T("/imdb <imdb query>"),						  T_("Launches your default web browser to the Internet Movie Database (imdb) with the specified query.")},
@@ -105,7 +106,7 @@ tstring getDescriptiveCommands() {
 tstring
 	commands =
 		_T("/stats [preview], ")
-		_T("/refresh, /me <msg>, /slots #, /dslots #, /search <string>, /clear [lines to keep], /dc++, /away <msg>, /back, /d <searchstring>, /g <searchstring>, /imdb <imdbquery>, /rebuild, /log [type], /help [brief], /u <url>, /f <string>, /download [#], /upload [#], /close, /a[bout][:]c[onfig]");
+		_T("/refresh, /me <msg>, /slots #, /dslots #, /search <string>, /clear [lines to keep], /dc++, /away <msg>, /back, /lock, /d <searchstring>, /g <searchstring>, /imdb <imdbquery>, /rebuild, /log [type], /help [brief], /u <url>, /f <string>, /download [#], /upload [#], /close, /a[bout][:]c[onfig]");
 
 bool checkCommand(tstring& cmd, tstring& param, tstring& message, tstring& status, bool& thirdPerson) {
 	string::size_type i = cmd.find(' ');
@@ -178,6 +179,17 @@ bool checkCommand(tstring& cmd, tstring& param, tstring& message, tstring& statu
 	} else if(Util::stricmp(cmd.c_str(), _T("back")) == 0) {
 		Util::setAway(false);
 		status = T_("Away mode off");
+	} else if(Util::stricmp(cmd.c_str(), _T("lock")) == 0) {
+		if(!MainWindow::hasLockPassword()) {
+			status = T_("Set a lock password first, in Settings > Windows > Password lock");
+		} else {
+			// Lock once the chat has finished handling this command, so it can't take the focus back.
+			UiServices::mainWindow->callAsync([] {
+				if(UiServices::mainWindow) {
+					UiServices::mainWindow->lock();
+				}
+			});
+		}
 	} else if(Util::stricmp(cmd.c_str(), _T("d")) == 0) {
 		if(param.empty()) {
 			status = T_("Specify a search string");
@@ -203,7 +215,14 @@ bool checkCommand(tstring& cmd, tstring& param, tstring& message, tstring& statu
 			ShellActions::openLink(Text::toT(Util::encodeURI(Text::fromT(param))));
 		}
 	} else if(Util::stricmp(cmd.c_str(), _T("rebuild")) == 0) {
-		HashManager::getInstance()->rebuild();
+		// A rebuild drops the hashes of files no scan has looked at since startup; while the share
+		// is still being scanned, that would include files that are still shared.
+		auto sm = ShareManager::getInstance();
+		if(sm->isRefreshing() || !sm->isShareVerified()) {
+			status = T_("The share is being refreshed; rebuild the hash database once the refresh has finished");
+		} else {
+			HashManager::getInstance()->rebuild();
+		}
 	} else if(Util::stricmp(cmd.c_str(), _T("upload")) == 0) {
 		auto value = std::strtoll(Text::fromT(param).c_str(), nullptr, 10);
 		if(value < 0 || value > ThrottleManager::MAX_LIMIT) {

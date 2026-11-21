@@ -53,7 +53,9 @@ active window.</dd>
 <h2 id="confirmitem">Confirm dialog options</h2>
 <dl style="margin-left: 40px;">
   <dt>Confirm application exit</dt>
-  <dd cshelp="IDH_SETTINGS_WINDOWS_CONFIRM_EXIT">Enabling this option will cause DC++ to prompt you before exiting.</dd>
+  <dd cshelp="IDH_SETTINGS_WINDOWS_CONFIRM_EXIT">Enabling this option will cause DC++ to prompt you before exiting.
+When DC++ asks for the lock password before exiting (see <a href="#lock">Password lock</a>), the password
+prompt replaces this question.</dd>
   <dt>Confirm hub closing</dt>
   <dd cshelp="IDH_SETTINGS_WINDOWS_CONFIRM_HUB_CLOSING">Enabling this option will cause DC++ to prompt before you close a <a href="window_hub.html">hub</a> window.</dd>
   <dt>Confirm favorite hub removal</dt>
@@ -68,6 +70,37 @@ a file (or files) from the <a href="window_download_queue.html">download queue</
   <dt>Confirm ADL Search removal</dt>
   <dd cshelp="IDH_SETTINGS_WINDOWS_CONFIRM_ADLS_REMOVAL">Enabling this option will cause DC++ to prompt before you remove
 an ADL Search item from the <a href="window_adlsearch.html">ADL Search</a> window.</dd>
+</dl>
+<h2 id="lock">Password lock</h2>
+<p>The password lock hides DC++ behind a password while you are away from the computer. When DC++
+is locked, its window shows only a password box: the menu, the toolbar, the open tabs, the
+transfers and the status bar are hidden, keyboard shortcuts do nothing, the taskbar shows no tab
+previews, the window title doesn't name the hub or user in view, and balloon pop-ups say what
+happened without showing the message. Hubs, searches, uploads, downloads and hashing keep running
+as usual. Enter the password and press Enter, or click Unlock, to use DC++ again. Links, magnets and
+balloons you click while it is locked open once it is unlocked.</p>
+<p>Type <untranslated>/lock</untranslated> in any chat window to lock DC++ straight away.</p>
+<p>The lock keeps other people at your keyboard out of DC++. It doesn't encrypt anything: your
+settings, logs and downloads stay readable to anyone who can use your Windows account, so lock
+Windows itself (Windows key + L) for real protection. If you forget the password, close DC++ and
+remove the <untranslated>LockPassword</untranslated> line from DCPlusPlus.xml in your settings
+folder; DC++ then starts without a lock password.</p>
+<dl style="margin-left: 40px;">
+  <dt>Set password, Change password, Remove password</dt>
+  <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_PASSWORD">Sets the lock password, which the options below need.
+Changing or removing it asks for the current password first. DC++ stores only a salted
+PBKDF2-SHA256 hash of the password, never the password itself. The change takes effect when you
+click OK.</dd>
+  <dt>Lock DC++ when it is minimized</dt>
+  <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_ON_MINIMIZE">Locks DC++ whenever its window is minimized,
+to the taskbar or to the tray.</dd>
+  <dt>Lock DC++ when it starts</dt>
+  <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_ON_STARTUP">Starts DC++ locked. Hubs you were connected to
+reconnect as usual behind the lock.</dd>
+  <dt>Ask for the lock password before exiting</dt>
+  <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_PASSWORD_TO_EXIT">Asks for the lock password whenever DC++ is
+closed, from the window, the tray or the taskbar, so nobody else can stop it. This applies whether
+or not DC++ is locked. Shutting down or signing out of Windows is never held up.</dd>
 </dl>
 </body>
 </html>

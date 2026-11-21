@@ -52,6 +52,7 @@
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/core/classes/ScopedFunctor.h>
+#include <dcpp/core/crypto/PasswordHash.h>
 #include <dcpp/search/SearchManager.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/share/ShareManager.h>
@@ -66,6 +67,8 @@
 
 #include <dwt/Application.h>
 #include <dwt/DWTException.h>
+#include <dwt/util/win32/Dwm.h>
+#include <dwt/widgets/Button.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/ComboBox.h>
 #include <dwt/widgets/Label.h>
@@ -74,6 +77,7 @@
 #include <dwt/widgets/Rebar.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/SplitterContainer.h>
+#include <dwt/widgets/TextBox.h>
 #include <dwt/widgets/ToolBar.h>
 
 #include <win32/frames/settings/ACFrame.h>
@@ -112,6 +116,8 @@
 #include <wtsapi32.h>
 
 using dwt::Container;
+using dwt::Grid;
+using dwt::GridInfo;
 using dwt::Rebar;
 using dwt::SplitterContainer;
 using dwt::Spinner;
@@ -139,7 +145,17 @@ away(false),
 awayIdle(false),
 fullSlots(false),
 privateSendBlink(false),
-privateSendOpen(false)
+privateSendOpen(false),
+lockPanel(nullptr),
+lockTitle(nullptr),
+lockHint(nullptr),
+lockPassword(nullptr),
+lockButton(nullptr),
+lockError(nullptr),
+locked(false),
+lockPending(false),
+lockedRebar(false),
+lockedStatus(false)
 {
 	// Project-owned links are intentionally not overridden by the upstream version.xml.
 	links.homepage = _T("https://github.com/iceman50/DCPlusPlus-Experimental");
@@ -230,6 +246,7 @@ privateSendOpen(false)
 	}
 
 	filterIter = dwt::Application::instance().addFilter([this](MSG &msg) { return filter(msg); });
+	keyboardFilterIter = dwt::Application::instance().addKeyboardFilter([this](MSG& msg) { return filterLockedKeys(msg); });
 
 	File::ensureDirectory(SETTING(LOG_DIRECTORY));
 
@@ -270,7 +287,12 @@ privateSendOpen(false)
 		}
 	}
 
-	callAsync([this] { parseCommandLine(tstring(::GetCommandLine())); });
+	// Lock before the window first shows, and before anything opened from the command line can.
+	if(SETTING(LOCK_ON_STARTUP)) {
+		lock();
+	}
+
+	callAsync([this] { runUnlocked([this] { parseCommandLine(tstring(::GetCommandLine())); }); });
 
 	callAsync([this] {
 		int cmdShow = dwt::Application::instance().getCmdShow();
@@ -870,7 +892,10 @@ void MainWindow::addPluginCommands(Menu* menu) {
 }
 
 void MainWindow::notify(const tstring& title, const tstring& message, function<void ()> callback, const dwt::IconPtr& balloonIcon) {
-	notifier->addMessage(str(TF_("DC++ - %1%") % title), message, [this, callback] { handleRestore(); if(callback) callback(); }, balloonIcon);
+	// While locked, a balloon says what happened but not what was said, and clicking it opens the
+	// window it refers to only once the client is unlocked.
+	notifier->addMessage(str(TF_("DC++ - %1%") % title), locked ? T_("Unlock DC++ to see it.") : message,
+		[this, callback] { handleRestore(); if(callback) runUnlocked(callback); }, balloonIcon);
 }
 
 void MainWindow::setStaticWindowState(const string& id, bool open) {
@@ -890,8 +915,18 @@ void MainWindow::TrayPM() {
 }
 
 void MainWindow::handleTabsTitleChanged(const tstring& title) {
+	tabsTitle = title;
+	updateTitle();
+}
+
+void MainWindow::updateTitle() {
 	const auto version = _T(VERSIONSTRING) _T(" ") + Text::toT(buildLabel);
-	setText(title.empty() ? _T(FULL_APPNAME) _T(" ") + version : _T(APPNAME) _T(" ") + version + _T(" - [") + title + _T("]"));
+	if(locked) {
+		// The caption shows on the taskbar and in Alt+Tab; don't name the hub or user in view.
+		setText(_T(APPNAME) _T(" ") + version + _T(" - ") + T_("Locked"));
+	} else {
+		setText(tabsTitle.empty() ? _T(FULL_APPNAME) _T(" ") + version : _T(APPNAME) _T(" ") + version + _T(" - [") + tabsTitle + _T("]"));
+	}
 }
 
 static void multiConnect(const string& group, TabViewPtr parent) {
@@ -1101,6 +1136,7 @@ void MainWindow::handleSized(const dwt::SizedEvent& sz) {
 }
 
 void MainWindow::handleMinimized() {
+	lockOnMinimize();
 	if(SETTING(AUTO_AWAY)) {
 		Util::incAway();
 	}
@@ -1195,8 +1231,7 @@ void MainWindow::saveWindowSettings() {
 
 bool MainWindow::handleClosing() {
 	if(!closing()) {
-		if(!SETTING(CONFIRM_EXIT) || (dwt::MessageBox(this).show(T_("Really exit?"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
-			dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) == IDYES))
+		if(confirmExit())
 		{
 			geoUpdater.stop();
 			saveWindowSettings();
@@ -1234,6 +1269,11 @@ bool MainWindow::handleClosing() {
 
 void MainWindow::layout() {
 	auto r = getContentRect();
+
+	if(locked) {
+		lockPanel->resize(r);
+		return;
+	}
 
 	if(!rebar->empty()) {
 		auto y = rebar->refresh();
@@ -1407,6 +1447,7 @@ void MainWindow::updateAwayStatus() {
 
 MainWindow::~MainWindow() {
 	dwt::Application::instance().removeFilter(filterIter);
+	dwt::Application::instance().removeKeyboardFilter(keyboardFilterIter);
 }
 
 void MainWindow::handleSettings() {
@@ -1631,6 +1672,13 @@ void MainWindow::handleMatchAll() {
 }
 
 void MainWindow::handleActivate(bool active) {
+	if(locked) {
+		if(active) {
+			lockPassword->setFocus();
+		}
+		return;
+	}
+
 	// hide the temporary menu bar when moving out of the main window
 	if(!active && !SETTING(SHOW_MENU_BAR) && ::GetMenu(handle())) {
 		setMenuBar(nullptr);
@@ -1781,7 +1829,9 @@ void MainWindow::parseCommandLine(const tstring& cmdLine) {
 }
 
 LRESULT MainWindow::handleCopyData(LPARAM lParam) {
-	parseCommandLine(reinterpret_cast<LPCTSTR>(reinterpret_cast<COPYDATASTRUCT*>(lParam)->lpData));
+	// Links and magnets passed on by another instance open once the client is unlocked.
+	tstring line = reinterpret_cast<LPCTSTR>(reinterpret_cast<COPYDATASTRUCT*>(lParam)->lpData);
+	runUnlocked([this, line] { parseCommandLine(line); });
 	return TRUE;
 }
 
@@ -1982,7 +2032,270 @@ void MainWindow::handleRestore() {
 		setVisible(true);
 }
 
+namespace {
+template<typename T> void wipe(std::basic_string<T>& text) {
+	if(!text.empty()) {
+		::SecureZeroMemory(&text[0], text.size() * sizeof(T));
+	}
+	text.clear();
+}
+}
+
+bool MainWindow::hasLockPassword() {
+	return PasswordHash::isValid(SETTING(LOCK_PASSWORD));
+}
+
+bool MainWindow::checkLockPassword(const tstring& password) {
+	auto utf8 = Text::fromT(password);
+	const bool match = PasswordHash::verify(utf8, SETTING(LOCK_PASSWORD));
+	wipe(utf8);
+	return match;
+}
+
+void MainWindow::initLockPanel() {
+	// One centred column: a title, a hint, the password box, the Unlock button and a line for errors.
+	lockPanel = addChild(Grid::Seed(1, 1));
+	lockPanel->column(0).mode = GridInfo::FILL;
+	lockPanel->column(0).align = GridInfo::CENTER;
+	lockPanel->row(0).mode = GridInfo::FILL;
+	lockPanel->row(0).align = GridInfo::CENTER;
+
+	auto column = lockPanel->addChild(Grid::Seed(5, 1));
+	column->setSpacing(column->scale(8));
+	column->column(0) = GridInfo(column->scale(300), GridInfo::STATIC, GridInfo::STRETCH);
+
+	Label::Seed centred;
+	centred.style |= SS_CENTER;
+	centred.caption = T_("DC++ is locked");
+	lockTitle = column->addChild(centred);
+	centred.caption = T_("Enter the lock password to use DC++ again.");
+	lockHint = column->addChild(centred);
+
+	lockPassword = column->addChild(ControlSeeds::Dialog::textBox);
+	lockPassword->setPassword();
+
+	lockButton = column->addChild(Button::Seed(T_("&Unlock")));
+	lockButton->onClicked([this] { tryUnlock(); });
+
+	centred.caption = Util::emptyStringT;
+	lockError = column->addChild(centred);
+
+	lockPanel->setVisible(false);
+}
+
+void MainWindow::refreshLockFonts() {
+	// Follow the current theme's font; it may have changed since the last lock.
+	auto lf = UiFonts::font->getLogFont();
+	lf.lfHeight = lf.lfHeight * 8 / 5;
+	lf.lfWeight = FW_BOLD;
+	lockTitleFont = new dwt::Font(lf);
+	lockTitle->setFont(lockTitleFont);
+	lockHint->setFont(UiFonts::font);
+	lockPassword->setFont(UiFonts::font);
+	lockButton->setFont(UiFonts::font);
+	lockError->setFont(UiFonts::font);
+}
+
+bool MainWindow::lock() {
+	if(locked) {
+		return true;
+	}
+	if(closing() || !hasLockPassword()) {
+		return false;
+	}
+	if(!getEnabled()) {
+		// A modal dialog is open and has the keyboard; lock as soon as it closes.
+		lockPending = true;
+		return true;
+	}
+	lockPending = false;
+
+	if(!lockPanel) {
+		initLockPanel();
+	}
+	refreshLockFonts();
+
+	locked = true;
+	// The controls' own flags: getVisible would also be false while the window itself is hidden,
+	// as it is when DC++ starts locked or sits in the tray.
+	lockedRebar = rebar->hasStyle(WS_VISIBLE);
+	lockedStatus = status && status->hasStyle(WS_VISIBLE);
+	setMenuBar(nullptr);
+	rebar->setVisible(false);
+	paned->setVisible(false);
+	if(status) {
+		status->setVisible(false);
+	}
+
+	// Taskbar previews would show each tab's name and contents; show the window's icon instead.
+	tabs->setTabsHidden(true);
+	BOOL on = TRUE;
+	dwt::util::win32::dwm::setWindowAttribute(handle(), DWMWA_FORCE_ICONIC_REPRESENTATION, &on, sizeof(on));
+	dwt::util::win32::dwm::setWindowAttribute(handle(), DWMWA_DISALLOW_PEEK, &on, sizeof(on));
+	updateTitle();
+
+	lockPassword->setText(Util::emptyStringT);
+	lockError->setText(Util::emptyStringT);
+	lockPanel->setVisible(true);
+	layout();
+	lockPanel->layout();
+	// Taking the focus would activate a window that is hidden or in the background; handleActivate
+	// focuses the password box when the window is next activated.
+	if(::GetActiveWindow() == handle()) {
+		lockPassword->setFocus();
+	}
+
+	// Paint the panel now: when a minimize follows, Windows takes its snapshot from what is drawn.
+	redrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+	return true;
+}
+
+void MainWindow::lockOnMinimize() {
+	if(SETTING(LOCK_ON_MINIMIZE)) {
+		lock();
+	}
+}
+
+void MainWindow::tryUnlock() {
+	if(!locked) {
+		return;
+	}
+
+	auto password = lockPassword->getText();
+	lockPassword->setText(Util::emptyStringT);
+	const bool match = !password.empty() && checkLockPassword(password);
+	wipe(password);
+
+	if(!match) {
+		lockError->setText(T_("Wrong password. Try again."));
+		lockPanel->layout();
+		lockPassword->setFocus();
+		return;
+	}
+
+	unlock();
+}
+
+void MainWindow::unlock() {
+	if(!locked) {
+		return;
+	}
+	locked = false;
+
+	lockPanel->setVisible(false);
+	lockError->setText(Util::emptyStringT);
+
+	if(SETTING(SHOW_MENU_BAR)) {
+		setMenuBar(mainMenu->handle());
+	}
+	if(lockedRebar) {
+		rebar->setVisible(true);
+	}
+	paned->setVisible(true);
+	if(status && lockedStatus) {
+		status->setVisible(true);
+	}
+
+	BOOL off = FALSE;
+	dwt::util::win32::dwm::setWindowAttribute(handle(), DWMWA_FORCE_ICONIC_REPRESENTATION, &off, sizeof(off));
+	dwt::util::win32::dwm::setWindowAttribute(handle(), DWMWA_DISALLOW_PEEK, &off, sizeof(off));
+	tabs->setTabsHidden(false);
+	updateTitle();
+
+	layout();
+	handleActivate(true);
+	redrawWindow(RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+
+	// Balloon clicks and links that arrived while locked.
+	auto actions = std::move(afterUnlock);
+	afterUnlock.clear();
+	for(auto& action: actions) {
+		callAsync(action);
+	}
+}
+
+void MainWindow::runUnlocked(function<void ()> f) {
+	if(!locked) {
+		f();
+		return;
+	}
+	// Keep the most recent ones; a long lock shouldn't open dozens of windows at once.
+	static const size_t maxHeld = 16;
+	if(afterUnlock.size() >= maxHeld) {
+		afterUnlock.erase(afterUnlock.begin());
+	}
+	afterUnlock.push_back(std::move(f));
+}
+
+bool MainWindow::filterLockedKeys(MSG& msg) {
+	if(!locked) {
+		return false;
+	}
+	// Keys for other windows, such as a dialog, are theirs.
+	if(msg.hwnd != handle() && !::IsChild(handle(), msg.hwnd)) {
+		return false;
+	}
+
+	if(!::IsChild(lockPanel->handle(), msg.hwnd)) {
+		// The focus is in the hidden client (a tab that opened took it, say). Hand the key to the
+		// password box, so nothing typed reaches a chat and no shortcut runs.
+		lockPassword->setFocus();
+		msg.hwnd = lockPassword->handle();
+	}
+
+	if(msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
+		tryUnlock();
+		return true;
+	}
+
+	// The panel's own keys (typing, Tab, Alt+U, Alt+F4) and never the client's shortcuts, which
+	// would otherwise run from the accelerator tables of the windows behind the panel.
+	if(!::IsDialogMessage(lockPanel->handle(), &msg)) {
+		::TranslateMessage(&msg);
+		::DispatchMessage(&msg);
+	}
+	return true;
+}
+
+bool MainWindow::confirmExit() {
+	if(SETTING(LOCK_PASSWORD_TO_EXIT) && hasLockPassword()) {
+		// The prompt is centred on the main window; bring that back from the tray first.
+		if(isIconic() || !getVisible()) {
+			handleRestore();
+		}
+
+		ParamDlg dlg(this, T_("Exit DC++"), T_("Lock password"), Util::emptyStringT, true);
+		if(dlg.run() != IDOK) {
+			return false;
+		}
+		auto password = dlg.getValue();
+		const bool match = !password.empty() && checkLockPassword(password);
+		wipe(password);
+		if(!match) {
+			dwt::MessageBox(this).show(T_("Wrong password. DC++ keeps running."), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
+				dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONEXCLAMATION);
+		}
+		return match;
+	}
+
+	return !SETTING(CONFIRM_EXIT) || dwt::MessageBox(this).show(T_("Really exit?"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
+		dwt::MessageBox::BOX_YESNO, dwt::MessageBox::BOX_ICONQUESTION) == IDYES;
+}
+
 bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
+	if(msg.message == WM_SYSCOMMAND && (msg.wParam & 0xFFF0) == SC_MINIMIZE) {
+		// Lock before Windows minimizes the window, so the taskbar's snapshot of it shows the
+		// lock panel rather than the chat that was open.
+		lockOnMinimize();
+	} else if(msg.message == WM_ENABLE && msg.wParam && lockPending) {
+		callAsync([this] {
+			if(lockPending) {
+				lockPending = false;
+				lock();
+			}
+		});
+	}
+
 	bool handled = dwt::Window::handleMessage(msg, retVal);
 	if(!handled && msg.message == WM_COMMAND && tabs) {
 		handled = tabs->handleMessage(msg, retVal);
@@ -1994,11 +2307,14 @@ void MainWindow::handleTrayContextMenu() {
 	auto menu = addChild(ControlSeeds::menu);
 
 	menu->appendItem(T_("Show"), [this] { handleRestore(); }, IconManager::menuIcon(IDI_DCPP), true, true);
-	menu->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, IconManager::menuIcon(IDI_OPEN_DL_DIR));
-	menu->appendSeparator();
-	menu->appendItem(T_("Settings"), [this] { handleSettings(); }, IconManager::menuIcon(IDI_SETTINGS));
-	fillLimiterMenu(menu->appendPopup(T_("Download limit"), IconManager::menuIcon(IDI_DLIMIT), false), false);
-	fillLimiterMenu(menu->appendPopup(T_("Upload limit"), IconManager::menuIcon(IDI_ULIMIT), false), true);
+	// While locked, the tray offers only what the lock panel and exiting already allow.
+	if(!locked) {
+		menu->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, IconManager::menuIcon(IDI_OPEN_DL_DIR));
+		menu->appendSeparator();
+		menu->appendItem(T_("Settings"), [this] { handleSettings(); }, IconManager::menuIcon(IDI_SETTINGS));
+		fillLimiterMenu(menu->appendPopup(T_("Download limit"), IconManager::menuIcon(IDI_DLIMIT), false), false);
+		fillLimiterMenu(menu->appendPopup(T_("Upload limit"), IconManager::menuIcon(IDI_ULIMIT), false), true);
+	}
 	menu->appendSeparator();
 	menu->appendItem(T_("Exit"), [this] { close(true); }, IconManager::menuIcon(IDI_EXIT));
 
@@ -2011,6 +2327,7 @@ void MainWindow::handleTrayClicked() {
 	if(isIconic()) {
 		handleRestore();
 	} else {
+		lockOnMinimize();
 		minimize();
 	}
 }

@@ -101,7 +101,7 @@ const string SettingsManager::settingTags[] =
 	"SoundMainChat", "SoundPM", "SoundPMWindow", "SoundFinishedDL", "SoundFinishedFL", "LastSharedFolder",
 	"SharingSkiplistExtensions", "SharingSkiplistRegEx", "SharingSkiplistPaths", "WhitelistOpenURIs",
 	"ACFrameOrder", "ACFrameWidths", "MaxMindAccountID", "MaxMindLicenseKey", "GeoIPDownloadURL",
-	"NmdcEncoding",
+	"NmdcEncoding", "LockPassword",
 	"SENTRY",
 	// Ints
 	"IncomingConnections", "IncomingConnections6", "OutgoingConnections", "InPort", "InPort6", 
@@ -180,7 +180,7 @@ const string SettingsManager::settingTags[] =
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
 	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind", "PFTRequireVerification",
 	"ThemedDialogBorders", "EnableMessageOutbox",
-	"LogHashedFiles",
+	"LogHashedFiles", "LockOnMinimize", "LockOnStartup", "LockPasswordToExit",
 	"SENTRY",
 	// Int64
 	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize", "GeoIPLastSuccess", "GeoIPLastAttempt",
@@ -326,6 +326,10 @@ SettingsManager::SettingsManager() {
 	setDefault(SHARE_CACHE, true);
 	// As AirDC++: hashing a large share would otherwise add a line per file.
 	setDefault(LOG_HASHED_FILES, false);
+	// The client lock is off until a password is set; LOCK_PASSWORD holds only a salted hash.
+	setDefault(LOCK_ON_MINIMIZE, false);
+	setDefault(LOCK_ON_STARTUP, false);
+	setDefault(LOCK_PASSWORD_TO_EXIT, false);
 	setDefault(ENABLE_RTF_TEMP_SHARES, true);
 	setDefault(RTF_DROPPED_IMAGES_INLINE, true);
 	setDefault(LOG_DIRECTORY, Util::getPath(Util::PATH_USER_LOCAL) + "Logs" PATH_SEPARATOR_STR);

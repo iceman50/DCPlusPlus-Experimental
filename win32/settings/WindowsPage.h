@@ -35,6 +35,22 @@ private:
 
 	TablePtr options;
 	TablePtr confirm;
+
+	// Password lock
+	ItemList lockItems;
+	LabelPtr lockState;
+	ButtonPtr lockSet;
+	ButtonPtr lockRemove;
+	CheckBoxPtr lockOnMinimize;
+	CheckBoxPtr lockOnStartup;
+	CheckBoxPtr lockToExit;
+	/// The password hash saved on OK; empty when no lock password is set.
+	string lockHash;
+
+	void handleSetLockPassword();
+	void handleRemoveLockPassword();
+	void showLockError(const tstring& message);
+	void updateLockControls();
 };
 
 #endif // !defined(DCPLUSPLUS_WIN32_WINDOWS_PAGE_H)
