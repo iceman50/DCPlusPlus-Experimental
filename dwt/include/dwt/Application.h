@@ -119,6 +119,12 @@ public:
 	FilterIter addFilter(const FilterFunction& f);
 	void removeFilter(const FilterIter& i);
 
+	/** Keyboard filters see keyboard messages before any control's accelerators and before the
+	 * filters above, so a window can keep keys away from its children entirely (a locked
+	 * window, for instance). A filter that returns true has handled or dropped the message. */
+	FilterIter addKeyboardFilter(const FilterFunction& f);
+	void removeKeyboardFilter(const FilterIter& i);
+
 	/** Run a function on the GUI thread asynchronously.
 	 * Callbacks are processed in the same FIFO order in which they are queued.
 	 */
@@ -217,6 +223,7 @@ private:
 	bool dispatchingAsync;
 
 	FilterList filters;
+	FilterList keyboardFilters;
 
 	std::unique_ptr<Appearance> appearance;
 

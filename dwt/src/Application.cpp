@@ -208,6 +208,12 @@ bool Application::dispatch() {
 
 	// heavily inspired by SWT (Display.java - filterMessage & findControl)
 	if(msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) {
+		for(auto& i: keyboardFilters) {
+			if(i(msg)) {
+				return true;
+			}
+		}
+
 		HWND hwnd = msg.hwnd;
 		HWND owner = 0;
 		while(hwnd && hwnd != owner) {
@@ -289,6 +295,14 @@ Application::FilterIter Application::addFilter(const FilterFunction& f) {
 
 void Application::removeFilter(const FilterIter& i) {
 	filters.erase(i);
+}
+
+Application::FilterIter Application::addKeyboardFilter(const FilterFunction& f) {
+	return keyboardFilters.insert(keyboardFilters.end(), f);
+}
+
+void Application::removeKeyboardFilter(const FilterIter& i) {
+	keyboardFilters.erase(i);
 }
 
 } // namespace dwt
