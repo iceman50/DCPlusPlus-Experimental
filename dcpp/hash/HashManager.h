@@ -58,12 +58,14 @@ public:
 	static const int64_t MIN_BLOCK_SIZE;
 
 	HashManager() {
+		hashers.push_back(std::make_unique<Hasher>(nextJobId, 0));
+		primary = hashers.front().get();
 		TimerManager::getInstance()->addListener(this);
 	}
 	virtual ~HashManager() {
 		TimerManager::getInstance()->removeListener(this);
 		hashStoreMaintenance.join();
-		hasher.join();
+		joinHashers();
 	}
 
 	/** Get the TTH root associated with the filename if its tree is current. */
@@ -71,9 +73,20 @@ public:
 	struct TTHRequest {
 		optional<TTHValue> tth;
 		uint64_t jobId;
+		/** False for a stored root that predates the Private Send marker check (see setMarkerChecked). */
+		bool markerChecked = true;
 	};
 	/** Return the current root or the exact hash-job cohort that will produce it. */
 	TTHRequest requestTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp) noexcept;
+	/** The stored root for an unchanged file, without queueing a hash when there is none. */
+	optional<TTHValue> findTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp) noexcept;
+	/** Record that a stored file was found without the Private Send marker. Files hashed by this
+	 * version are checked when hashed; older records are checked once by the next share scan. */
+	void setMarkerChecked(const string& aFileName) noexcept;
+	/** Register a file whose content is already proven by a stored full tree (a finished,
+	 * tree-verified download), so it isn't hashed again. @return false when the tree isn't stored
+	 * or the file doesn't match it. */
+	bool addVerifiedFile(const string& aFileName, const TTHValue& aRoot) noexcept;
 	/**
 	 * Hash a file synchronously and verify that it still matches the advertised root.
 	 * Used for upload requests during share refreshes, where the cached virtual path
@@ -83,8 +96,8 @@ public:
 	/** Verify an already-open file handle and restore its original position. */
 	bool verifyFileTTH(File& file, int64_t aSize, const TTHValue& root) noexcept;
 
-	void stopHashing(const string& baseDir) { hasher.stopHashing(baseDir); }
-	void setPriority(Thread::Priority p) { hasher.setThreadPriority(p); }
+	void stopHashing(const string& baseDir);
+	void setPriority(Thread::Priority p);
 
 	bool getTree(const TTHValue& root, TigerTree& tt);
 
@@ -93,14 +106,13 @@ public:
 
 	bool addTree(const TigerTree& tree) { Lock l(cs); return store.addTree(tree); }
 
-	void getStats(string& curFile, uint64_t& bytesLeft, size_t& filesLeft) const {
-		hasher.getStats(curFile, bytesLeft, filesLeft);
-	}
+	/** Totals of every hasher; curFile is the file one of them is hashing. */
+	void getStats(string& curFile, uint64_t& bytesLeft, size_t& filesLeft) const;
 
 	/**
 	 * Rebuild hash data file
 	 */
-	void rebuild() { hasher.scheduleRebuild(); }
+	void rebuild() { primary->scheduleRebuild(); }
 	using HashStoreMaintenanceCallback = function<void (bool, const string&)>;
 	bool verifyHashStore(bool fullCheck = false);
 	void optimizeHashStore();
@@ -111,15 +123,15 @@ public:
 
 	void startup(function<void (float)> progressF) {
 		hashStoreMaintenance.start();
-		hasher.start();
+		startHashers();
 		store.load(progressF);
 	}
 
 	void shutdown() {
 		hashStoreMaintenance.shutdown();
-		hasher.shutdown();
+		shutdownHashers();
 		hashStoreMaintenance.join();
-		hasher.join();
+		joinHashers();
 		Lock l(cs);
 		store.save();
 	}
@@ -152,13 +164,24 @@ private:
 		bool stop;
 	};
 
+	/** Reads and hashes queued files one at a time. There is one per drive (or network share) being
+	 * hashed, up to MAX_HASH_VOLUMES, so drives are read in parallel and each one sequentially. */
 	class Hasher : public Thread {
 	public:
-		Hasher() : stop(false), running(false), idle(true), paused(0), rebuild(false),
-			currentSize(0), currentFileSize(0), currentTimestamp(0), currentJobId(0),
-			currentTerminal(false), nextJobId(1) { }
+		/** @param jobIds Shared by all hashers, so job ids are unique across them.
+		 * @param initialPaused Pause count to start with (hashing is paused when it's created). */
+		Hasher(std::atomic<uint64_t>& jobIds, unsigned initialPaused) : jobIds(jobIds), stop(false), running(false),
+			idle(true), paused(initialPaused), rebuild(false), currentSize(0), currentFileSize(0), currentTimestamp(0),
+			currentJobId(0), currentTerminal(false), queuedBytes(0), queuedFiles(0) { }
 
-		uint64_t hashFile(const string& fileName, int64_t size, uint32_t timestamp) noexcept;
+		/** @param volume getVolume(fileName); counted until the file has been hashed or dropped. */
+		uint64_t hashFile(const string& fileName, int64_t size, uint32_t timestamp, const string& volume) noexcept;
+		/** Whether a file on this volume is queued here or being hashed here. */
+		bool hasVolume(const string& volume) const noexcept;
+		/** Nothing queued and nothing being hashed. */
+		bool isIdle() const noexcept;
+		/** Bytes queued or still to read of the current file. */
+		uint64_t getLoad() const noexcept;
 
 		/// @return whether hashing was already paused
 		bool pause() noexcept;
@@ -211,9 +234,16 @@ private:
 
 		// Case-sensitive (faster), it is rather unlikely that case changes, and if it does it's harmless.
 		// map because it's sorted (to avoid random hash order that would create quite strange shares while hashing)
-		map<string, std::deque<HashRequest>> w;
+		map<string, HashRequest> w;
+		/** Further snapshots of a path already in w, oldest first. Rare: a file that changed while
+		 * waiting, requested again with its new size or time. */
+		std::multimap<string, HashRequest> waiting;
 		mutable CriticalSection cs;
 		Semaphore s;
+		std::atomic<uint64_t>& jobIds;
+		/** Files queued or being hashed, by volume. */
+		unordered_map<string, size_t> volumes;
+		string currentVolume;
 
 		std::atomic<bool> stop;
 		/** A queue item's currently being processed */ 
@@ -228,9 +258,22 @@ private:
 		uint32_t currentTimestamp;
 		uint64_t currentJobId;
 		bool currentTerminal;
-		uint64_t nextJobId;
+		/** Totals of w and waiting, so progress polling doesn't walk the queue. */
+		uint64_t queuedBytes;
+		size_t queuedFiles;
 
 		void instantPause();
+		uint64_t newJobId() noexcept;
+		/** A request left the queue: hashed, or dropped (with its volume, unless it is being hashed). */
+		void dequeued(const HashRequest& request) noexcept;
+		void volumeDone(const string& volume) noexcept;
+		/** Continue hashing the file being hashed as the snapshot it actually is, under the job of a
+		 * queued request for that snapshot when there is one. */
+		void adoptSnapshot(const string& fileName, int64_t size, uint32_t timestamp,
+			int64_t& requestedSize_, uint32_t& requestedTimestamp_, uint64_t& requestedJobId_) noexcept;
+
+		/** Files at least this large are read unbuffered; smaller ones through the snapshot handle. */
+		static const int64_t DIRECT_READ_MIN_SIZE = 16 * 1024 * 1024;
 	};
 
 	friend class Hasher;
@@ -239,7 +282,11 @@ private:
 	public:
 		HashStore();
 		~HashStore();
-		void addFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aUsed);
+		/** @param aMarkerChecked The file was confirmed not to carry the Private Send marker. */
+		void addFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aUsed, bool aMarkerChecked = true);
+		void setMarkerChecked(const string& aFileName);
+		/** Whether the full tree for this root, of this file size, is stored. */
+		bool hasTree(const TTHValue& root, int64_t size) const;
 
 		void load(function<void (float)> progressF);
 		void save();
@@ -249,7 +296,8 @@ private:
 		void optimize();
 		void compact();
 
-		optional<TTHValue> getTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp) noexcept;
+		/** @param markerChecked_ Receives whether the stored file was checked for the Private Send marker. */
+		optional<TTHValue> getTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp, bool* markerChecked_ = nullptr) noexcept;
 
 		bool addTree(const TigerTree& tt) noexcept;
 		bool getTree(const TTHValue& root, TigerTree& tth);
@@ -275,12 +323,14 @@ private:
 		/** File -> root mapping info; the file name is its key in the directory's FileList. */
 		struct FileInfo {
 		public:
-			FileInfo(const TTHValue& aRoot, uint32_t aTimeStamp, bool aUsed) :
-				root(aRoot), timeStamp(aTimeStamp), used(aUsed) { }
+			FileInfo(const TTHValue& aRoot, uint32_t aTimeStamp, bool aUsed, bool aMarkerChecked) :
+				root(aRoot), timeStamp(aTimeStamp), used(aUsed), markerChecked(aMarkerChecked) { }
 
 			GETSET(TTHValue, root, Root);
 			GETSET(uint32_t, timeStamp, TimeStamp);
 			GETSET(bool, used, Used);
+			/** Confirmed not to carry the Private Send marker (database column "checked"). */
+			GETSET(bool, markerChecked, MarkerChecked);
 		};
 
 		friend class HashLoader;
@@ -300,6 +350,7 @@ private:
 		SQLiteStatement saveFileStmt;
 		SQLiteStatement removeFileStmt;
 		SQLiteStatement loadTreeStmt;
+		SQLiteStatement markCheckedStmt;
 
 		/** Open the SQLite hash database and create or migrate the schema before use. */
 		void openDb();
@@ -313,6 +364,7 @@ private:
 		int getSchemaVersion();
 		/** Upgrade older SQLite hash-store schemas while preserving only rows that remain valid. */
 		void migrateSchema(int version);
+		void migrateSchemaV2(int version);
 		/** Return true when SQLite already contains durable hash rows and should be treated as authoritative. */
 		bool hasDbData();
 		/** Read one metadata value used for durable database state such as legacy migration completion. */
@@ -333,10 +385,10 @@ private:
 		/** Validate legacy HashData.dat tree data, write valid records into SQLite and mark migration complete. */
 		bool migrateLegacy(function<void (float)> progressF);
 
-		void saveFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth);
+		void saveFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aMarkerChecked);
 		void removeFile(const string& aFileName) noexcept;
 		bool saveTree(const TigerTree& tt);
-		void writeFileRow(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth);
+		void writeFileRow(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aMarkerChecked);
 		void writeTreeRow(const TigerTree& tt);
 		bool loadTree(const TTHValue& root, TigerTree& tt);
 
@@ -360,8 +412,29 @@ private:
 	void scheduleHashStoreMaintenance(function<bool ()> operation, HashStoreMaintenanceCallback callback);
 
 	HashStoreMaintenanceWorker hashStoreMaintenance;
-	Hasher hasher;
+	/** hashers[0] (primary) always exists and runs database rebuilds; others are added as drives are
+	 * hashed in parallel and kept until shutdown. Guarded by hashersCs, taken after cs. */
+	vector<std::unique_ptr<Hasher>> hashers;
+	Hasher* primary;
+	mutable CriticalSection hashersCs;
+	bool hashersStarted = false;
+	bool hashersStopped = false;
+	unsigned hashersPaused = 0;
+	Thread::Priority hasherPriority = Thread::IDLE;
+	std::atomic<uint64_t> nextJobId { 1 };
 	HashStore store;
+
+	/** Queue a file with the hasher for its volume. @return the job id that will report it. */
+	uint64_t queueHash(const string& fileName, int64_t size, uint32_t timestamp) noexcept;
+	/** The hasher already reading this volume, else an idle one, else a new one (up to
+	 * MAX_HASH_VOLUMES), else the least loaded. Requires hashersCs. */
+	Hasher& selectHasher(const string& volume);
+	/** The drive or network share a path is on, from the path alone (no disk access): "c:",
+	 * "\\server\share". Empty when unknown, so such files share one hasher. */
+	static string getVolume(const string& path);
+	void startHashers();
+	void shutdownHashers();
+	void joinHashers();
 
 	struct VerificationCacheEntry {
 		VerificationCacheEntry(string aFileName, const TTHValue& aRoot, int64_t aSize, uint32_t aTimeStamp, bool aResult) :

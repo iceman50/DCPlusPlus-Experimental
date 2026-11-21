@@ -148,7 +148,7 @@ const string SettingsManager::settingTags[] =
 	"OutboxMaxEntries", "OutboxMaxMessageBytes", "OutboxExpiryDays",
 	"AdcMinSaltLength", "BBSMaxBoards",
 	"ArchiveMaxEntries", "ArchiveMaxFileBytes", "ArchiveMaxTotalBytes",
-	"MaxReceivedPartialListBytes",
+	"MaxReceivedPartialListBytes", "MaxHashVolumes",
 	"SENTRY",
 	// Bools
 	"AddFinishedInstantly", "AdlsBreakOnFirst",
@@ -180,6 +180,7 @@ const string SettingsManager::settingTags[] =
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
 	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind", "PFTRequireVerification",
 	"ThemedDialogBorders", "EnableMessageOutbox",
+	"LogHashedFiles",
 	"SENTRY",
 	// Int64
 	"TotalUpload", "TotalDownload", "SharingSkiplistMinSize", "SharingSkiplistMaxSize", "GeoIPLastSuccess", "GeoIPLastAttempt",
@@ -323,6 +324,8 @@ SettingsManager::SettingsManager() {
 	setDefault(HASH_DB_VERIFY_STARTUP, false);
 	setDefault(HASH_DB_COMPACT_ON_REBUILD, false);
 	setDefault(SHARE_CACHE, true);
+	// As AirDC++: hashing a large share would otherwise add a line per file.
+	setDefault(LOG_HASHED_FILES, false);
 	setDefault(ENABLE_RTF_TEMP_SHARES, true);
 	setDefault(RTF_DROPPED_IMAGES_INLINE, true);
 	setDefault(LOG_DIRECTORY, Util::getPath(Util::PATH_USER_LOCAL) + "Logs" PATH_SEPARATOR_STR);
@@ -382,6 +385,7 @@ SettingsManager::SettingsManager() {
 	setDefault(SEND_UNKNOWN_COMMANDS, true);
 	setDefault(MAX_HASH_SPEED, 0);
 	setDefault(HASHING_THREADS, 2);
+	setDefault(MAX_HASH_VOLUMES, 2);
 	setDefault(OPEN_USER_CMD_HELP, true);
 	setDefault(GEO_CITY, false);
 	setDefault(GEO_REGION, false);

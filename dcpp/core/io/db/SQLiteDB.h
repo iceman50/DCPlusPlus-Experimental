@@ -75,6 +75,8 @@ public:
 	void rollback() noexcept;
 
 	sqlite3* getHandle() const noexcept { return db; }
+	/** Rows changed by the last INSERT, UPDATE or DELETE. */
+	int64_t changes() const noexcept;
 	/** Return SQLite's latest error message for this connection. */
 	string getError() const;
 	/** Apply a SQLite runtime limit and return SQLite's previous value. */

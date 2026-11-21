@@ -310,10 +310,12 @@ ExperimentalPage::ExperimentalPage(dwt::Widget* parent) :
 
 	{
 		auto group = transferGrid->addChild(GroupBox::Seed(T_("Hashing and share database")));
-		auto cur = group->addChild(Grid::Seed(6, 1));
+		auto cur = group->addChild(Grid::Seed(7, 1));
 		cur->column(0).mode = GridInfo::FILL;
 		addIntItem(cur, T_("Maximum hash speed"), SettingsManager::MAX_HASH_SPEED,
-			IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_SPEED, T_("MiB/s (0 = unlimited)"), 0, UD_MAXVAL);
+			IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_SPEED, T_("MiB/s per drive (0 = unlimited)"), 0, UD_MAXVAL);
+		addIntItem(cur, T_("Drives hashed at the same time"), SettingsManager::MAX_HASH_VOLUMES,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_VOLUMES, T_("drives"), SettingsManager::MAX_HASH_VOLUMES_MIN, SettingsManager::MAX_HASH_VOLUMES_MAX);
 		addIntItem(cur, T_("Hashing worker threads"), SettingsManager::HASHING_THREADS,
 			IDH_SETTINGS_EXPERIMENTAL_HASHING_THREADS, T_("threads"), SettingsManager::HASHING_THREADS_MIN, SettingsManager::HASHING_THREADS_MAX);
 		addIntItem(cur, T_("Hash database write batch size"), SettingsManager::HASH_DB_WRITE_BATCH_SIZE,
@@ -553,6 +555,7 @@ void ExperimentalPage::write() {
 	clamp(SettingsManager::MAX_MCN_UPLOADS, 1);
 	clamp(SettingsManager::MAX_HASH_SPEED, 0);
 	clampRange(SettingsManager::HASHING_THREADS, SettingsManager::HASHING_THREADS_MIN, SettingsManager::HASHING_THREADS_MAX);
+	clampRange(SettingsManager::MAX_HASH_VOLUMES, SettingsManager::MAX_HASH_VOLUMES_MIN, SettingsManager::MAX_HASH_VOLUMES_MAX);
 	clamp(SettingsManager::HASH_DB_WRITE_BATCH_SIZE, 1);
 	clamp(SettingsManager::RTF_TEMP_SHARE_LIMIT, 1);
 	clamp(SettingsManager::RTF_TEMP_SHARE_EXPIRATION, 0);

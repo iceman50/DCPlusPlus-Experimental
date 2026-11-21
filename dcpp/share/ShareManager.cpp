@@ -95,16 +95,6 @@ bool isValidCachedPath(const string& path) noexcept {
 	return !path.empty() && path.size() <= MAX_SHARE_CACHE_PATH;
 }
 
-bool isUncPath(const string& path) noexcept {
-	if(path.size() < 2) {
-		return false;
-	}
-	if(path.compare(0, 4, "\\\\?\\") == 0) {
-		return path.compare(0, 8, "\\\\?\\UNC\\") == 0;
-	}
-	return (path[0] == '\\' || path[0] == '/') && (path[1] == '\\' || path[1] == '/');
-}
-
 bool isUnderSharedRoot(const string& path, const map<string, string>& shares) noexcept {
 	for(const auto& share: shares) {
 		if(Util::strnicmp(path, share.first, share.first.size()) == 0) {
@@ -129,9 +119,8 @@ string getMetadata(SQLiteDB& db, const string& key) {
 std::atomic_flag ShareManager::refreshing = ATOMIC_FLAG_INIT;
 std::atomic<bool> ShareManager::refreshActive { false };
 
-ShareManager::ShareManager() : hits(0), xmlListLen(0), bzXmlListLen(0),
-	xmlDirty(true), forceXmlRefresh(true), refreshDirs(false), update(false), listN(0),
-	lastXmlUpdate(0), lastFullUpdate(GET_TICK()), bloom(1<<20)
+ShareManager::ShareManager() : hits(0), refreshDirs(false), update(false), listN(0),
+	lastFullUpdate(GET_TICK()), bloom(1<<20)
 {
 	SettingsManager::getInstance()->addListener(this);
 	TimerManager::getInstance()->addListener(this);
@@ -140,6 +129,8 @@ ShareManager::ShareManager() : hits(0), xmlListLen(0), bzXmlListLen(0),
 }
 
 ShareManager::~ShareManager() {
+	// A scan of a large network share can take hours; don't make shutdown wait for it.
+	stopping = true;
 	SettingsManager::getInstance()->removeListener(this);
 	TimerManager::getInstance()->removeListener(this);
 	QueueManager::getInstance()->removeListener(this);
@@ -153,10 +144,14 @@ ShareManager::~ShareManager() {
 
 	join();
 
-	if(bzXmlRef.get()) {
-		bzXmlRef.reset();
-		File::deleteFile(getBZXmlFile());
+	for(auto& list: fileLists) {
+		list.second.ref.reset();
+		if(!list.second.path.empty()) {
+			staleListFiles.push_back(list.second.path);
+		}
 	}
+	fileLists.clear();
+	removeStaleLists();
 }
 
 ShareManager::Directory::Directory(const string& aName, const ShareManager::Directory::Ptr& aParent, time_t aLastWrite) :
@@ -192,6 +187,20 @@ string ShareManager::Directory::getRealPath(const std::string& path) const {
 }
 
 string ShareManager::findRealRoot(const string& virtualRoot, const string& virtualPath) const {
+	// A name shared from one folder: the path is that folder's, no need to look on disk (a
+	// network round trip per upload request on a NAS). Only merged names are probed.
+	const string* single = nullptr;
+	size_t matches = 0;
+	for(auto& i: shares) {
+		if(Util::stricmp(i.second, virtualRoot) == 0) {
+			single = &i.first;
+			++matches;
+		}
+	}
+	if(matches == 1) {
+		return *single + virtualPath;
+	}
+
 	for(auto& i: shares) {
 		if(Util::stricmp(i.second, virtualRoot) == 0) {
 			std::string name = i.first + virtualPath;
@@ -213,13 +222,19 @@ int64_t ShareManager::Directory::getSize() const noexcept {
 }
 
 string ShareManager::toVirtual(const TTHValue& tth) const {
-	if(bzXmlRoot && tth == bzXmlRoot) {
-		return Transfer::USER_LIST_NAME_BZ;
-	} else if(xmlRoot && tth == xmlRoot) {
-		return Transfer::USER_LIST_NAME;
+	{
+		FastLock l(fileListsCs);
+		auto list = fileLists.find(Util::emptyString);
+		if(list != fileLists.end()) {
+			if(list->second.bzRoot && tth == *list->second.bzRoot) {
+				return Transfer::USER_LIST_NAME_BZ;
+			} else if(list->second.xmlRoot && tth == *list->second.xmlRoot) {
+				return Transfer::USER_LIST_NAME;
+			}
+		}
 	}
 
-	Lock l(cs);
+	RLock l(cs);
 	auto i = tthIndex.find(tth);
 	if(i != tthIndex.end()) {
 		return i->second->getADCPath();
@@ -279,7 +294,7 @@ bool ShareManager::isFileAllowed(const Directory::File& file, const ShareAccess&
 
 string ShareManager::toVirtual(const TTHValue& tth, const string& hubUrl, const CID& user) const {
 	auto access = getShareAccess(hubUrl);
-	Lock l(cs);
+	RLock l(cs);
 	auto i = tthIndex.find(tth);
 	if(i != tthIndex.end() && isFileAllowed(*i->second, access)) {
 		return i->second->getADCPath();
@@ -296,32 +311,43 @@ string ShareManager::toReal(const string& virtualFile, const string& hubUrl, con
 	return toRealWithSize(virtualFile, hubUrl, user).first;
 }
 
-pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile) {
-	Lock l(cs);
+void ShareManager::checkNotMarked(const string& realPath) {
+	// A shared file that gained the Private Send marker after it was scanned (the marker changes
+	// its modification time, so the next scan drops its hash) is never served meanwhile. One
+	// stream open per upload request, outside the share lock.
+	if(pft::hasPrivateMarker(realPath)) {
+		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
+	}
+}
 
+pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile) {
 	if(virtualFile == "MyList.DcLst") {
 		throw ShareException("NMDC-style lists no longer supported, please upgrade your client");
 	}
 	if(virtualFile == Transfer::USER_LIST_NAME_BZ || virtualFile == Transfer::USER_LIST_NAME) {
-		generateXmlList();
-		return make_pair(getBZXmlFile(), 0);
+		return make_pair(getList(ShareAccess { true, { } }).path, 0);
 	}
 
-	if(virtualFile.compare(0, 4, "TTH/") == 0) {
-		const TTHValue tth(virtualFile.substr(4));
-		auto i = tthIndex.find(tth);
-		if(i != tthIndex.end() && !pft::isPrivatePath(i->second->getRealPath()))
-			return make_pair(i->second->getRealPath(), i->second->getSize());
-		if(const auto temp = findTempShare(tth))
-			if(!pft::isPrivatePath(temp->realPath))
-				return make_pair(temp->realPath, temp->size);
-		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
-	}
+	auto result = [&] {
+		RLock l(cs);
+		if(virtualFile.compare(0, 4, "TTH/") == 0) {
+			const TTHValue tth(virtualFile.substr(4));
+			auto i = tthIndex.find(tth);
+			if(i != tthIndex.end() && !pft::isPrivateLocation(i->second->getRealPath()))
+				return make_pair(i->second->getRealPath(), i->second->getSize());
+			if(const auto temp = findTempShare(tth))
+				if(!pft::isPrivateLocation(temp->realPath))
+					return make_pair(temp->realPath, temp->size);
+			throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
+		}
 
-	auto& f = findFile(virtualFile);
-	if(pft::isPrivatePath(f.getRealPath()))
-		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
-	return make_pair(f.getRealPath(), f.getSize());
+		auto& f = findFile(virtualFile);
+		if(pft::isPrivateLocation(f.getRealPath()))
+			throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
+		return make_pair(f.getRealPath(), f.getSize());
+	}();
+	checkNotMarked(result.first);
+	return result;
 }
 
 pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile, const string& hubUrl, const CID& user) {
@@ -330,8 +356,14 @@ pair<string, int64_t> ShareManager::toRealWithSize(const string& virtualFile, co
 }
 
 ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFile, const string& hubUrl, const CID& user) {
+	auto info = resolveFileLocked(virtualFile, hubUrl, user);
+	checkNotMarked(info.realPath);
+	return info;
+}
+
+ShareManager::ResolvedFileInfo ShareManager::resolveFileLocked(const string& virtualFile, const string& hubUrl, const CID& user) {
 	auto access = getShareAccess(hubUrl);
-	Lock l(cs);
+	RLock l(cs);
 
 	if(virtualFile == "MyList.DcLst" || virtualFile == Transfer::USER_LIST_NAME_BZ || virtualFile == Transfer::USER_LIST_NAME) {
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
@@ -340,11 +372,11 @@ ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFi
 	if(virtualFile.compare(0, 4, "TTH/") == 0) {
 		const TTHValue tth(virtualFile.substr(4));
 		auto i = tthIndex.find(tth);
-		if(i != tthIndex.end() && isFileAllowed(*i->second, access) && !pft::isPrivatePath(i->second->getRealPath())) {
+		if(i != tthIndex.end() && isFileAllowed(*i->second, access) && !pft::isPrivateLocation(i->second->getRealPath())) {
 			return { i->second->getRealPath(), i->second->getSize(), tth, false, 0, false };
 		}
 		if(const auto temp = findTempShare(tth, &hubUrl, nullptr, user)) {
-			if(pft::isPrivatePath(temp->realPath))
+			if(pft::isPrivateLocation(temp->realPath))
 				throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 			return { temp->realPath, temp->size, temp->tth, true, temp->timestamp, temp->exactOnly };
 		}
@@ -352,7 +384,7 @@ ShareManager::ResolvedFileInfo ShareManager::resolveFile(const string& virtualFi
 	}
 
 	auto& f = findFile(virtualFile);
-	if(!isFileAllowed(f, access) || pft::isPrivatePath(f.getRealPath()))
+	if(!isFileAllowed(f, access) || pft::isPrivateLocation(f.getRealPath()))
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	return { f.getRealPath(), f.getSize(), f.tth, false, 0, false };
 }
@@ -361,33 +393,33 @@ StringList ShareManager::getRealPaths(const string& virtualPath) {
 	if(virtualPath.empty())
 		throw ShareException("empty virtual path");
 
+	if(*(virtualPath.end() - 1) != '/') {
+		// A file: resolved (and checked for the Private Send marker) without the share lock held,
+		// as a file list name builds the list, which must never happen under the share lock.
+		return { toReal(virtualPath) };
+	}
+
 	StringList ret;
-
-	Lock l(cs);
-
-	if(*(virtualPath.end() - 1) == '/') {
-		// directory
+	StringList roots;
+	{
+		RLock l(cs);
 		Directory::Ptr d = splitVirtual(virtualPath).first;
 
 		// imitate Directory::getRealPath
 		if(d->getParent()) {
-			ret.push_back(d->getParent()->getRealPath(d->getName()));
+			ret.push_back(d->getParent()->getRealPath(d->getRealName()));
 		} else {
-			for(auto& i: shares) {
-				if(Util::stricmp(i.second, d->getName()) == 0) {
-					// remove the trailing path sep
-					if(FileFindIter(i.first.substr(0, i.first.size() - 1)) != FileFindIter()) {
-						ret.push_back(i.first);
-					}
-				}
-			}
+			roots = getRealRoots(d->getName());
 		}
-
-	} else {
-		// file
-		ret.push_back(toReal(virtualPath));
 	}
 
+	// Which of the folders shared under the name are there, checked without the share lock held.
+	for(const auto& root: roots) {
+		// remove the trailing path sep
+		if(FileFindIter(root.substr(0, root.size() - 1)) != FileFindIter()) {
+			ret.push_back(root);
+		}
+	}
 	return ret;
 }
 
@@ -395,46 +427,50 @@ StringList ShareManager::getRealPaths(const TTHValue& tth, const string& hubUrl,
 	StringList ret;
 	auto access = getShareAccess(hubUrl);
 
-	Lock l(cs);
-	// During refresh recovery the original cached path may no longer exist, but
-	// the same content can still be shared from another directory. Walk the live
-	// tree and keep hub-specific share rules intact before UploadManager retries.
-	function<void (const Directory&)> collect = [&](const Directory& dir) {
-		for(const auto& file: dir.files) {
-			if(file.tth && *file.tth == tth && isFileAllowed(file, access) && !pft::isPrivatePath(file.getRealPath())) {
-				ret.push_back(file.getRealPath());
+	{
+		RLock l(cs);
+		// During refresh recovery the original cached path may no longer exist, but
+		// the same content can still be shared from another directory. Walk the live
+		// tree and keep hub-specific share rules intact before UploadManager retries.
+		function<void (const Directory&)> collect = [&](const Directory& dir) {
+			for(const auto& file: dir.files) {
+				if(file.tth && *file.tth == tth && isFileAllowed(file, access) && !pft::isPrivateLocation(file.getRealPath())) {
+					ret.push_back(file.getRealPath());
+				}
+			}
+
+			for(const auto& child: dir.directories) {
+				collect(*child.second);
+			}
+		};
+
+		for(const auto& dir: directories) {
+			collect(*dir.second);
+		}
+		for(const auto& temp: tempShares) {
+			if(tempShareExpired(temp, GET_TICK()))
+				continue;
+			if(pft::isPrivateLocation(temp.realPath))
+				continue;
+			if(!temp.exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES))
+				continue;
+			if(temp.tth == tth && Util::stricmp(temp.hubUrl, hubUrl) == 0 && tempShareVisibleTo(temp, user) &&
+				std::none_of(ret.begin(), ret.end(), [&temp](const string& path) {
+					return Util::stricmp(path, temp.realPath) == 0;
+				}))
+			{
+				ret.push_back(temp.realPath);
 			}
 		}
 
-		for(const auto& child: dir.directories) {
-			collect(*child.second);
-		}
-	};
-
-	for(const auto& dir: directories) {
-		collect(*dir.second);
-	}
-	for(const auto& temp: tempShares) {
-		if(tempShareExpired(temp, GET_TICK()))
-			continue;
-		if(pft::isPrivatePath(temp.realPath))
-			continue;
-		if(!temp.exactOnly && !SETTING(ENABLE_RTF_TEMP_SHARES))
-			continue;
-		if(temp.tth == tth && Util::stricmp(temp.hubUrl, hubUrl) == 0 && tempShareVisibleTo(temp, user) &&
-			std::none_of(ret.begin(), ret.end(), [&temp](const string& path) {
-				return Util::stricmp(path, temp.realPath) == 0;
-			}))
-		{
-			ret.push_back(temp.realPath);
-		}
 	}
 
+	ret.erase(std::remove_if(ret.begin(), ret.end(), [](const string& path) { return pft::hasPrivateMarker(path); }), ret.end());
 	return ret;
 }
 
 optional<TTHValue> ShareManager::getTTHFromReal(const string& realPath) noexcept {
-	Lock l(cs);
+	RLock l(cs);
 	auto f = getFile(realPath);
 	if (f) {
 		return f->get().tth;
@@ -489,7 +525,7 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 	} catch(...) {
 		return false;
 	}
-	Lock l(cs);
+	WLock l(cs);
 	// Protocol documents are for the whole hub; only chat attachments have a recipient.
 	const auto scope = exactOnly ? CID() : recipient;
 	auto existing = std::find_if(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
@@ -521,7 +557,7 @@ bool ShareManager::addValidatedTempShare(const string& realPath, int64_t size, u
 bool ShareManager::isTempShare(const TTHValue& tth, const string& realPath,
 	const string& hubUrl, const CID& recipient) const noexcept
 {
-	Lock l(cs);
+	RLock l(cs);
 	return std::any_of(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
 		return !item.exactOnly && !tempShareExpired(item, GET_TICK()) && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
 			Util::stricmp(item.hubUrl, hubUrl) == 0 && item.recipient == recipient;
@@ -529,7 +565,7 @@ bool ShareManager::isTempShare(const TTHValue& tth, const string& realPath,
 }
 
 vector<ShareManager::TempShareInfo> ShareManager::getTempShares() const {
-	Lock l(cs);
+	RLock l(cs);
 	vector<TempShareInfo> result;
 	for(const auto& item : tempShares)
 		if(!item.exactOnly && !tempShareExpired(item, GET_TICK()))
@@ -540,7 +576,7 @@ vector<ShareManager::TempShareInfo> ShareManager::getTempShares() const {
 bool ShareManager::removeTempShare(const string& realPath, const TTHValue& tth,
 	const string& hubUrl, const CID& recipient) noexcept
 {
-	Lock l(cs);
+	WLock l(cs);
 	const auto oldSize = tempShares.size();
 	tempShares.erase(std::remove_if(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
 		return !item.exactOnly && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
@@ -552,7 +588,7 @@ bool ShareManager::removeTempShare(const string& realPath, const TTHValue& tth,
 bool ShareManager::removeTTHOnlyShare(const string& realPath, const TTHValue& tth,
 	const string& hubUrl) noexcept
 {
-	Lock l(cs);
+	WLock l(cs);
 	const auto oldSize = tempShares.size();
 	tempShares.erase(std::remove_if(tempShares.begin(), tempShares.end(), [&](const TempShareInfo& item) {
 		return item.exactOnly && item.tth == tth && Util::stricmp(item.realPath, realPath) == 0 &&
@@ -576,7 +612,7 @@ size_t ShareManager::clearTempShares() noexcept {
 		// Keep the generation change and clearing atomic with attachment insertion.
 		// A finisher either adds before this lock and is cleared here, or observes the
 		// new generation and cannot add after Clear has completed.
-		Lock shareLock(cs);
+		WLock shareLock(cs);
 		count = static_cast<size_t>(std::count_if(tempShares.begin(), tempShares.end(),
 			[](const TempShareInfo& item) { return !item.exactOnly; }));
 		tempShares.erase(std::remove_if(tempShares.begin(), tempShares.end(),
@@ -633,7 +669,7 @@ uint64_t ShareManager::prepareChatAttachment(const string& realPath, const strin
 	if(!SETTING(ENABLE_RTF_TEMP_SHARES)) {
 		bool inNormalShare = false;
 		{
-			Lock l(cs);
+			RLock l(cs);
 			inNormalShare = static_cast<bool>(getFile(realPath));
 		}
 		if(!inNormalShare) {
@@ -741,7 +777,7 @@ void ShareManager::finishChatAttachment(PendingChatAttachment request, const TTH
 		auto access = getShareAccess(request.hubUrl);
 		bool permanentlyVisible = false;
 		{
-			Lock l(cs);
+			RLock l(cs);
 			auto i = tthIndex.find(tth);
 			permanentlyVisible = i != tthIndex.end() && i->second->getSize() == request.size &&
 				isFileAllowed(*i->second, access);
@@ -875,7 +911,7 @@ bool ShareManager::validateChatAttachment(const TTHValue& tth, int64_t size,
 		auto access = getShareAccess(hubUrl);
 		optional<TempShareInfo> temporary;
 		{
-			Lock l(cs);
+			RLock l(cs);
 			auto i = tthIndex.find(tth);
 			if(i != tthIndex.end() && i->second->getSize() == size &&
 				(hubUrl.empty() || isFileAllowed(*i->second, access))) {
@@ -895,7 +931,7 @@ bool ShareManager::validateChatAttachment(const TTHValue& tth, int64_t size,
 			temporary->realPath, temporary->size, temporary->timestamp);
 		if(!current || *current != tth) return false;
 
-		Lock l(cs);
+		RLock l(cs);
 		const bool chatOnly = false;
 		const auto item = findTempShare(tth, &hubUrl, &chatOnly, user);
 		return item && item->size == temporary->size && item->timestamp == temporary->timestamp &&
@@ -906,13 +942,16 @@ bool ShareManager::validateChatAttachment(const TTHValue& tth, int64_t size,
 }
 
 optional<TTHValue> ShareManager::getTTH(const string& virtualFile) const {
-	Lock l(cs);
-	if(virtualFile == Transfer::USER_LIST_NAME_BZ) {
-		return bzXmlRoot;
-	} else if(virtualFile == Transfer::USER_LIST_NAME) {
-		return xmlRoot;
+	if(virtualFile == Transfer::USER_LIST_NAME_BZ || virtualFile == Transfer::USER_LIST_NAME) {
+		FastLock l(fileListsCs);
+		auto list = fileLists.find(Util::emptyString);
+		if(list == fileLists.end()) {
+			return nullopt;
+		}
+		return virtualFile == Transfer::USER_LIST_NAME_BZ ? list->second.bzRoot : list->second.xmlRoot;
 	}
 
+	RLock l(cs);
 	if(virtualFile.compare(0, 4, "TTH/") == 0) {
 		const TTHValue tth(virtualFile.substr(4));
 		if(tthIndex.find(tth) != tthIndex.end() || findTempShare(tth)) return tth;
@@ -923,7 +962,7 @@ optional<TTHValue> ShareManager::getTTH(const string& virtualFile) const {
 
 optional<TTHValue> ShareManager::getTTH(const string& virtualFile, const string& hubUrl, const CID& user) const {
 	auto access = getShareAccess(hubUrl);
-	Lock l(cs);
+	RLock l(cs);
 	if(virtualFile.compare(0, 4, "TTH/") == 0) {
 		const TTHValue tth(virtualFile.substr(4));
 		auto i = tthIndex.find(tth);
@@ -969,38 +1008,31 @@ MemoryInputStream* ShareManager::getTree(const string& virtualFile, const string
 	return new MemoryInputStream(&buf[0], buf.size());
 }
 
-AdcCommand ShareManager::getFileInfo(const string& aFile) {
-	if(aFile == Transfer::USER_LIST_NAME) {
-		generateXmlList();
-		if(!xmlRoot) {
-			throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
-		}
-
-		AdcCommand cmd(AdcCommand::CMD_RES);
-		cmd.addParam("FN", aFile);
-		cmd.addParam("SI", Util::toString(xmlListLen));
-		cmd.addParam("TR", xmlRoot->toBase32());
-		return cmd;
+AdcCommand ShareManager::getListInfo(const string& aFile, const ShareAccess& access) {
+	const auto list = getList(access);
+	const bool bz = aFile == Transfer::USER_LIST_NAME_BZ;
+	const auto& root = bz ? list.bzRoot : list.xmlRoot;
+	if(!root) {
+		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	}
 
-	if(aFile == Transfer::USER_LIST_NAME_BZ) {
-		generateXmlList();
-		if(!bzXmlRoot) {
-			throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
-		}
+	AdcCommand cmd(AdcCommand::CMD_RES);
+	cmd.addParam("FN", aFile);
+	cmd.addParam("SI", Util::toString(bz ? list.bzLen : list.xmlLen));
+	cmd.addParam("TR", root->toBase32());
+	return cmd;
+}
 
-		AdcCommand cmd(AdcCommand::CMD_RES);
-		cmd.addParam("FN", aFile);
-		cmd.addParam("SI", Util::toString(bzXmlListLen));
-		cmd.addParam("TR", bzXmlRoot->toBase32());
-		return cmd;
+AdcCommand ShareManager::getFileInfo(const string& aFile) {
+	if(aFile == Transfer::USER_LIST_NAME || aFile == Transfer::USER_LIST_NAME_BZ) {
+		return getListInfo(aFile, ShareAccess { true, { } });
 	}
 
 	if(aFile.compare(0, 4, "TTH/") != 0)
 		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 
 	TTHValue val(aFile.substr(4));
-	Lock l(cs);
+	RLock l(cs);
 	auto i = tthIndex.find(val);
 	if(i == tthIndex.end()) {
 		if(const auto temp = findTempShare(val)) {
@@ -1024,20 +1056,7 @@ AdcCommand ShareManager::getFileInfo(const string& aFile) {
 AdcCommand ShareManager::getFileInfo(const string& aFile, const string& hubUrl, const CID& user) {
 	auto access = getShareAccess(hubUrl);
 	if(aFile == Transfer::USER_LIST_NAME || aFile == Transfer::USER_LIST_NAME_BZ) {
-		if(access.unrestricted) {
-			return getFileInfo(aFile);
-		}
-
-		auto data = generateFileListData(hubUrl, aFile == Transfer::USER_LIST_NAME_BZ);
-		TigerTree tree(1024 * 1024 * 1024);
-		tree.update(data.data(), data.size());
-		tree.finalize();
-
-		AdcCommand cmd(AdcCommand::CMD_RES);
-		cmd.addParam("FN", aFile);
-		cmd.addParam("SI", Util::toString(static_cast<int64_t>(data.size())));
-		cmd.addParam("TR", tree.getRoot().toBase32());
-		return cmd;
+		return getListInfo(aFile, access);
 	}
 
 	if(aFile.compare(0, 4, "TTH/") != 0) {
@@ -1045,7 +1064,7 @@ AdcCommand ShareManager::getFileInfo(const string& aFile, const string& hubUrl, 
 	}
 
 	TTHValue val(aFile.substr(4));
-	Lock l(cs);
+	RLock l(cs);
 	auto i = tthIndex.find(val);
 	if(i == tthIndex.end() || !isFileAllowed(*i->second, access)) {
 		if(const auto temp = findTempShare(val, &hubUrl, nullptr, user)) {
@@ -1147,12 +1166,12 @@ string ShareManager::validateVirtual(const string& aVirt) const noexcept {
 }
 
 bool ShareManager::hasVirtual(const string& virtualName) const noexcept {
-	Lock l(cs);
+	RLock l(cs);
 	return directories.find(virtualName) != directories.end();
 }
 
 void ShareManager::load(SimpleXML& aXml) {
-	Lock l(cs);
+	WLock l(cs);
 
 	aXml.resetCurrentChild();
 	if(aXml.findChild("Share")) {
@@ -1179,7 +1198,7 @@ void ShareManager::load(SimpleXML& aXml) {
 }
 
 void ShareManager::save(SimpleXML& aXml) {
-	Lock l(cs);
+	RLock l(cs);
 
 	aXml.addTag("Share");
 	aXml.stepIn();
@@ -1207,7 +1226,7 @@ void ShareManager::addDirectory(const string& realPath, const string& virtualNam
 
 	string vName = validateVirtual(virtualName);
 	{
-		Lock l(cs);
+		WLock l(cs);
 
 		for(auto& i: shares) {
 			if(Util::strnicmp(realPath, i.first, i.first.length()) == 0) {
@@ -1230,12 +1249,12 @@ void ShareManager::addDirectory(const string& realPath, const string& virtualNam
 }
 
 bool ShareManager::hasPendingDirectories() const noexcept {
-	Lock l(cs);
+	RLock l(cs);
 	return !pendingDirectories.empty() || !scanningDirectory.empty();
 }
 
 bool ShareManager::isDirectoryPending(const string& realPath) const noexcept {
-	Lock l(cs);
+	RLock l(cs);
 	return scanningDirectory == realPath ||
 		std::find(pendingDirectories.begin(), pendingDirectories.end(), realPath) != pendingDirectories.end();
 }
@@ -1263,12 +1282,11 @@ void ShareManager::startPendingScan() noexcept {
 
 bool ShareManager::scanPendingDirectories() {
 	bool scanned = false;
-	// Hold off hashing while folders are scanned, as a full refresh does.
-	std::unique_ptr<HashManager::HashPauser> pauser;
-	for(;;) {
+	const pft::PrivatePathScanner privacy;
+	while(!stopping) {
 		string realPath, vName;
 		{
-			Lock l(cs);
+			WLock l(cs);
 			if(pendingDirectories.empty()) {
 				break;
 			}
@@ -1281,19 +1299,15 @@ bool ShareManager::scanPendingDirectories() {
 			vName = i->second;
 			scanningDirectory = realPath;
 		}
-		ScopedFunctor([this] { Lock l(cs); scanningDirectory.clear(); });
+		ScopedFunctor([this] { WLock l(cs); scanningDirectory.clear(); });
 
-		if(!pauser) {
-			pauser = std::make_unique<HashManager::HashPauser>();
-		}
-		if(!checkHidden(realPath)) {
+		updateFilterCache();
+		Directory::Ptr dp;
+		if(!scanRoot(privacy, realPath, vName, dp)) {
 			continue;
 		}
-		updateFilterCache();
-		auto dp = buildTree(realPath);
-		dp->setName(vName);
 
-		Lock l(cs);
+		WLock l(cs);
 		auto i = shares.find(realPath);
 		// Removed, renamed or queued again while it was scanned: that change has its own scan.
 		if(i == shares.end() || i->second != vName ||
@@ -1302,8 +1316,7 @@ bool ShareManager::scanPendingDirectories() {
 			continue;
 		}
 		merge(dp, realPath);
-		rebuildIndices();
-		setDirty();
+		afterTreeChange();
 		scanned = true;
 	}
 	return scanned;
@@ -1313,6 +1326,17 @@ void ShareManager::merge(const Directory::Ptr& directory, const string& realPath
 	auto i = directories.find(directory->getName());
 	if(i != directories.end()) {
 		dcdebug("Merging directory <%s> into %s\n", realPath.c_str(), directory->getName().c_str());
+		// The name was shared from one folder, whose files don't store their path (it follows from
+		// the folder); from now on it is merged, so they need it.
+		StringList others;
+		for(const auto& share: shares) {
+			if(share.first != realPath && Util::stricmp(share.second, directory->getName()) == 0) {
+				others.push_back(share.first);
+			}
+		}
+		if(others.size() == 1) {
+			keepRealPaths(*i->second, others.front());
+		}
 		i->second->merge(directory, realPath);
 
 	} else {
@@ -1337,13 +1361,13 @@ void ShareManager::Directory::merge(const Directory::Ptr& source, const string& 
 			auto f = findFile(subSource->getName());
 			if(f != files.end()) {
 				// we have a file that has the same name as the dir being merged; rename it.
-				const_cast<File&>(*f).validateName(Util::getFilePath(f->getRealPath()));
+				const_cast<File&>(*f).validateName(Util::getFilePath(f->getRealPath()), true);
 			}
 
 		} else {
 			// the directory was already existing; merge into it.
 			auto subTarget = ti->second;
-			subTarget->merge(subSource, realPath + subSource->getName() + PATH_SEPARATOR);
+			subTarget->merge(subSource, realPath + subSource->getRealName() + PATH_SEPARATOR);
 		}
 	}
 
@@ -1352,7 +1376,8 @@ void ShareManager::Directory::merge(const Directory::Ptr& source, const string& 
 		auto& file = const_cast<File&>(i);
 
 		file.setParent(this);
-		file.validateName(realPath);
+		// Files of a merged name always keep their path: it can't be told from the folders.
+		file.validateName(realPath, true);
 
 		files.insert(move(file));
 	}
@@ -1362,9 +1387,23 @@ bool ShareManager::Directory::nameInUse(const string& name) const {
 	return findFile(name) != files.end() || directories.find(name) != directories.end();
 }
 
-void ShareManager::Directory::File::validateName(const string& sourcePath) {
-	auto diskPath = sourcePath + name;
+void ShareManager::keepRealPaths(Directory& dir, const string& dirRealPath) {
+	for(auto& f: dir.files) {
+		if(!f.realPath) {
+			const_cast<Directory::File&>(f).realPath = dirRealPath + f.getName();
+		}
+	}
+	for(auto& child: dir.directories) {
+		keepRealPaths(*child.second, dirRealPath + child.second->getRealName() + PATH_SEPARATOR);
+	}
+}
+
+void ShareManager::Directory::File::validateName(const string& sourcePath, bool keepRealPath) {
+	// A path set earlier (by the scan that found the file) stays the authority.
+	auto diskPath = realPath ? *realPath : sourcePath + name;
+	bool renamed = false;
 	if(parent->nameInUse(name)) {
+		renamed = true;
 		uint32_t num = 0;
 		string base = name, ext, vname;
 		auto dot = base.rfind('.');
@@ -1379,7 +1418,13 @@ void ShareManager::Directory::File::validateName(const string& sourcePath) {
 		dcdebug("Renaming duplicate <%s> to <%s>\n", name.c_str(), vname.c_str());
 		name = move(vname);
 	}
-	realPath = move(diskPath);
+	// Otherwise the path follows from the directories (Directory::getRealPath), which saves
+	// memory for every file of a large share.
+	if(renamed || keepRealPath) {
+		realPath = move(diskPath);
+	} else {
+		realPath.reset();
+	}
 }
 
 void ShareManager::removeDirectory(const string& realPath) {
@@ -1390,7 +1435,7 @@ void ShareManager::removeDirectory(const string& realPath) {
 
 	bool rescan = false;
 	{
-		Lock l(cs);
+		WLock l(cs);
 
 		auto i = shares.find(realPath);
 		if(i == shares.end()) {
@@ -1431,7 +1476,7 @@ void ShareManager::renameDirectory(const string& realPath, const string& virtual
 }
 
 int64_t ShareManager::getShareSize(const string& realPath) const noexcept {
-	Lock l(cs);
+	RLock l(cs);
  	dcassert(realPath.size()>0);
 	auto i = shares.find(realPath);
 
@@ -1451,22 +1496,21 @@ int64_t ShareManager::getShareSize(const string& realPath) const noexcept {
 				// Only one root dir has been found, go simple...
 				return j->second->getSize();
 			} else {
-				// This path is part of multiple merged root dirs, count only what's belong to this virtual share
+				// This path is part of multiple merged root dirs, count only what belongs to this
+				// folder: the files whose real path is under it. No file system access under the lock.
 				int64_t tmp = 0;
-				// Subdirectories
-				for(auto& d: j->second->directories) {
-					if(FileFindIter(realPath + d.second->getRealName()) != FileFindIter()) {
-						tmp += d.second->getSize();
-					} 
-				}
-
-				// Files in the root dir
-				for(auto& f: j->second->files) {
-					if(FileFindIter(realPath + PATH_SEPARATOR_STR + f.getName()) != FileFindIter()) {
-						tmp += f.getSize();
-					} 
-				}
-				return tmp; 
+				std::function<void (const Directory&)> count = [&](const Directory& dir) {
+					for(const auto& f: dir.files) {
+						if(f.tth && f.realPath && Util::strnicmp(*f.realPath, realPath, realPath.size()) == 0) {
+							tmp += f.getSize();
+						}
+					}
+					for(const auto& d: dir.directories) {
+						count(*d.second);
+					}
+				};
+				count(*j->second);
+				return tmp;
 			}
 		}
 	}
@@ -1474,52 +1518,57 @@ int64_t ShareManager::getShareSize(const string& realPath) const noexcept {
 }
 
 int64_t ShareManager::getShareSize() const noexcept {
-	Lock l(cs);
-	int64_t tmp = 0;
-	for(auto& i: tthIndex) {
-		tmp += i.second->getSize();
+	RLock l(cs);
+	return sharedBytes;
+}
+
+ShareManager::ShareTotals ShareManager::getTotals(const ShareAccess& access) const {
+	if(access.unrestricted) {
+		return { indexVersion, sharedBytes, tthIndex.size() };
 	}
-	return tmp;
+	// Hubs ask for their totals with every info update; a profile's totals are counted again only
+	// after the share changed. Called under the shared share lock, so the cache has its own lock.
+	FastLock l(totalsCs);
+	auto& totals = profileTotals[getProfileKey(access)];
+	if(totals.version != indexVersion) {
+		totals = { indexVersion, 0, 0 };
+		for(const auto& item: tthIndex) {
+			if(isFileAllowed(*item.second, access)) {
+				totals.size += item.second->getSize();
+				++totals.files;
+			}
+		}
+	}
+	return totals;
 }
 
 int64_t ShareManager::getShareSizeForHub(const string& hubUrl) const {
 	auto access = getShareAccess(hubUrl);
-	Lock l(cs);
-	int64_t size = 0;
-	for(const auto& item: tthIndex) {
-		if(isFileAllowed(*item.second, access)) {
-			size += item.second->getSize();
-		}
-	}
-	return size;
+	RLock l(cs);
+	return getTotals(access).size;
 }
 
 size_t ShareManager::getSharedFiles() const noexcept {
-	Lock l(cs);
+	RLock l(cs);
 	return tthIndex.size();
 }
 
 size_t ShareManager::getSharedFiles(const string& hubUrl) const {
 	auto access = getShareAccess(hubUrl);
-	Lock l(cs);
-	return count_if(tthIndex.begin(), tthIndex.end(), [this, &access](const auto& item) {
-		return isFileAllowed(*item.second, access);
-	});
+	RLock l(cs);
+	return getTotals(access).files;
 }
 
 ShareManager::Directory::Ptr ShareManager::buildTree(const string& realPath, optional<std::reference_wrapper<const string>> dirName,
 	const Directory::Ptr& parent, time_t lastWrite)
 {
 	const pft::PrivatePathScanner privacy;
-	return scanTree(privacy, realPath, dirName, parent, lastWrite);
+	return scanTree(privacy, realPath, dirName, parent, lastWrite, false);
 }
 
 ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanner& privacy, const string& realPath,
-	optional<std::reference_wrapper<const string>> dirName, const Directory::Ptr& parent, time_t lastWrite)
+	optional<std::reference_wrapper<const string>> dirName, const Directory::Ptr& parent, time_t lastWrite, bool keepRealPaths)
 {
-	// Canonicalized lazily: only directories that contain files need it.
-	optional<pft::PrivatePathScanner::Directory> privateDir;
-
 	if(lastWrite == 0) {
 		FileFindIter directoryInfo(realPath.substr(0, realPath.size() - 1));
 		if(directoryInfo != FileFindIter()) {
@@ -1538,6 +1587,9 @@ ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanne
 	//will be needed later
 	for(FileFindIter i(realPath), end; i != end; ++i) {
 #endif
+		if(stopping) {
+			break;
+		}
 		auto name = i->getFileName();
 
 		if(name.empty()) {
@@ -1556,6 +1608,8 @@ ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanne
 		if(i->isDirectory()) {
 			auto newRealPath = realPath + name + PATH_SEPARATOR;
 
+			if(privacy.isPrivateDirectory(newRealPath, name, i->isReparsePoint()))
+				continue;
 			if(!checkInvalidPaths(newRealPath))
 				continue;
 
@@ -1571,7 +1625,7 @@ ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanne
 				} while(dir->nameInUse(virtualName));
 			}
 
-			dir->directories[virtualName] = scanTree(privacy, newRealPath, std::cref(virtualName), dir, i->getLastWriteTime());
+			dir->directories[virtualName] = scanTree(privacy, newRealPath, std::cref(virtualName), dir, i->getLastWriteTime(), keepRealPaths);
 
 			if(virtualName != name) {
 				dir->directories[virtualName]->setRealName(move(name));
@@ -1583,16 +1637,8 @@ ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanne
 
 			auto size = i->getSize();
 			auto fileName = realPath + name;
-			// A link file can point anywhere, so only regular files may use the per-directory check.
-			if(i->isReparsePoint()) {
-				if(pft::isPrivatePath(fileName))
-					continue;
-			} else {
-				if(!privateDir)
-					privateDir = privacy.enter(realPath);
-				if(privacy.isPrivateFile(*privateDir, name))
-					continue;
-			}
+			if(privacy.isPrivateFile(fileName, name, i->isReparsePoint()))
+				continue;
 
 			if(!checkInvalidFileName(name))
 				continue;
@@ -1604,9 +1650,16 @@ ShareManager::Directory::Ptr ShareManager::scanTree(const pft::PrivatePathScanne
 			if(fileName == SETTING(TLS_PRIVATE_KEY_FILE)) { continue; }
 
 			const auto fileDate = i->getLastWriteTime();
-			Directory::File f(name, size, dir,
-				HashManager::getInstance()->getTTH(fileName, size, fileDate), fileDate);
-			f.validateName(realPath);
+			auto request = HashManager::getInstance()->requestTTH(fileName, size, fileDate);
+			if(request.tth && !request.markerChecked) {
+				// Hashed by an older version, before markers were checked at hashing time: check this
+				// file once. Every file hashed since was checked when it was hashed.
+				if(pft::hasPrivateMarker(fileName))
+					continue;
+				HashManager::getInstance()->setMarkerChecked(fileName);
+			}
+			Directory::File f(name, size, dir, request.tth, fileDate);
+			f.validateName(realPath, keepRealPaths);
 			lastFileIter = dir->files.insert(lastFileIter, move(f));
 		}
 	}
@@ -1649,8 +1702,6 @@ bool ShareManager::checkInvalidFileName(const string& name) const
 
 bool ShareManager::checkInvalidPaths(const string& name) const
 {
-	if(pft::isPrivatePath(name))
-		return false;
 	for(auto& f: cachedFilterSkiplistPaths)
 	{
 		if(checkRegEx(f, name))
@@ -1749,10 +1800,26 @@ void ShareManager::updateIndices(Directory& dir) {
 
 void ShareManager::rebuildIndices(size_t expectedFiles) {
 	tthIndex.clear();
+	sharedBytes = 0;
+	++indexVersion;
 	if(expectedFiles > 0) {
 		tthIndex.reserve(expectedFiles);
 	}
-	bloom.clear();
+
+	// A fixed-size name filter fills up with a large share and then rejects nothing, so every
+	// search walks the whole share. About four bits per name fragment keeps it selective.
+	size_t fragments = 0;
+	std::function<void (const Directory&)> count = [&](const Directory& dir) {
+		fragments += decltype(bloom)::positions(dir.getName());
+		for(const auto& file: dir.files) {
+			if(file.tth) fragments += decltype(bloom)::positions(file.getName());
+		}
+		for(const auto& child: dir.directories) count(*child.second);
+	};
+	for(const auto& i: directories) count(*i.second);
+	size_t bits = 1 << 20;
+	while(bits < fragments * 4 && bits < (static_cast<size_t>(1) << 28)) bits <<= 1;
+	bloom.reset(bits);
 
 	for(auto& i: directories) {
 		updateIndices(*i.second);
@@ -1769,8 +1836,14 @@ void ShareManager::updateIndices(Directory& dir, const decltype(std::declval<Dir
 	auto j = tthIndex.find(*f.tth);
 	if(j == tthIndex.end()) {
 		dir.size += f.getSize();
+		sharedBytes += f.getSize();
 
 	} else {
+		if(deferDuplicates) {
+			// Indexing one folder of a refresh: the old tree of another folder may hold the other
+			// copy, so which copy stays is settled by the full rebuild at the end.
+			return;
+		}
 		if(!SETTING(LIST_DUPES)) {
 			try {
 				LogManager::getInstance()->message(str(F_("Duplicate file will not be shared: %1% (Size: %2% B) Dupe matched against: %3%")
@@ -1836,7 +1909,6 @@ void ShareManager::createShareCacheSchema(SQLiteDB& db) {
 		"real_name TEXT,"
 		"last_write INTEGER NOT NULL CHECK(last_write >= 0)"
 		");"
-		"CREATE INDEX IF NOT EXISTS idx_share_cache_directories_parent ON directories(parent_id);"
 		"CREATE TABLE IF NOT EXISTS files ("
 		"id INTEGER PRIMARY KEY NOT NULL,"
 		"directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,"
@@ -1846,8 +1918,7 @@ void ShareManager::createShareCacheSchema(SQLiteDB& db) {
 		"real_path TEXT NOT NULL,"
 		"last_write INTEGER NOT NULL CHECK(last_write >= 0)"
 		");"
-		"CREATE INDEX IF NOT EXISTS idx_share_cache_files_directory ON files(directory_id);"
-		"CREATE INDEX IF NOT EXISTS idx_share_cache_files_tth ON files(tth);"
+		// No secondary indexes: the cache is only ever read whole, in id order.
 		"PRAGMA user_version = 3;"
 	);
 }
@@ -1856,12 +1927,21 @@ bool ShareManager::loadShareCache() noexcept {
 	if(!SETTING(SHARE_CACHE)) {
 		return false;
 	}
+	map<string, string> roots;
 	{
-		Lock l(cs);
-		if(any_of(shares.begin(), shares.end(), [](const auto& share) { return isUncPath(share.first); })) {
-			LogManager::getInstance()->message(_("Share cache skipped because UNC shares require a fresh share scan"),
-				LogMessage::SEV_INFO, _("Share cache"));
-			return false;
+		RLock l(cs);
+		roots = shares;
+	}
+	// The cache was written by a scan that checked every directory; only the roots are checked
+	// again (once each), in case private storage moved under one since.
+	{
+		const pft::PrivatePathScanner privacy;
+		for(const auto& root: roots) {
+			if(privacy.isPrivateRoot(root.first)) {
+				LogManager::getInstance()->message(str(F_("Share cache skipped because the shared folder %1% contains privately received files") %
+					Util::addBrackets(root.first)), LogMessage::SEV_INFO, _("Share cache"));
+				return false;
+			}
 		}
 	}
 
@@ -1885,7 +1965,7 @@ bool ShareManager::loadShareCache() noexcept {
 		string expectedFingerprint;
 		std::set<string, noCaseStringLess> expectedRoots;
 		{
-			Lock l(cs);
+			RLock l(cs);
 			expectedFingerprint = getShareCacheFingerprint();
 			for(const auto& share: shares) {
 				expectedRoots.insert(share.second);
@@ -1908,6 +1988,27 @@ bool ShareManager::loadShareCache() noexcept {
 		unordered_map<string, Directory::Ptr, noCaseStringHash, noCaseStringEq> newDirectories;
 		if(!expectedRoots.empty()) {
 			newDirectories.reserve(expectedRoots.size());
+		}
+
+		// A file's real path is kept only when it can't be derived from its directories (see
+		// Directory::File::validateName): under a name shared from one folder, it is that folder's
+		// path plus the directories' real names.
+		std::map<string, string, noCaseStringLess> singleRoots;
+		{
+			std::map<string, size_t, noCaseStringLess> rootCounts;
+			for(const auto& root: roots) {
+				++rootCounts[root.second];
+				singleRoots[root.second] = root.first;
+			}
+			for(const auto& count: rootCounts) {
+				if(count.second > 1) {
+					singleRoots.erase(count.first);
+				}
+			}
+		}
+		unordered_map<int64_t, string> derivedPaths;
+		if(directoryRows > 0 && directoryRows <= static_cast<uint64_t>(derivedPaths.max_size())) {
+			derivedPaths.reserve(static_cast<size_t>(directoryRows));
 		}
 
 		auto dirs = db.prepare("SELECT id, parent_id, name, real_name, last_write FROM directories ORDER BY id");
@@ -1957,13 +2058,30 @@ bool ShareManager::loadShareCache() noexcept {
 				}
 			}
 			byId.emplace(id, dir);
+
+			string derived;
+			if(dirs.columnIsNull(1)) {
+				auto single = singleRoots.find(name);
+				if(single != singleRoots.end()) {
+					derived = single->second;
+				}
+			} else {
+				auto parentPath = derivedPaths.find(dirs.columnInt64(1));
+				if(parentPath != derivedPaths.end() && !parentPath->second.empty()) {
+					derived = parentPath->second + dir->getRealName() + PATH_SEPARATOR;
+				}
+			}
+			derivedPaths.emplace(id, std::move(derived));
 		}
 
 		if(newDirectories.size() != expectedRoots.size()) {
 			throw ShareException(_("Share cache is missing a configured root directory"));
 		}
 
-		auto files = db.prepare("SELECT directory_id, name, size, tth, real_path, last_write FROM files ORDER BY directory_id, name");
+		// Rows were written directory by directory, so id order groups them without sorting a
+		// million rows first.
+		auto files = db.prepare("SELECT directory_id, name, size, tth, real_path, last_write FROM files ORDER BY id");
+		const auto storage = pft::storageRoot();
 		while(files.step()) {
 			auto dir = byId.find(files.columnInt64(0));
 			if(dir == byId.end()) {
@@ -1997,25 +2115,28 @@ bool ShareManager::loadShareCache() noexcept {
 				throw ShareException(_("Missing real file path in share cache"));
 			}
 			auto realPath = files.columnText(4);
-			if(pft::isPrivatePath(realPath))
-				continue;
-			{
-				Lock l(cs);
-				if(!isValidCachedPath(realPath) || !isUnderSharedRoot(realPath, shares)) {
-					throw ShareException(_("Invalid real file path in share cache"));
-				}
+			if(!isValidCachedPath(realPath) || !isUnderSharedRoot(realPath, roots)) {
+				throw ShareException(_("Invalid real file path in share cache"));
 			}
-			file.realPath = std::move(realPath);
+			// By name only: a per-file file system check would cost several network round trips
+			// per file on a NAS, which is what made starting with a large network share take an hour.
+			if(pft::isPrivateLocation(realPath, storage))
+				continue;
+			const auto& derived = derivedPaths[dir->first];
+			if(derived.empty() || derived.size() + name.size() != realPath.size() ||
+				realPath.compare(0, derived.size(), derived) != 0 || realPath.compare(derived.size(), string::npos, name) != 0)
+			{
+				file.realPath = std::move(realPath);
+			}
 
 			dir->second->files.insert(std::move(file));
 		}
 
 		{
-			Lock l(cs);
+			WLock l(cs);
 			directories.swap(newDirectories);
 			lastFullUpdate = GET_TICK();
-			xmlDirty = true;
-			forceXmlRefresh = true;
+			++listForce;
 			rebuildIndices(static_cast<size_t>(std::min<uint64_t>(fileRows, static_cast<uint64_t>(tthIndex.max_size()))));
 		}
 
@@ -2034,9 +2155,38 @@ bool ShareManager::loadShareCache() noexcept {
 	return false;
 }
 
-void ShareManager::saveShareCacheDirectory(SQLiteStatement& dirStmt, SQLiteStatement& fileStmt, const Directory& dir,
+void ShareManager::saveShareCacheDirectory(SQLiteStatement& dirStmt, SQLiteStatement& fileStmt, const Directory::Ptr& dir,
 	optional<int64_t> parentId, int64_t& nextId, uint64_t& directoryCount, uint64_t& fileCount) const
 {
+	// One directory is copied under the share lock and written outside it, so saving a large
+	// share doesn't stop uploads, searches and hash results for the whole write.
+	struct FileRow {
+		string name;
+		int64_t size;
+		optional<TTHValue> tth;
+		string realPath;
+		time_t lastWrite;
+	};
+	string name;
+	optional<string> realName;
+	time_t lastWrite;
+	vector<FileRow> files;
+	vector<Directory::Ptr> children;
+	{
+		RLock l(cs);
+		name = dir->getName();
+		realName = dir->getRealNameOverride();
+		lastWrite = dir->getLastWrite();
+		files.reserve(dir->files.size());
+		for(const auto& file: dir->files) {
+			files.push_back({ file.getName(), file.getSize(), file.tth, file.getRealPath(), file.getLastWrite() });
+		}
+		children.reserve(dir->directories.size());
+		for(const auto& child: dir->directories) {
+			children.push_back(child.second);
+		}
+	}
+
 	const auto id = nextId++;
 	dirStmt.bind(1, id);
 	if(parentId) {
@@ -2044,37 +2194,39 @@ void ShareManager::saveShareCacheDirectory(SQLiteStatement& dirStmt, SQLiteState
 	} else {
 		dirStmt.bindNull(2);
 	}
-	dirStmt.bind(3, dir.getName());
-	if(dir.getRealNameOverride()) {
-		dirStmt.bind(4, *dir.getRealNameOverride());
+	dirStmt.bind(3, name);
+	if(realName) {
+		dirStmt.bind(4, *realName);
 	} else {
 		dirStmt.bindNull(4);
 	}
-	dirStmt.bind(5, static_cast<int64_t>(dir.getLastWrite()));
+	dirStmt.bind(5, static_cast<int64_t>(lastWrite));
 	dirStmt.stepDone();
 	dirStmt.reset();
 	dirStmt.clearBindings();
 	directoryCount++;
 
-	for(const auto& file: dir.files) {
+	string base32;
+	for(const auto& file: files) {
 		fileStmt.bind(1, id);
-		fileStmt.bind(2, file.getName());
-		fileStmt.bind(3, file.getSize());
+		fileStmt.bind(2, file.name);
+		fileStmt.bind(3, file.size);
 		if(file.tth) {
-			fileStmt.bind(4, file.tth->toBase32());
+			base32.clear();
+			fileStmt.bind(4, file.tth->toBase32(base32));
 		} else {
 			fileStmt.bindNull(4);
 		}
-		fileStmt.bind(5, file.getRealPath());
-		fileStmt.bind(6, static_cast<int64_t>(file.getLastWrite()));
+		fileStmt.bind(5, file.realPath);
+		fileStmt.bind(6, static_cast<int64_t>(file.lastWrite));
 		fileStmt.stepDone();
 		fileStmt.reset();
 		fileStmt.clearBindings();
 		fileCount++;
 	}
 
-	for(const auto& child: dir.directories) {
-		saveShareCacheDirectory(dirStmt, fileStmt, *child.second, id, nextId, directoryCount, fileCount);
+	for(const auto& child: children) {
+		saveShareCacheDirectory(dirStmt, fileStmt, child, id, nextId, directoryCount, fileCount);
 	}
 }
 
@@ -2084,52 +2236,47 @@ void ShareManager::saveShareCache() noexcept {
 	}
 
 	const auto cacheFile = getShareCacheFile();
-	for(bool retried = false;; retried = true) {
-		try {
-			writeShareCache(cacheFile);
-			return;
-		} catch(const SQLiteException& e) {
-			// The cache is derived from a full scan, so a corrupt file is simply replaced. Other
-			// failures (locked, I/O) leave it alone.
-			if(!retried && e.isCorruption()) {
-				LogManager::getInstance()->message(str(F_("Replacing unreadable share cache %1%: %2%") %
-					Util::addBrackets(cacheFile) % e.getError()), LogMessage::SEV_WARNING, _("Share cache"));
-				bool removed = true;
-				for(const char* suffix: { "", "-wal", "-shm" }) {
-					try {
-						if(File::getSize(cacheFile + suffix) != -1) File::deleteFile(cacheFile + suffix);
-					} catch(const FileException&) {
-						removed = false;
-					}
-				}
-				if(removed) continue;
-			}
-			LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.getError()),
-				LogMessage::SEV_ERROR, _("Share cache"));
-			return;
-		} catch(const Exception& e) {
-			LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.getError()),
-				LogMessage::SEV_ERROR, _("Share cache"));
-			return;
-		} catch(const std::exception& e) {
-			LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.what()),
-				LogMessage::SEV_ERROR, _("Share cache"));
-			return;
-		}
+	try {
+		writeShareCache(cacheFile);
+	} catch(const Exception& e) {
+		LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.getError()),
+			LogMessage::SEV_ERROR, _("Share cache"));
+	} catch(const std::exception& e) {
+		LogManager::getInstance()->message(str(F_("Error saving share cache %1%: %2%") % Util::addBrackets(cacheFile) % e.what()),
+			LogMessage::SEV_ERROR, _("Share cache"));
 	}
 }
 
-void ShareManager::writeShareCache(const string& cacheFile) {
-	{
-		SQLiteDB db(cacheFile);
-		createShareCacheSchema(db);
-		// Rebuild the snapshot atomically so interrupted saves never become a
-		// valid partial cache on the next startup.
-		SQLiteTransaction transaction(db);
-		db.execute("DELETE FROM metadata;DELETE FROM files;DELETE FROM directories;");
+namespace {
+bool removeIfExists(const string& path) noexcept {
+	if(File::getSize(path) == -1) {
+		return true;
+	}
+	File::deleteFile(path);
+	return File::getSize(path) == -1;
+}
+}
 
-		uint64_t directoryCount = 0;
-		uint64_t fileCount = 0;
+void ShareManager::writeShareCache(const string& cacheFile) {
+	// The snapshot is written to a new file and then replaces the old one: no million-row delete
+	// first, and an interrupted save never leaves a partial cache behind. (A corrupt old file is
+	// simply replaced.)
+	const auto newFile = cacheFile + ".new";
+	for(const char* suffix: { "", "-wal", "-shm", "-journal" }) {
+		if(!removeIfExists(newFile + suffix)) {
+			throw FileException(str(F_("Unable to remove %1%") % Util::addBrackets(newFile + suffix)));
+		}
+	}
+
+	uint64_t directoryCount = 0;
+	uint64_t fileCount = 0;
+	try {
+		SQLiteDB db(newFile);
+		// A throwaway file until it is complete: no journal, and the rows are written parents
+		// first, consistent by construction.
+		db.execute("PRAGMA journal_mode=OFF;PRAGMA synchronous=OFF;PRAGMA foreign_keys=OFF;");
+		createShareCacheSchema(db);
+		SQLiteTransaction transaction(db);
 		{
 			auto metaStmt = db.prepare("INSERT INTO metadata(key, value) VALUES(?1, ?2)");
 			auto putMeta = [&metaStmt](const string& key, const string& value) {
@@ -2140,29 +2287,61 @@ void ShareManager::writeShareCache(const string& cacheFile) {
 				metaStmt.clearBindings();
 			};
 
+			string fingerprint;
+			vector<Directory::Ptr> roots;
 			{
-				Lock l(cs);
-				putMeta("schema", Util::toString(SHARE_CACHE_SCHEMA_VERSION));
-				putMeta("fingerprint", getShareCacheFingerprint());
-				putMeta("app", APPNAME " " VERSIONSTRING);
-
-				auto dirStmt = db.prepare("INSERT INTO directories(id, parent_id, name, real_name, last_write) VALUES(?1, ?2, ?3, ?4, ?5)");
-				auto fileStmt = db.prepare("INSERT INTO files(directory_id, name, size, tth, real_path, last_write) VALUES(?1, ?2, ?3, ?4, ?5, ?6)");
-				int64_t nextId = 1;
+				RLock l(cs);
+				fingerprint = getShareCacheFingerprint();
 				for(const auto& dir: directories) {
-					saveShareCacheDirectory(dirStmt, fileStmt, *dir.second, nullopt, nextId, directoryCount, fileCount);
+					roots.push_back(dir.second);
 				}
+			}
+			putMeta("schema", Util::toString(SHARE_CACHE_SCHEMA_VERSION));
+			putMeta("fingerprint", fingerprint);
+			putMeta("app", APPNAME " " VERSIONSTRING);
+
+			auto dirStmt = db.prepare("INSERT INTO directories(id, parent_id, name, real_name, last_write) VALUES(?1, ?2, ?3, ?4, ?5)");
+			auto fileStmt = db.prepare("INSERT INTO files(directory_id, name, size, tth, real_path, last_write) VALUES(?1, ?2, ?3, ?4, ?5, ?6)");
+			int64_t nextId = 1;
+			for(const auto& root: roots) {
+				if(stopping) {
+					throw Exception(_("Shutting down"));
+				}
+				saveShareCacheDirectory(dirStmt, fileStmt, root, nullopt, nextId, directoryCount, fileCount);
 			}
 
 			putMeta("directories", std::to_string(directoryCount));
 			putMeta("files", std::to_string(fileCount));
 		}
 		transaction.commit();
-		db.execute("PRAGMA optimize;PRAGMA wal_checkpoint(PASSIVE);");
-		LogManager::getInstance()->message(str(F_("Saved share cache %1% (%2% directories, %3% files)") %
-			Util::addBrackets(cacheFile) % std::to_string(directoryCount) % std::to_string(fileCount)),
-			LogMessage::SEV_INFO, _("Share cache"));
+	} catch(...) {
+		removeIfExists(newFile);
+		throw;
 	}
+
+	// The old database's write-ahead log must never be replayed into the new file.
+	for(const char* suffix: { "-wal", "-shm" }) {
+		if(!removeIfExists(cacheFile + suffix)) {
+			removeIfExists(newFile);
+			throw FileException(str(F_("Unable to remove %1%") % Util::addBrackets(cacheFile + suffix)));
+		}
+	}
+	// Atomic replacement (File::renameFile would copy over an existing file).
+#ifdef _WIN32
+	if(!::MoveFileExW(File::toNativePath(newFile).c_str(), File::toNativePath(cacheFile).c_str(),
+		MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+	{
+		const auto error = Util::translateError(GetLastError());
+		removeIfExists(newFile);
+		throw FileException(error);
+	}
+#else
+	File::renameFile(newFile, cacheFile);
+#endif
+
+	LogManager::getInstance()->message(str(F_("Saved share cache %1% (%2% directories, %3% files)") %
+		Util::addBrackets(cacheFile) % std::to_string(directoryCount) % std::to_string(fileCount)),
+		LogMessage::SEV_INFO, _("Share cache"));
 }
 
 void ShareManager::startupRefresh(function<void (float)> progressF) noexcept {
@@ -2209,7 +2388,7 @@ void ShareManager::refresh(bool dirs, bool aUpdate, bool block, function<void (f
 }
 
 StringPairList ShareManager::getDirectories() const noexcept {
-	Lock l(cs);
+	RLock l(cs);
 	StringPairList ret;
 	for(auto& i: shares) {
 		ret.emplace_back(i.second, i.first);
@@ -2221,7 +2400,7 @@ int ShareManager::run() {
 	runRefresh();
 	// A folder added after the refresh scanned its pending list, but before it released the
 	// refresh flag, found the flag taken and left its scan to this thread.
-	while(hasPendingDirectories() && !refreshing.test_and_set()) {
+	while(!stopping && hasPendingDirectories() && !refreshing.test_and_set()) {
 		refreshActive = true;
 		update = true;
 		refreshDirs = false;
@@ -2230,81 +2409,230 @@ int ShareManager::run() {
 	return 0;
 }
 
+bool ShareManager::scanRoot(const pft::PrivatePathScanner& privacy, const string& realPath, const string& virtualName,
+	Directory::Ptr& tree_)
+{
+	// A root that can't be reached (a NAS that is off or disconnected) keeps its previous contents:
+	// scanning it would find nothing and remove the whole folder from the share.
+	if(!File::isDirectory(realPath)) {
+		LogManager::getInstance()->message(str(F_("The shared folder %1% is not available; its previous contents stay shared until it can be scanned") %
+			Util::addBrackets(realPath)), LogMessage::SEV_WARNING, _("Sharing"));
+		return false;
+	}
+
+	Directory::Ptr scanned;
+	if(privacy.isPrivateRoot(realPath)) {
+		LogManager::getInstance()->message(str(F_("The shared folder %1% is not shared because it contains privately received files") %
+			Util::addBrackets(realPath)), LogMessage::SEV_WARNING, _("Sharing"));
+	} else if(checkHidden(realPath)) {
+		bool merged;
+		{
+			RLock l(cs);
+			merged = getRealRoots(virtualName).size() > 1;
+		}
+		scanned = scanTree(privacy, realPath, nullopt, nullptr, 0, merged);
+		if(stopping) {
+			return false;
+		}
+		// Lost during the scan: what was found is incomplete.
+		if(!File::isDirectory(realPath)) {
+			LogManager::getInstance()->message(str(F_("The shared folder %1% became unavailable while it was scanned; its previous contents stay shared until it can be scanned") %
+				Util::addBrackets(realPath)), LogMessage::SEV_WARNING, _("Sharing"));
+			return false;
+		}
+	}
+
+	if(!scanned) {
+		scanned = Directory::create(virtualName);
+	}
+	scanned->setName(virtualName);
+	if(!tree_) {
+		tree_ = scanned;
+	} else {
+		tree_->merge(scanned, realPath);
+	}
+	return true;
+}
+
+StringList ShareManager::getRealRoots(const string& virtualName) const {
+	StringList roots;
+	for(const auto& share: shares) {
+		if(Util::stricmp(share.second, virtualName) == 0) {
+			roots.push_back(share.first);
+		}
+	}
+	return roots;
+}
+
+void ShareManager::afterTreeChange() {
+	rebuildIndices();
+	replayScanHashes();
+	replayMovedFiles();
+	setDirty();
+}
+
+void ShareManager::unindexTree(const Directory& dir) {
+	for(const auto& file: dir.files) {
+		if(file.tth) {
+			auto i = tthIndex.find(*file.tth);
+			if(i != tthIndex.end() && i->second == &file) {
+				tthIndex.erase(i);
+				sharedBytes -= file.getSize();
+			}
+		}
+	}
+	for(const auto& child: dir.directories) {
+		unindexTree(*child.second);
+	}
+}
+
+void ShareManager::replaceTree(const string& virtualName, const Directory::Ptr& tree) {
+	// Only this name's entries change, so a refresh doesn't rebuild the indices of the whole share
+	// (over a second for a million files, under the share lock) after every folder. The rebuild at
+	// the end of the refresh settles duplicates across folders and resizes the name filter.
+	auto old = directories.find(virtualName);
+	if(old != directories.end()) {
+		unindexTree(*old->second);
+		old->second = tree;
+	} else {
+		directories[virtualName] = tree;
+	}
+	++indexVersion;
+	deferDuplicates = true;
+	updateIndices(*tree);
+	deferDuplicates = false;
+	replayScanHashes();
+	replayMovedFiles();
+	setDirty();
+}
+
 void ShareManager::runRefresh(function<void (float)> progressF) {
-	StringPairList dirs;
+	// Folders shared under the same virtual name are scanned and applied together.
+	vector<pair<string, StringList>> groups;
+	size_t rootCount = 0;
 	{
-		Lock l(cs);
-		for(auto& i: shares) {
-			dirs.emplace_back(i.second, i.first);
+		WLock l(cs);
+		for(const auto& share: shares) {
+			auto group = find_if(groups.begin(), groups.end(), [&share](const pair<string, StringList>& g) {
+				return Util::stricmp(g.first, share.second) == 0;
+			});
+			if(group == groups.end()) {
+				groups.emplace_back(share.second, StringList { share.first });
+			} else {
+				group->second.push_back(share.first);
+			}
+			++rootCount;
 		}
 		// A full scan builds every registered root, including any still waiting for their own scan.
 		if(refreshDirs) {
 			pendingDirectories.clear();
 		}
+		// Hashing isn't paused while folders are scanned; keep what finishes until the scan is live.
+		recordScanHashes = true;
+		scanHashes.clear();
+		movedFiles.clear();
 	}
 	// A full refresh with nothing shared still leaves an accurate (empty) index.
-	const bool scannedAllRoots = refreshDirs;
-	// Don't need to refresh if no directories are shared
-	if(dirs.empty())
-		refreshDirs = false;
+	bool scannedAllRoots = refreshDirs;
 
-	std::shared_ptr<HashManager::HashPauser> pauser;
 	bool refreshedDirs = false;
-		
+	bool scannedRoots = false;
+
 	if(refreshDirs) {
-		pauser = std::make_shared<HashManager::HashPauser>();
-
 		LogManager::getInstance()->message(_("File list refresh initiated"), LogMessage::SEV_INFO, _("Sharing"));
-
-		lastFullUpdate = GET_TICK();
-
-		vector<pair<Directory::Ptr, string>> newDirs;
-
-		float progressCounter = 0, dirCount = dirs.size();
+		const auto started = GET_TICK();
 
 		// Make sure that the cache is updated.
 		updateFilterCache();
+		const pft::PrivatePathScanner privacy;
 
-		for(auto& i: dirs) {
-			if(checkHidden(i.second)) {
-				auto dp = buildTree(i.second);
-				dp->setName(i.first);
-				newDirs.emplace_back(dp, i.second);
+		float progressCounter = 0;
+		const float progressTotal = static_cast<float>(std::max<size_t>(rootCount, 1));
+
+		for(const auto& group: groups) {
+			if(stopping) {
+				break;
 			}
 
-			if(progressF) {
-				progressF(++progressCounter / dirCount);
-			}
-		}
-
-		{
-			Lock l(cs);
-			directories.clear();
-
-			for(auto& i: newDirs) {
-				// A folder removed or renamed during the scan must not come back.
-				auto share = shares.find(i.second);
-				if(share != shares.end() && share->second == i.first->getName()) {
-					merge(i.first, i.second);
+			Directory::Ptr tree;
+			bool usable = true;
+			for(const auto& root: group.second) {
+				if(stopping || !scanRoot(privacy, root, group.first, tree)) {
+					usable = false;
+					break;
+				}
+				if(progressF) {
+					progressF(++progressCounter / progressTotal);
 				}
 			}
+			if(stopping) {
+				break;
+			}
+			if(!usable) {
+				// Kept as it was; the queue's in-share check waits for a complete scan.
+				scannedAllRoots = false;
+				continue;
+			}
 
-			rebuildIndices();
+			// Each folder is shared as soon as it is scanned, not after every folder is done.
+			WLock l(cs);
+			// Removed, renamed or joined by another folder while it was scanned: that change has its own scan.
+			if(getRealRoots(group.first) != group.second) {
+				continue;
+			}
+			replaceTree(group.first, tree);
+			refreshedDirs = true;
 		}
-		refreshDirs = false;
-		refreshedDirs = true;
 
-		LogManager::getInstance()->message(_("File list refresh finished"), LogMessage::SEV_INFO, _("Sharing"));
+		if(!stopping) {
+			WLock l(cs);
+			// Virtual names that are no longer shared at all.
+			for(auto i = directories.begin(); i != directories.end();) {
+				if(getRealRoots(i->first).empty()) {
+					i = directories.erase(i);
+					refreshedDirs = true;
+				} else {
+					++i;
+				}
+			}
+			if(refreshedDirs) {
+				afterTreeChange();
+			}
+		}
+
+		refreshDirs = false;
+		scannedRoots = !stopping;
+		// Automatic refreshes are timed from the end of the previous one, and a long scan pushes the
+		// next one back by as long as it took, so slow storage is never scanned without a break.
+		lastFullUpdate = GET_TICK();
+		lastRefreshDuration = lastFullUpdate - started;
+
+		if(!stopping) {
+			LogManager::getInstance()->message(_("File list refresh finished"), LogMessage::SEV_INFO, _("Sharing"));
+		}
 	}
 
-	if(scanPendingDirectories()) {
+	if(!stopping && scanPendingDirectories()) {
 		refreshedDirs = true;
+	}
+
+	{
+		WLock l(cs);
+		recordScanHashes = false;
+		vector<ScanHash>().swap(scanHashes);
+		vector<MovedFile>().swap(movedFiles);
+	}
+
+	if(stopping) {
+		refreshing.clear();
+		refreshActive = false;
+		return;
 	}
 
 	if(update) {
-		/* Hold off hashing until all infos have been sent out 
+		/* Hold off hashing until all infos have been sent out
 		   so we properly signal the update to possible bloom requesters. */
-		ClientManager::getInstance()->infoUpdated(std::move(pauser));
+		ClientManager::getInstance()->infoUpdated(scannedRoots ? std::make_shared<HashManager::HashPauser>() : nullptr);
 	}
 
 	refreshing.clear();
@@ -2322,7 +2650,7 @@ void ShareManager::runRefresh(function<void (float)> progressF) {
 
 void ShareManager::getBloom(ByteVector& v, size_t k, size_t m, size_t h) const {
 	dcdebug("Creating bloom filter, k=%u, m=%u, h=%u\n", k, m, h);
-	Lock l(cs);
+	RLock l(cs);
 
 	HashBloom bloom;
 	bloom.reset(k, m, h);
@@ -2335,7 +2663,7 @@ void ShareManager::getBloom(ByteVector& v, size_t k, size_t m, size_t h) const {
 void ShareManager::getBloom(ByteVector& v, size_t k, size_t m, size_t h, const string& hubUrl) const {
 	dcdebug("Creating hub share bloom filter, k=%u, m=%u, h=%u\n", k, m, h);
 	auto access = getShareAccess(hubUrl);
-	Lock l(cs);
+	RLock l(cs);
 
 	HashBloom bloom;
 	bloom.reset(k, m, h);
@@ -2362,67 +2690,248 @@ private:
 	OutputStream& output;
 	int64_t count = 0;
 };
+
+bool removeFile(const string& path) noexcept {
+	File::deleteFile(path);
+	return File::getSize(path) == -1;
+}
+
+string fileListHeader(const string& base = "/") {
+	string tmp;
+	return "<FileListing Version=\"1\" CID=\"" + ClientManager::getInstance()->getMe()->getCID().toBase32() +
+		"\" Base=\"" + SimpleXML::escape(base, tmp, true) + "\" Generator=\"" APPNAME " " VERSIONSTRING "\">\r\n";
+}
+}
+
+#define LITERAL(n) n, sizeof(n)-1
+void ShareManager::writeDirectoryXml(OutputStream& os, const Directory::Ptr& dir, string& indent, string& tmp) const {
+	// One directory at a time under the share lock: uploads, searches and hash results go on while
+	// a large share's list is written and compressed.
+	struct FileEntry {
+		string name;
+		int64_t size;
+		TTHValue tth;
+	};
+	string name;
+	time_t lastWrite;
+	vector<Directory::Ptr> children;
+	vector<FileEntry> files;
+	{
+		RLock l(cs);
+		name = dir->getName();
+		lastWrite = dir->getLastWrite();
+		children.reserve(dir->directories.size());
+		for(const auto& child: dir->directories) {
+			children.push_back(child.second);
+		}
+		files.reserve(dir->files.size());
+		for(const auto& file: dir->files) {
+			if(file.tth) {
+				files.push_back({ file.getName(), file.getSize(), *file.tth });
+			}
+		}
+	}
+
+	os.write(indent);
+	os.write(LITERAL("<Directory Name=\""));
+	os.write(SimpleXML::escape(name, tmp, true));
+	if(lastWrite > 0) {
+		os.write(LITERAL("\" Date=\""));
+		os.write(Util::toString(static_cast<int64_t>(lastWrite)));
+	}
+	os.write(LITERAL("\">\r\n"));
+	indent += '\t';
+	for(const auto& child: children) {
+		writeDirectoryXml(os, child, indent, tmp);
+	}
+	for(const auto& file: files) {
+		os.write(indent);
+		os.write(LITERAL("<File Name=\""));
+		os.write(SimpleXML::escape(file.name, tmp, true));
+		os.write(LITERAL("\" Size=\""));
+		os.write(Util::toString(file.size));
+		os.write(LITERAL("\" TTH=\""));
+		tmp.clear();
+		os.write(file.tth.toBase32(tmp));
+		os.write(LITERAL("\"/>\r\n"));
+	}
+	indent.erase(indent.length() - 1);
+	os.write(indent);
+	os.write(LITERAL("</Directory>\r\n"));
+}
+#undef LITERAL
+
+void ShareManager::writeListXml(OutputStream& os, const ShareAccess& access) const {
+	vector<Directory::Ptr> roots;
+	{
+		RLock l(cs);
+		for(const auto& item: directories) {
+			// An explicit favorite-hub profile with no selected directories is not
+			// unrestricted: it gets a valid root-only file list.
+			if(isVirtualAllowed(item.first, access)) {
+				roots.push_back(item.second);
+			}
+		}
+	}
+	os.write(SimpleXML::utf8Header);
+	os.write(fileListHeader());
+	string indent, tmp;
+	for(const auto& root: roots) {
+		writeDirectoryXml(os, root, indent, tmp);
+	}
+	os.write("</FileListing>");
+}
+
+string ShareManager::getProfileKey(const ShareAccess& access) {
+	if(access.unrestricted) {
+		return Util::emptyString;
+	}
+	// Never empty: an explicit empty profile is not the unrestricted list.
+	string key = "profile";
+	for(const auto& directory: access.directories) {
+		key += '\n' + Text::toLower(directory);
+	}
+	return key;
+}
+
+ShareManager::FileList ShareManager::getList(const ShareAccess& access) {
+	const auto key = getProfileKey(access);
+	// Rebuilt when forced (a refresh, a finished download), and otherwise at most every 15 minutes
+	// while the share changes (as files are hashed, for example), as AirDC++ does. Requires cs.
+	auto isCurrent = [this](const FileList& list) {
+		return !list.path.empty() && list.forceVersion == listForce &&
+			(list.dirtyVersion == listVersion || (list.generated + 15 * 60 * 1000 >= GET_TICK() && list.generated >= lastFullUpdate));
+	};
+	{
+		FastLock l(fileListsCs);
+		const auto& list = fileLists[key];
+		if(isCurrent(list)) {
+			return list;
+		}
+	}
+
+	Lock gl(listCs, std::try_to_lock);
+	if(!gl.owns_lock()) {
+		// A list is being built (that takes a while for a large share): whoever already has one
+		// gets it meanwhile rather than waiting.
+		{
+			FastLock l(fileListsCs);
+			const auto& list = fileLists[key];
+			if(!list.path.empty()) {
+				return list;
+			}
+		}
+		gl.lock();
+	}
+
+	uint64_t version, force;
+	{
+		FastLock l(fileListsCs);
+		const auto& list = fileLists[key];
+		// Built by another request meanwhile.
+		if(isCurrent(list)) {
+			return list;
+		}
+		version = listVersion;
+		force = listForce;
+	}
+
+	FileList list;
+	try {
+		string name = "files";
+		if(!key.empty()) {
+			TigerHash hash;
+			hash.update(key.data(), key.size());
+			name += "-" + TTHValue(hash.finalize()).toBase32().substr(0, 16);
+		}
+		auto path = Util::getPath(Util::PATH_USER_CONFIG) + name + "-" + Util::toString(++listN) + ".xml.bz2";
+		{
+			File f(path, File::WRITE, File::TRUNCATE | File::CREATE);
+			// We don't care about the leaves...
+			CalcOutputStream<TTFilter<1024*1024*1024>, false> bzTree(&f);
+			FilteredOutputStream<BZFilter, false> bzipper(&bzTree);
+			XmlSizeCounter count(bzipper);
+			CalcOutputStream<TTFilter<1024*1024*1024>, false> xml(&count);
+
+			writeListXml(xml, access);
+			xml.flush();
+
+			list.xmlLen = count.getCount();
+			xml.getFilter().getTree().finalize();
+			bzTree.getFilter().getTree().finalize();
+			list.xmlRoot = xml.getFilter().getTree().getRoot();
+			list.bzRoot = bzTree.getFilter().getTree().getRoot();
+		}
+		if(key.empty()) {
+			// The full list keeps its usual name when it isn't being uploaded.
+			const auto stable = Util::getPath(Util::PATH_USER_CONFIG) + "files.xml.bz2";
+			{
+				FastLock l(fileListsCs);
+				auto& old = fileLists[key];
+				if(old.path == stable) {
+					old.ref.reset();
+				}
+			}
+			if(File::getSize(stable) == -1 || removeFile(stable)) {
+				try {
+					File::renameFile(path, stable);
+					path = stable;
+				} catch(const FileException&) {
+					// Ignore, the numbered name works as well.
+				}
+			}
+		}
+		list.ref = std::make_shared<File>(path, File::READ, File::OPEN);
+		list.bzLen = File::getSize(path);
+		list.path = path;
+		LogManager::getInstance()->message(str(F_("File list %1% generated") % Util::addBrackets(path)),
+			LogMessage::SEV_INFO, _("Sharing"));
+	} catch(const Exception&) {
+		// Keep serving the previous list.
+		FastLock l(fileListsCs);
+		return fileLists[key];
+	}
+
+	list.dirtyVersion = version;
+	list.forceVersion = force;
+	list.generated = GET_TICK();
+
+	string replaced;
+	{
+		FastLock l(fileListsCs);
+		auto& current = fileLists[key];
+		if(current.path != list.path) {
+			replaced = current.path;
+		}
+		current = list;
+	}
+	// A list being uploaded is still open; it is removed later.
+	if(!replaced.empty()) {
+		staleListFiles.push_back(replaced);
+	}
+	removeStaleLists();
+	return list;
+}
+
+void ShareManager::removeStaleLists() noexcept {
+	staleListFiles.erase(std::remove_if(staleListFiles.begin(), staleListFiles.end(), [](const string& path) {
+		return File::getSize(path) == -1 || removeFile(path);
+	}), staleListFiles.end());
 }
 
 void ShareManager::generateXmlList() {
-	Lock l(cs);
-	if(forceXmlRefresh || (xmlDirty && (lastXmlUpdate + 15 * 60 * 1000 < GET_TICK() || lastXmlUpdate < lastFullUpdate))) {
-		listN++;
+	getList(ShareAccess { true, { } });
+}
 
-		try {
-			string tmp2;
-			string indent;
+string ShareManager::getListFile(const string& hubUrl) {
+	return getList(getShareAccess(hubUrl)).path;
+}
 
-			string newXmlName = Util::getPath(Util::PATH_USER_CONFIG) + "files" + Util::toString(listN) + ".xml.bz2";
-			{
-				File f(newXmlName, File::WRITE, File::TRUNCATE | File::CREATE);
-				// We don't care about the leaves...
-				CalcOutputStream<TTFilter<1024*1024*1024>, false> bzTree(&f);
-				FilteredOutputStream<BZFilter, false> bzipper(&bzTree);
-				XmlSizeCounter count(bzipper);
-				CalcOutputStream<TTFilter<1024*1024*1024>, false> newXmlFile(&count);
-
-				newXmlFile.write(SimpleXML::utf8Header);
-				newXmlFile.write("<FileListing Version=\"1\" CID=\"" + ClientManager::getInstance()->getMe()->getCID().toBase32() + "\" Base=\"/\" Generator=\"" APPNAME " " VERSIONSTRING "\">\r\n");
-				for(auto& i: directories) {
-					i.second->toXml(newXmlFile, indent, tmp2, -1, false);
-				}
-				newXmlFile.write("</FileListing>");
-				newXmlFile.flush();
-
-				xmlListLen = count.getCount();
-
-				newXmlFile.getFilter().getTree().finalize();
-				bzTree.getFilter().getTree().finalize();
-
-				xmlRoot = newXmlFile.getFilter().getTree().getRoot();
-				bzXmlRoot = bzTree.getFilter().getTree().getRoot();
-			}
-
-			if(bzXmlRef.get()) {
-				bzXmlRef.reset();
-				File::deleteFile(getBZXmlFile());
-			}
-
-			try {
-				File::renameFile(newXmlName, Util::getPath(Util::PATH_USER_CONFIG) + "files.xml.bz2");
-				newXmlName =Util::getPath(Util::PATH_USER_CONFIG) + "files.xml.bz2";
-			} catch(const FileException&) {
-				// Ignore, this is for caching only...
-			}
-			bzXmlRef = unique_ptr<File>(new File(newXmlName, File::READ, File::OPEN));
-			setBZXmlFile(newXmlName);
-			bzXmlListLen = File::getSize(newXmlName);
-			LogManager::getInstance()->message(str(F_("File list %1% generated") % Util::addBrackets(bzXmlFile)),
-				LogMessage::SEV_INFO, _("Sharing"));
-		} catch(const Exception&) {
-			// No new file lists...
-		}
-
-		xmlDirty = false;
-		forceXmlRefresh = false;
-		lastXmlUpdate = GET_TICK();
-	}
+bool ShareManager::isOwnListFile(const string& path) const {
+	FastLock l(fileListsCs);
+	return std::any_of(fileLists.begin(), fileLists.end(), [&path](const pair<const string, FileList>& list) {
+		return !list.second.path.empty() && Util::stricmp(list.second.path, path) == 0;
+	});
 }
 
 namespace {
@@ -2438,77 +2947,42 @@ public:
 private:
 	FilteredInputStream<UnBZFilter, true> stream;
 };
-
-class TemporaryListFile : public File {
-public:
-	TemporaryListFile(const string& path) : File(path, File::RW, File::CREATE | File::TRUNCATE), path(path) { }
-	~TemporaryListFile() override { close(); File::deleteFile(path); }
-private:
-	string path;
-};
 }
 
 std::pair<std::unique_ptr<InputStream>, int64_t> ShareManager::openXmlList(const string& hubUrl) {
-	if(!hasCustomShare(hubUrl)) {
-		Lock l(cs);
-		generateXmlList();
-		auto file = std::make_unique<File>(getBZXmlFile(), File::READ, File::OPEN);
-		auto stream = std::make_unique<XmlListInputStream>(file.get());
-		file.release();
-		return { std::move(stream), xmlListLen };
+	// The uncompressed list is read back from the compressed one, so it is never built in memory.
+	const auto list = getList(hubUrl.empty() ? ShareAccess { true, { } } : getShareAccess(hubUrl));
+	if(list.path.empty()) {
+		throw ShareException(UserConnection::FILE_NOT_AVAILABLE);
 	}
-	// Spool a hub-specific list to disk so serialization does not grow RAM with the share.
-	auto file = std::make_unique<TemporaryListFile>(Util::getTempPath() + "dcpp-list-" + CID::generate().toBase32() + ".xml");
-	auto access = getShareAccess(hubUrl);
-	file->write(SimpleXML::utf8Header);
-	file->write("<FileListing Version=\"1\" CID=\"" + ClientManager::getInstance()->getMe()->getCID().toBase32() + "\" Base=\"/\">\r\n");
-	{
-		Lock l(cs);
-		string indent, tmp;
-		for(const auto& item: directories) {
-			if(isVirtualAllowed(item.first, access)) item.second->toXml(*file, indent, tmp, -1, false);
-		}
-	}
-	file->write("</FileListing>");
-	const auto size = file->getSize();
-	file->setPos(0);
-	return { std::move(file), size };
+	auto file = std::make_unique<File>(list.path, File::READ, File::OPEN);
+	auto stream = std::make_unique<XmlListInputStream>(file.get());
+	file.release();
+	return { std::move(stream), list.xmlLen };
 }
 
-string ShareManager::generateFileListData(const string& hubUrl, bool compressed) const {
-	auto access = getShareAccess(hubUrl);
-	string xml = SimpleXML::utf8Header;
-	xml += "<FileListing Version=\"1\" CID=\"" + ClientManager::getInstance()->getMe()->getCID().toBase32() +
-		"\" Base=\"/\" Generator=\"" APPNAME " " VERSIONSTRING "\">\r\n";
-
-	{
-		StringRefOutputStream output(xml);
-		string indent;
-		string tmp;
-		Lock l(cs);
-		// An explicit favorite-hub profile with no selected directories is not
-		// unrestricted: the loop intentionally writes no directory entries and
-		// returns a valid root-only file list.
-		for(const auto& item: directories) {
-			if(isVirtualAllowed(item.first, access)) {
-				item.second->toXml(output, indent, tmp, -1, false);
-			}
-		}
+string ShareManager::generateFileListData(const string& hubUrl, bool compressed) {
+	const auto list = getList(getShareAccess(hubUrl));
+	if(list.path.empty()) {
+		return Util::emptyString;
 	}
-	xml += "</FileListing>";
-
-	if(!compressed) {
-		return xml;
+	if(compressed) {
+		return File(list.path, File::READ, File::OPEN).read();
 	}
-
-	StringOutputStream output;
-	FilteredOutputStream<BZFilter, false> compressor(&output);
-	compressor.write(xml);
-	compressor.flush();
-	return output.getString();
+	string xml;
+	StringRefOutputStream output(xml);
+	auto opened = openXmlList(hubUrl);
+	char buffer[64 * 1024];
+	for(;;) {
+		size_t n = sizeof(buffer);
+		const auto produced = opened.first->read(buffer, n);
+		if(!produced) break;
+		output.write(buffer, produced);
+	}
+	return xml;
 }
 
-MemoryInputStream* ShareManager::generateFileList(const string& hubUrl, bool compressed) const {
+MemoryInputStream* ShareManager::generateFileList(const string& hubUrl, bool compressed) {
 	return new MemoryInputStream(generateFileListData(hubUrl, compressed));
 }
 
@@ -2518,7 +2992,7 @@ MemoryInputStream* ShareManager::generatePartialList(const string& dir, bool rec
 
 	time_t baseDate = 0;
 	{
-		Lock l(cs);
+		RLock l(cs);
 		if(dir == "/") {
 			for(const auto& item: directories) {
 				baseDate = (std::max)(baseDate, item.second->getLastWrite());
@@ -2570,7 +3044,7 @@ MemoryInputStream* ShareManager::generatePartialList(const string& dir, bool rec
 	LimitedOutputStream<false> sos(&stringOutput, maxPartialListBytes - xml.size());
 	string indent = "\t";
 
-	Lock l(cs);
+	RLock l(cs);
 	if(dir == "/") {
 		for(auto& i: directories) {
 			tmp.clear();
@@ -2626,7 +3100,7 @@ MemoryInputStream* ShareManager::generatePartialList(const string& dir, bool rec
 	auto access = getShareAccess(hubUrl);
 	time_t baseDate = 0;
 	{
-		Lock l(cs);
+		RLock l(cs);
 		if(dir == "/") {
 			for(const auto& item: directories) {
 				if(isVirtualAllowed(item.first, access)) {
@@ -2680,7 +3154,7 @@ MemoryInputStream* ShareManager::generatePartialList(const string& dir, bool rec
 	LimitedOutputStream<false> output(&stringOutput, maxPartialListBytes - xml.size());
 	string indent = "\t";
 
-	Lock l(cs);
+	RLock l(cs);
 	if(dir == "/") {
 		for(const auto& item: directories) {
 			if(isVirtualAllowed(item.first, access)) {
@@ -2994,7 +3468,7 @@ void ShareManager::Directory::search(SearchResultList& results, SearchQuery& que
 SearchResultList ShareManager::search(SearchQuery&& query, size_t maxResults) noexcept {
 	SearchResultList results;
 
-	Lock l(cs);
+	RLock l(cs);
 
 	if(query.root) {
 		auto i = tthIndex.find(*query.root);
@@ -3029,7 +3503,7 @@ void ShareManager::appendTempSearchResults(SearchResultList& results, SearchQuer
 
 	vector<TempShareInfo> candidates;
 	{
-		Lock l(cs);
+		RLock l(cs);
 		for(const auto& item: tempShares) {
 			// Private-chat attachments never answer searches: a search does not prove
 			// who is asking, and the recipient downloads straight from the message.
@@ -3081,7 +3555,7 @@ SearchResultList ShareManager::search(SearchQuery&& query, size_t maxResults,
 {
 	SearchResultList results;
 	{
-		Lock l(cs);
+		RLock l(cs);
 
 		if(query.root) {
 			auto item = tthIndex.find(*query.root);
@@ -3090,7 +3564,11 @@ SearchResultList ShareManager::search(SearchQuery&& query, size_t maxResults,
 					item->second->getParent()->getFullName() + item->second->getName(), *item->second->tth));
 				addHits(1);
 			}
-		} else {
+		} else if(std::all_of(query.includeInit.begin(), query.includeInit.end(),
+			[this](const StringSearch& term) { return bloom.match(term.getPattern()); }))
+		{
+			// The bloom filter holds every shared name, whatever the hub's profile, so a term it
+			// rejects matches nothing; most searches never walk the share.
 			for(const auto& dir: directories) {
 				if(!isVirtualAllowed(dir.first, access)) continue;
 				dir.second->search(results, query, maxResults);
@@ -3229,76 +3707,200 @@ optional<std::reference_wrapper<const ShareManager::Directory::File>> ShareManag
 }
 
 void ShareManager::on(QueueManagerListener::FileMoved, const string& realPath) noexcept {
+	if(!SETTING(ADD_FINISHED_INSTANTLY)) {
+		return;
+	}
 	try {
 		if(pft::isPrivatePath(realPath))
 			return;
 	} catch(...) {
 		return;
 	}
-	if(SETTING(ADD_FINISHED_INSTANTLY)) {
-		int64_t size = -1;
-		time_t lastWrite = 0;
-		try {
-			File completedFile(realPath, File::READ, File::OPEN);
-			size = completedFile.getSize();
-			lastWrite = completedFile.getLastModified();
-		} catch(const FileException&) {
+
+	MovedFile moved { realPath, -1, 0, nullopt };
+	try {
+		File completedFile(realPath, File::READ, File::OPEN | File::SHARED);
+		moved.size = completedFile.getSize();
+		moved.lastWrite = completedFile.getLastModified();
+	} catch(const FileException&) {
+		return;
+	}
+	{
+		RLock l(cs);
+		// Check if the finished download dir is supposed to be shared
+		if(!getDirectory(realPath)) {
 			return;
 		}
+	}
 
-		Lock l(cs);
-		// Check if the finished download dir is supposed to be shared
+	// File system work stays outside the share lock.
+	moved.tth = HashManager::getInstance()->getTTH(realPath, moved.size, static_cast<uint32_t>(moved.lastWrite));
+	const auto parentPath = Util::getFilePath(realPath);
+	time_t parentWrite = 0;
+	FileFindIter parentInfo(parentPath.substr(0, parentPath.size() - 1));
+	if(parentInfo != FileFindIter()) {
+		parentWrite = static_cast<time_t>(parentInfo->getLastWriteTime());
+	}
+
+	WLock l(cs);
+	if(addMovedFile(moved)) {
 		auto dir = getDirectory(realPath);
 		if(dir) {
-			const auto parentPath = Util::getFilePath(realPath);
-			Directory::File f(Util::getFileName(realPath), size, dir,
-				HashManager::getInstance()->getTTH(realPath, size, static_cast<uint32_t>(lastWrite)), lastWrite);
-			f.validateName(parentPath);
-			dir->files.insert(move(f));
-
-			FileFindIter parentInfo(parentPath.substr(0, parentPath.size() - 1));
-			if(parentInfo != FileFindIter()) {
-				dir->setLastWrite((std::max)(dir->getLastWrite(), static_cast<time_t>(parentInfo->getLastWriteTime())));
-			}
-			setDirty();
-			forceXmlRefresh = true;
+			dir->setLastWrite((std::max)(dir->getLastWrite(), parentWrite));
 		}
+		if(recordScanHashes) {
+			movedFiles.push_back(moved);
+		}
+	}
+}
+
+bool ShareManager::addMovedFile(const MovedFile& moved) {
+	auto dir = getDirectory(moved.realPath);
+	if(!dir) {
+		return false;
+	}
+
+	// A download that replaced a shared file: drop the old entry and its index.
+	auto existing = getFile(moved.realPath, dir);
+	string existingPath;
+	if(existing) {
+		try {
+			existingPath = existing->get().getRealPath();
+		} catch(const ShareException&) { }
+	}
+	if(existing && Util::stricmp(existingPath, moved.realPath) == 0) {
+		const auto& old = existing->get();
+		if(old.getSize() == moved.size && old.getLastWrite() == moved.lastWrite && old.tth == moved.tth) {
+			return true;
+		}
+		if(old.tth) {
+			auto i = tthIndex.find(*old.tth);
+			if(i != tthIndex.end() && i->second == &old) {
+				tthIndex.erase(i);
+				sharedBytes -= old.getSize();
+			}
+		}
+		dir->files.erase(dir->files.find(old.getName()));
+		++indexVersion;
+	}
+
+	// A finished download shows in the file list at once.
+	++listForce;
+	Directory::File f(Util::getFileName(moved.realPath), moved.size, dir, moved.tth, moved.lastWrite);
+	auto root = dir.get();
+	while(root->getParent()) {
+		root = root->getParent();
+	}
+	f.validateName(Util::getFilePath(moved.realPath), getRealRoots(root->getName()).size() > 1);
+	const auto& file = *dir->files.insert(move(f)).first;
+	if(file.tth) {
+		++indexVersion;
+		auto i = tthIndex.find(*file.tth);
+		if(i == tthIndex.end()) {
+			dir->size += file.getSize();
+			sharedBytes += file.getSize();
+			tthIndex[*file.tth] = &file;
+		} else if(SETTING(LIST_DUPES)) {
+			tthIndex[*file.tth] = &file;
+		}
+		bloom.add(Text::toLower(file.getName()));
+	}
+	setDirty();
+	return true;
+}
+
+void ShareManager::replayMovedFiles() {
+	for(const auto& moved: movedFiles) {
+		addMovedFile(moved);
 	}
 }
 
 void ShareManager::on(HashManagerListener::TTHDone, const string& realPath, const TTHValue& root,
 	int64_t size, uint32_t timestamp, uint64_t hashJobId) noexcept
 {
-	try {
-		if(pft::isPrivatePath(realPath))
-			return;
-	} catch(...) {
+	// Files in private storage are never shared, but a pending chat attachment still gets its answer.
+	if(!pft::isPrivateLocation(realPath)) {
+		try {
+			// A hash completion belongs to one exact filesystem snapshot. The hasher holds a
+			// write-denying handle on the file until its listeners have run, so its results
+			// (job id != 0) describe the file as it is. Other completions are checked again
+			// against the file, so an older one cannot assign its TTH to a replacement.
+			bool current = hashJobId != 0;
+			if(!current) {
+				File snapshot(realPath, File::READ, File::OPEN);
+				current = snapshot.getSize() == size && snapshot.getLastModified() == timestamp;
+			}
+			if(current) {
+				WLock l(cs);
+				applyHash(realPath, root, size, timestamp, false);
+				if(recordScanHashes) {
+					scanHashes.push_back({ realPath, root, size, timestamp });
+				}
+			}
+		} catch(...) { }
+	}
+	completeChatAttachments(realPath, root, size, timestamp, hashJobId);
+}
+
+void ShareManager::applyHash(const string& realPath, const TTHValue& root, int64_t size, uint32_t timestamp, bool sameTimestamp) {
+	auto f = getFile(realPath);
+	if(!f || f->get().getSize() != size) {
 		return;
 	}
-	try {
-		// A hash completion belongs to one exact filesystem snapshot. Keep a
-		// non-writable handle while updating the share node so an older completion
-		// cannot assign its TTH to a replacement that now occupies the same path.
-		File snapshot(realPath, File::READ, File::OPEN);
-		if(snapshot.getSize() == size && snapshot.getLastModified() == timestamp) {
-			Lock l(cs);
-			auto f = getFile(realPath);
-			if(f && f->get().getSize() == size) {
-				auto& file = const_cast<Directory::File&>(f->get());
-				if(file.tth && root != *file.tth)
-					tthIndex.erase(*file.tth);
-				file.tth = root;
-				file.setLastWrite(timestamp);
-				tthIndex[*file.tth] = &file;
-
-				setDirty();
-				forceXmlRefresh = true;
-
-				bloom.add(Text::toLower(Util::getFileName(realPath)));
-			}
+	auto& file = const_cast<Directory::File&>(f->get());
+	// getFile falls back to the file of that name; it must be this file on disk.
+	if(file.realPath && Util::stricmp(*file.realPath, realPath) != 0) {
+		return;
+	}
+	if(file.tth && *file.tth == root && (sameTimestamp || file.getLastWrite() == static_cast<time_t>(timestamp))) {
+		return;
+	}
+	if(sameTimestamp && file.getLastWrite() != static_cast<time_t>(timestamp)) {
+		return;
+	}
+	const bool wasHashed = static_cast<bool>(file.tth);
+	++indexVersion;
+	if(file.tth && root != *file.tth) {
+		// Only this file's own entry: another file may share the old root.
+		auto i = tthIndex.find(*file.tth);
+		if(i != tthIndex.end() && i->second == &file) {
+			tthIndex.erase(i);
+			sharedBytes -= file.getSize();
 		}
-	} catch(...) { }
-	completeChatAttachments(realPath, root, size, timestamp, hashJobId);
+	}
+	file.tth = root;
+	file.setLastWrite(timestamp);
+	auto i = tthIndex.find(root);
+	if(i == tthIndex.end()) {
+		tthIndex.emplace(root, &file);
+		sharedBytes += file.getSize();
+		if(!wasHashed) {
+			file.getParent()->size += file.getSize();
+		}
+	} else if(SETTING(LIST_DUPES)) {
+		i->second = &file;
+	} else {
+		// As a refresh does (updateIndices): a duplicate isn't shared.
+		LogManager::getInstance()->message(str(F_("Duplicate file will not be shared: %1% (Size: %2% B) Dupe matched against: %3%")
+			% Util::addBrackets(realPath) % Util::toString(file.getSize()) % Util::addBrackets(i->second->getRealPath())),
+			LogMessage::SEV_WARNING, _("Sharing"));
+		auto parent = file.getParent();
+		parent->files.erase(parent->files.find(file.getName()));
+		setDirty();
+		return;
+	}
+
+	// A new hash makes the file list stale but doesn't force an immediate rebuild of it: while a
+	// large share hashes, that would rebuild the whole list for nearly every list request.
+	setDirty();
+
+	bloom.add(Text::toLower(Util::getFileName(realPath)));
+}
+
+void ShareManager::replayScanHashes() {
+	for(const auto& hash: scanHashes) {
+		applyHash(hash.realPath, hash.root, hash.size, hash.timestamp, true);
+	}
 }
 
 void ShareManager::on(HashManagerListener::TTHFailed, const string& realPath, int64_t size,
@@ -3309,12 +3911,16 @@ void ShareManager::on(HashManagerListener::TTHFailed, const string& realPath, in
 
 void ShareManager::on(TimerManagerListener::Minute, uint64_t tick) noexcept {
 	{
-		Lock l(cs);
+		WLock l(cs);
 		tempShares.erase(std::remove_if(tempShares.begin(), tempShares.end(),
 			[tick](const TempShareInfo& item) { return tempShareExpired(item, tick); }), tempShares.end());
 	}
-	if(SETTING(AUTO_REFRESH_TIME) > 0) {
-		if(lastFullUpdate + SETTING(AUTO_REFRESH_TIME) * 60 * 1000 <= tick) {
+	// Timed from the end of the last full refresh, and never sooner than that refresh took, so a
+	// share that takes longer to scan than the interval isn't rescanned back to back. A refresh in
+	// progress is left alone rather than reported every minute.
+	if(SETTING(AUTO_REFRESH_TIME) > 0 && !refreshActive) {
+		const auto interval = std::max<uint64_t>(static_cast<uint64_t>(SETTING(AUTO_REFRESH_TIME)) * 60 * 1000, lastRefreshDuration);
+		if(lastFullUpdate + interval <= tick) {
 			refresh(true, true);
 		}
 	}

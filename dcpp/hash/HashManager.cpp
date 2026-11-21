@@ -27,6 +27,9 @@
 #include <dcpp/core/io/SFVReader.h>
 #include <dcpp/hash/TigerTreeHasher.h>
 #include <dcpp/core/io/compress/ZUtils.h>
+#include <dcpp/transfer/private/PrivateTransferStorage.h>
+
+#include <unordered_set>
 
 namespace dcpp {
 
@@ -59,8 +62,217 @@ HashManager::TTHRequest HashManager::requestTTH(
 	const string& aFileName, int64_t aSize, uint32_t aTimeStamp) noexcept
 {
 	Lock l(cs);
-	auto tth = store.getTTH(aFileName, aSize, aTimeStamp);
-	return { tth, tth ? 0 : hasher.hashFile(aFileName, aSize, aTimeStamp) };
+	bool markerChecked = true;
+	auto tth = store.getTTH(aFileName, aSize, aTimeStamp, &markerChecked);
+	TTHRequest request { tth, tth ? 0 : queueHash(aFileName, aSize, aTimeStamp) };
+	request.markerChecked = !tth || markerChecked;
+	return request;
+}
+
+string HashManager::getVolume(const string& path) {
+#ifdef _WIN32
+	// \\?\C:\..., C:\..., \\?\UNC\server\share\..., \\server\share\...
+	size_t start = 0;
+	bool unc = false;
+	if(path.compare(0, 8, "\\\\?\\UNC\\") == 0) {
+		start = 8;
+		unc = true;
+	} else if(path.compare(0, 4, "\\\\?\\") == 0) {
+		start = 4;
+	} else if(path.compare(0, 2, "\\\\") == 0) {
+		start = 2;
+		unc = true;
+	}
+
+	if(unc) {
+		const auto server = path.find_first_of("\\/", start);
+		if(server == string::npos || server == start) {
+			return Util::emptyString;
+		}
+		const auto share = path.find_first_of("\\/", server + 1);
+		const auto end = share == string::npos ? path.size() : share;
+		if(end == server + 1) {
+			return Util::emptyString;
+		}
+		string volume = "\\\\" + path.substr(start, end - start);
+		volume[2 + server - start] = '\\';
+		return Text::toLower(volume);
+	}
+
+	if(path.size() >= start + 2 && path[start + 1] == ':') {
+		return Text::toLower(path.substr(start, 2));
+	}
+#else
+	(void)path;
+#endif
+	return Util::emptyString;
+}
+
+uint64_t HashManager::queueHash(const string& fileName, int64_t size, uint32_t timestamp) noexcept {
+	const auto volume = getVolume(fileName);
+	// Choosing the hasher and queueing with it are one step, so a volume never ends up with two.
+	Lock l(hashersCs);
+	return selectHasher(volume).hashFile(fileName, size, timestamp, volume);
+}
+
+HashManager::Hasher& HashManager::selectHasher(const string& volume) {
+	// One reader per drive, as AirDC++ does: a hard disk or a NAS reading two files at once spends
+	// its time seeking between them. Different drives are read in parallel.
+	for(const auto& hasher: hashers) {
+		if(hasher->hasVolume(volume)) {
+			return *hasher;
+		}
+	}
+
+	const auto limit = static_cast<size_t>(std::clamp(SETTING(MAX_HASH_VOLUMES),
+		SettingsManager::MAX_HASH_VOLUMES_MIN, SettingsManager::MAX_HASH_VOLUMES_MAX));
+	const auto usable = std::min(limit, hashers.size());
+	for(size_t i = 0; i < usable; ++i) {
+		if(hashers[i]->isIdle()) {
+			return *hashers[i];
+		}
+	}
+
+	if(hashers.size() < limit && !hashersStopped) {
+		auto hasher = std::make_unique<Hasher>(nextJobId, hashersPaused);
+		bool usableHasher = true;
+		if(hashersStarted) {
+			try {
+				hasher->start();
+				hasher->setThreadPriority(hasherPriority);
+			} catch(const ThreadException& e) {
+				LogManager::getInstance()->message(str(F_("Unable to start another hashing thread: %1%") % e.getError()),
+					LogMessage::SEV_WARNING, _("Hashing"));
+				usableHasher = false;
+			}
+		}
+		if(usableHasher) {
+			hashers.push_back(std::move(hasher));
+			return *hashers.back();
+		}
+	}
+
+	auto least = hashers.begin();
+	for(auto i = hashers.begin() + 1; i < hashers.begin() + usable; ++i) {
+		if((*i)->getLoad() < (*least)->getLoad()) {
+			least = i;
+		}
+	}
+	return **least;
+}
+
+void HashManager::startHashers() {
+	Lock l(hashersCs);
+	hashersStarted = true;
+	for(const auto& hasher: hashers) {
+		hasher->start();
+		hasher->setThreadPriority(hasherPriority);
+	}
+}
+
+void HashManager::shutdownHashers() {
+	Lock l(hashersCs);
+	hashersStopped = true;
+	for(const auto& hasher: hashers) {
+		hasher->shutdown();
+	}
+}
+
+void HashManager::joinHashers() {
+	// Not under hashersCs: a hasher's listeners may queue files (a chat attachment), which takes it.
+	// No hasher is added once they are stopped.
+	vector<Hasher*> all;
+	{
+		Lock l(hashersCs);
+		for(const auto& hasher: hashers) {
+			all.push_back(hasher.get());
+		}
+	}
+	for(auto hasher: all) {
+		hasher->join();
+	}
+}
+
+void HashManager::stopHashing(const string& baseDir) {
+	// Each hasher reports what it drops; listeners run without hashersCs held.
+	vector<Hasher*> all;
+	{
+		Lock l(hashersCs);
+		for(const auto& hasher: hashers) {
+			all.push_back(hasher.get());
+		}
+	}
+	for(auto hasher: all) {
+		hasher->stopHashing(baseDir);
+	}
+}
+
+void HashManager::setPriority(Thread::Priority p) {
+	Lock l(hashersCs);
+	hasherPriority = p;
+	if(hashersStarted) {
+		for(const auto& hasher: hashers) {
+			hasher->setThreadPriority(p);
+		}
+	}
+}
+
+void HashManager::getStats(string& curFile, uint64_t& bytesLeft, size_t& filesLeft) const {
+	curFile.clear();
+	bytesLeft = 0;
+	filesLeft = 0;
+	Lock l(hashersCs);
+	for(const auto& hasher: hashers) {
+		string file;
+		uint64_t bytes = 0;
+		size_t files = 0;
+		hasher->getStats(file, bytes, files);
+		if(curFile.empty()) {
+			curFile = std::move(file);
+		}
+		bytesLeft += bytes;
+		filesLeft += files;
+	}
+}
+
+optional<TTHValue> HashManager::findTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp) noexcept {
+	Lock l(cs);
+	return store.getTTH(aFileName, aSize, aTimeStamp);
+}
+
+void HashManager::setMarkerChecked(const string& aFileName) noexcept {
+	try {
+		Lock l(cs);
+		store.setMarkerChecked(aFileName);
+	} catch(const Exception& e) {
+		logHashStoreWarning(str(F_("Error saving hash data: %1%") % e.getError()));
+	}
+}
+
+bool HashManager::addVerifiedFile(const string& aFileName, const TTHValue& aRoot) noexcept {
+	try {
+		File file(aFileName, File::READ, File::OPEN | File::SHARED);
+		const auto size = file.getSize();
+		const auto timestamp = file.getLastModified();
+		file.close();
+
+		if(timestamp == 0 || size < 0) {
+			return false;
+		}
+		Lock l(cs);
+		TigerTree tree;
+		if(!store.hasTree(aRoot, size) || !store.getTree(aRoot, tree) || tree.getFileSize() != size) {
+			// A file of one block (as the hasher would hash it) is described by its root alone.
+			if(size > MIN_BLOCK_SIZE) {
+				return false;
+			}
+			tree = TigerTree(size, MIN_BLOCK_SIZE, aRoot);
+		}
+		store.addFile(aFileName, timestamp, tree, true, true);
+		return true;
+	} catch(const Exception&) {
+		return false;
+	}
 }
 
 bool HashManager::verifyFileTTH(const string& aFileName, int64_t aSize, const TTHValue& root) noexcept {
@@ -78,6 +290,10 @@ bool HashManager::verifyFileTTH(const string& aFileName, int64_t aSize, const TT
 		f.close();
 
 		if(size != aSize) {
+			return false;
+		}
+		// Every route into the hash store refuses privately received files.
+		if(pft::hasPrivateMarker(aFileName)) {
 			return false;
 		}
 
@@ -132,7 +348,7 @@ bool HashManager::verifyFileTTH(const string& aFileName, int64_t aSize, const TT
 
 		{
 			Lock l(cs);
-			store.addFile(aFileName, timestamp, tt, true);
+			store.addFile(aFileName, timestamp, tt, true, true);
 			verificationCache.emplace_back(aFileName, root, size, timestamp, true);
 			if(verificationCache.size() > 256) {
 				verificationCache.pop_front();
@@ -189,7 +405,7 @@ void HashManager::hashDone(const string& aFileName, uint32_t aTimeStamp, const T
 {
 	try {
 		Lock l(cs);
-		store.addFile(aFileName, aTimeStamp, tth, true);
+		store.addFile(aFileName, aTimeStamp, tth, true, true);
 	} catch (const Exception& e) {
 		LogManager::getInstance()->message(str(F_("Hashing failed: %1%") % e.getError()), LogMessage::SEV_ERROR, _("Hashing"));
 		hashFailed(aFileName, size, aTimeStamp, jobId,
@@ -199,6 +415,10 @@ void HashManager::hashDone(const string& aFileName, uint32_t aTimeStamp, const T
 
 	fire(HashManagerListener::TTHDone(), aFileName, tth.getRoot(), size, aTimeStamp, jobId);
 
+	// Off by default, as in AirDC++: the hasher reports one summary per folder instead.
+	if(!SETTING(LOG_HASHED_FILES)) {
+		return;
+	}
 	if(speed > 0) {
 		LogManager::getInstance()->message(str(F_("Finished hashing: %1% (%2% at %3%/s)") % Util::addBrackets(aFileName) %
 			Util::formatBytes(size) % Util::formatBytes(speed)), LogMessage::SEV_INFO, _("Hashing"));
@@ -304,15 +524,42 @@ int HashManager::HashStoreMaintenanceWorker::run() {
 	return 0;
 }
 
-void HashManager::HashStore::addFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aUsed) {
+void HashManager::HashStore::addFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aUsed, bool aMarkerChecked) {
 	if(!addTree(tth)) {
 		throw HashException(_("Unable to save hash data"));
 	}
 
 	auto fname = Util::getFileName(aFileName), fpath = Util::getFilePath(aFileName);
 
-	fileIndex[fpath].insert_or_assign(std::move(fname), FileInfo(tth.getRoot(), aTimeStamp, aUsed));
-	saveFile(aFileName, aTimeStamp, tth);
+	fileIndex[fpath].insert_or_assign(std::move(fname), FileInfo(tth.getRoot(), aTimeStamp, aUsed, aMarkerChecked));
+	saveFile(aFileName, aTimeStamp, tth, aMarkerChecked);
+}
+
+void HashManager::HashStore::setMarkerChecked(const string& aFileName) {
+	auto i = fileIndex.find(Util::getFilePath(aFileName));
+	if(i == fileIndex.end()) {
+		return;
+	}
+	auto j = i->second.find(Util::getFileName(aFileName));
+	if(j == i->second.end() || j->second.getMarkerChecked()) {
+		return;
+	}
+	j->second.setMarkerChecked(true);
+
+	beginWrite();
+	if(!markCheckedStmt.isOpen()) {
+		markCheckedStmt = db.prepare("UPDATE files SET checked=1 WHERE path=?1");
+	}
+	markCheckedStmt.bind(1, aFileName);
+	markCheckedStmt.stepDone();
+	markCheckedStmt.reset();
+	markCheckedStmt.clearBindings();
+	recordWrite();
+}
+
+bool HashManager::HashStore::hasTree(const TTHValue& root, int64_t size) const {
+	auto i = treeIndex.find(root);
+	return i != treeIndex.end() && i->second.getSize() == size;
 }
 
 bool HashManager::HashStore::addTree(const TigerTree& tt) noexcept {
@@ -388,6 +635,30 @@ int HashManager::HashStore::getSchemaVersion() {
 }
 
 void HashManager::HashStore::migrateSchema(int version) {
+	migrateSchemaV2(version);
+
+	if(version < 3) {
+		// Version 3 records whether a file was checked for the Private Send marker. Existing rows
+		// start unchecked and are checked once by the next share scan.
+		bool hasColumn = false;
+		{
+			auto columns = db.prepare("PRAGMA table_info(files)");
+			while(columns.step()) {
+				if(columns.columnText(1) == "checked") {
+					hasColumn = true;
+				}
+			}
+		}
+		SQLiteTransaction transaction(db);
+		if(!hasColumn) {
+			db.execute("ALTER TABLE files ADD COLUMN checked INTEGER NOT NULL DEFAULT 0;");
+		}
+		db.execute("PRAGMA user_version = 3;");
+		transaction.commit();
+	}
+}
+
+void HashManager::HashStore::migrateSchemaV2(int version) {
 	if(version < 2) {
 		// Version 2 adds an enforced files.root -> trees.root relationship. Copying through a
 		// replacement table lets old databases open while dropping orphaned or malformed rows.
@@ -471,9 +742,9 @@ bool HashManager::HashStore::saveTree(const TigerTree& tt) {
 	return true;
 }
 
-void HashManager::HashStore::saveFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth) {
+void HashManager::HashStore::saveFile(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aMarkerChecked) {
 	beginWrite();
-	writeFileRow(aFileName, aTimeStamp, tth);
+	writeFileRow(aFileName, aTimeStamp, tth, aMarkerChecked);
 	recordWrite();
 }
 
@@ -498,18 +769,19 @@ void HashManager::HashStore::writeTreeRow(const TigerTree& tt) {
 	saveTreeStmt.clearBindings();
 }
 
-void HashManager::HashStore::writeFileRow(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth) {
+void HashManager::HashStore::writeFileRow(const string& aFileName, uint32_t aTimeStamp, const TigerTree& tth, bool aMarkerChecked) {
 	if(!saveFileStmt.isOpen()) {
 		saveFileStmt = db.prepare(
-			"INSERT INTO files(path, size, timestamp, root) VALUES(?1, ?2, ?3, ?4) "
+			"INSERT INTO files(path, size, timestamp, root, checked) VALUES(?1, ?2, ?3, ?4, ?5) "
 			"ON CONFLICT(path) DO UPDATE SET "
-			"size=excluded.size, timestamp=excluded.timestamp, root=excluded.root"
+			"size=excluded.size, timestamp=excluded.timestamp, root=excluded.root, checked=excluded.checked"
 		);
 	}
 	saveFileStmt.bind(1, aFileName);
 	saveFileStmt.bind(2, tth.getFileSize());
 	saveFileStmt.bind(3, static_cast<int64_t>(aTimeStamp));
 	saveFileStmt.bind(4, tth.getRoot().data, TTHValue::BYTES);
+	saveFileStmt.bind(5, static_cast<int64_t>(aMarkerChecked ? 1 : 0));
 	saveFileStmt.stepDone();
 	saveFileStmt.reset();
 	saveFileStmt.clearBindings();
@@ -611,7 +883,7 @@ int64_t HashManager::HashStore::getBlockSize(const TTHValue& root) const {
 	return i == treeIndex.end() ? 0 : i->second.getBlockSize();
 }
 
-optional<TTHValue> HashManager::HashStore::getTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp) noexcept {
+optional<TTHValue> HashManager::HashStore::getTTH(const string& aFileName, int64_t aSize, uint32_t aTimeStamp, bool* markerChecked_) noexcept {
 	auto fname = Util::getFileName(aFileName), fpath = Util::getFilePath(aFileName);
 
 	auto i = fileIndex.find(fpath);
@@ -623,6 +895,9 @@ optional<TTHValue> HashManager::HashStore::getTTH(const string& aFileName, int64
 			auto ti = treeIndex.find(root);
 			if(ti != treeIndex.end() && ti->second.getSize() == aSize && fi.getTimeStamp() == aTimeStamp) {
 				fi.setUsed(true);
+				if(markerChecked_) {
+					*markerChecked_ = fi.getMarkerChecked();
+				}
 				return root;
 			}
 
@@ -635,69 +910,54 @@ optional<TTHValue> HashManager::HashStore::getTTH(const string& aFileName, int64
 }
 
 void HashManager::HashStore::rebuild() {
+	// Drops the records of files no share scan has looked up since startup, and the trees no file
+	// uses any more. Done in the database and in the indexes directly: loading every tree into
+	// memory first takes gigabytes for a large share. (A damaged tree is found whenever it is
+	// loaded: its leaves are checked against its root.)
 	try {
 		flushWrites();
-		decltype(fileIndex) newFileIndex;
-		decltype(treeIndex) newTreeIndex;
-		unordered_map<TTHValue, TigerTree> newTrees;
-
-		for (auto& i: fileIndex) {
-			for (auto& [name, j]: i.second) {
-				if (!j.getUsed())
-					continue;
-
-				auto k = treeIndex.find(j.getRoot());
-				if (k != treeIndex.end()) {
-					newTreeIndex[j.getRoot()] = k->second;
+		vector<string> unused;
+		std::unordered_set<TTHValue> referenced;
+		for(const auto& [path, files]: fileIndex) {
+			for(const auto& [name, fi]: files) {
+				if(fi.getUsed()) {
+					referenced.insert(fi.getRoot());
+				} else {
+					unused.push_back(path + name);
 				}
 			}
 		}
 
-		for (auto i = newTreeIndex.begin(); i != newTreeIndex.end();) {
-			TigerTree tree;
-			if (loadTree(i->first, tree)) {
-				i->second.setIndex(tree.getLeaves().size() == 1 ? SMALL_TREE : 0);
-				newTrees.emplace(i->first, tree);
-				++i;
-			} else {
-				newTreeIndex.erase(i++);
-			}
-		}
-
-		for (auto& i: fileIndex) {
-			FileList newFileList;
-
-			for (auto& [name, j]: i.second) {
-				if (newTreeIndex.find(j.getRoot()) != newTreeIndex.end() && j.getUsed()) {
-					newFileList.emplace(name, j);
-				}
-			}
-
-			if(!newFileList.empty()) {
-				newFileIndex[i.first] = move(newFileList);
-			}
-		}
-
-		treeIndex = newTreeIndex;
-		fileIndex = newFileIndex;
+		uint64_t removedTrees = 0;
 		{
 			SQLiteTransaction transaction(db);
-			db.execute("DELETE FROM files");
-			db.execute("DELETE FROM trees");
-			for (auto& i: newTrees) {
-				writeTreeRow(i.second);
-			}
-			for (auto& i: fileIndex) {
-				const string& dir = i.first;
-				for (auto& [name, fi]: i.second) {
-					auto tree = newTrees.find(fi.getRoot());
-					if(tree != newTrees.end()) {
-						writeFileRow(dir + name, fi.getTimeStamp(), tree->second);
-					}
+			{
+				auto remove = db.prepare("DELETE FROM files WHERE path=?1");
+				for(const auto& path: unused) {
+					remove.bind(1, path);
+					remove.stepDone();
+					remove.reset();
+					remove.clearBindings();
 				}
 			}
+			db.execute("DELETE FROM trees WHERE NOT EXISTS (SELECT 1 FROM files WHERE files.root = trees.root)");
+			removedTrees = static_cast<uint64_t>(db.changes());
 			transaction.commit();
 		}
+
+		for(auto i = fileIndex.begin(); i != fileIndex.end();) {
+			auto& files = i->second;
+			for(auto j = files.begin(); j != files.end();) {
+				j = j->second.getUsed() ? std::next(j) : files.erase(j);
+			}
+			i = files.empty() ? fileIndex.erase(i) : std::next(i);
+		}
+		for(auto i = treeIndex.begin(); i != treeIndex.end();) {
+			i = referenced.count(i->first) ? std::next(i) : treeIndex.erase(i);
+		}
+
+		LogManager::getInstance()->message(str(F_("Hash database rebuilt: removed %1% unused file records and %2% unused trees") %
+			unused.size() % removedTrees), LogMessage::SEV_INFO, _("Hash database"));
 		if(SETTING(HASH_DB_COMPACT_ON_REBUILD)) {
 			compact();
 		}
@@ -808,6 +1068,7 @@ void HashManager::HashStore::resetStatements() noexcept {
 	saveFileStmt = SQLiteStatement();
 	removeFileStmt = SQLiteStatement();
 	loadTreeStmt = SQLiteStatement();
+	markCheckedStmt = SQLiteStatement();
 }
 
 string HashManager::HashStore::getIndexFile() { return Util::getPath(Util::PATH_USER_CONFIG) + "HashIndex.xml"; }
@@ -875,7 +1136,7 @@ void HashManager::HashStore::loadDb(function<void (float)> progressF) {
 
 	uint64_t invalidFiles = 0;
 	uint64_t orphanFiles = 0;
-	auto files = db.prepare("SELECT path, timestamp, root FROM files ORDER BY path");
+	auto files = db.prepare("SELECT path, timestamp, root, checked FROM files ORDER BY path");
 	string lastPath;
 	FileList* currentFileList = nullptr;
 	uint64_t loaded = 0;
@@ -903,7 +1164,7 @@ void HashManager::HashStore::loadDb(function<void (float)> progressF) {
 			lastPath = std::move(fpath);
 			currentFileList = &result.first->second;
 		}
-		currentFileList->try_emplace(std::move(fname), root, timeStamp, false);
+		currentFileList->try_emplace(std::move(fname), root, timeStamp, false, files.columnInt(3) != 0);
 		if((++loaded % 1024) == 0) {
 			progressF(0);
 		}
@@ -1035,7 +1296,7 @@ bool HashManager::HashStore::migrateLegacy(function<void (float)> progressF) {
 			for(auto& [name, fi]: i.second) {
 				auto tree = validTrees.find(fi.getRoot());
 				if(tree != validTrees.end()) {
-					writeFileRow(dir + name, fi.getTimeStamp(), tree->second);
+					writeFileRow(dir + name, fi.getTimeStamp(), tree->second, fi.getMarkerChecked());
 					migratedFiles++;
 				}
 				rowWritten();
@@ -1282,7 +1543,7 @@ void HashLoader::startTag(const string& name, StringPairList& attribs, bool simp
 			const auto& root = getAttrib(attribs, sRoot, 2);
 			if(!file.empty() && timeStamp > 0 && !root.empty() && (version != 2 || upgradeFromV2(file))) {
 				auto fname = Util::getFileName(file), fpath = Util::getFilePath(file);
-				store.fileIndex[fpath].try_emplace(fname, TTHValue(root), timeStamp, false);
+				store.fileIndex[fpath].try_emplace(fname, TTHValue(root), timeStamp, false, false);
 			}
 		} else if (name == sTrees) {
 			inTrees = !simple;
@@ -1301,24 +1562,105 @@ HashManager::HashStore::~HashStore() {
 	flushWritesNoexcept();
 }
 
-uint64_t HashManager::Hasher::hashFile(const string& fileName, int64_t size, uint32_t timestamp) noexcept {
+uint64_t HashManager::Hasher::newJobId() noexcept {
+	auto jobId = jobIds++;
+	if(jobId == 0) jobId = jobIds++;
+	return jobId;
+}
+
+void HashManager::Hasher::volumeDone(const string& volume) noexcept {
+	auto i = volumes.find(volume);
+	if(i != volumes.end() && --i->second == 0) {
+		volumes.erase(i);
+	}
+}
+
+bool HashManager::Hasher::hasVolume(const string& volume) const noexcept {
+	Lock l(cs);
+	return volumes.find(volume) != volumes.end();
+}
+
+bool HashManager::Hasher::isIdle() const noexcept {
+	Lock l(cs);
+	return volumes.empty();
+}
+
+uint64_t HashManager::Hasher::getLoad() const noexcept {
+	Lock l(cs);
+	return queuedBytes + static_cast<uint64_t>(std::max<int64_t>(currentSize, 0));
+}
+
+uint64_t HashManager::Hasher::hashFile(const string& fileName, int64_t size, uint32_t timestamp, const string& volume) noexcept {
 	Lock l(cs);
 	if(running && !currentTerminal && currentFile == fileName && currentFileSize == size &&
 		currentTimestamp == timestamp)
 	{
 		return currentJobId;
 	}
-	auto& requests = w[fileName];
-	auto existing = std::find_if(requests.begin(), requests.end(), [&](const HashRequest& request) {
-		return request.size == size && request.timestamp == timestamp;
-	});
-	if(existing != requests.end()) return existing->jobId;
+	auto first = w.find(fileName);
+	if(first != w.end()) {
+		if(first->second.size == size && first->second.timestamp == timestamp) return first->second.jobId;
+		for(auto i = waiting.lower_bound(fileName); i != waiting.end() && i->first == fileName; ++i) {
+			if(i->second.size == size && i->second.timestamp == timestamp) return i->second.jobId;
+		}
+	}
 
-	auto jobId = nextJobId++;
-	if(jobId == 0) jobId = nextJobId++;
-	requests.push_back({ size, timestamp, jobId });
+	const auto jobId = newJobId();
+	const HashRequest request { size, timestamp, jobId };
+	if(first == w.end()) {
+		w.emplace(fileName, request);
+	} else {
+		waiting.emplace_hint(waiting.upper_bound(fileName), fileName, request);
+	}
+	++volumes[volume];
+	++queuedFiles;
+	queuedBytes += static_cast<uint64_t>(std::max<int64_t>(size, 0));
 	if(idle) s.signal();
 	return jobId;
+}
+
+void HashManager::Hasher::adoptSnapshot(const string& fileName, int64_t size, uint32_t timestamp,
+	int64_t& requestedSize_, uint32_t& requestedTimestamp_, uint64_t& requestedJobId_) noexcept
+{
+	Lock l(cs);
+	uint64_t jobId = 0;
+	auto first = w.find(fileName);
+	if(first != w.end() && first->second.size == size && first->second.timestamp == timestamp) {
+		jobId = first->second.jobId;
+		dequeued(first->second);
+		w.erase(first);
+		auto next = waiting.find(fileName);
+		if(next != waiting.end()) {
+			w.emplace(fileName, next->second);
+			waiting.erase(next);
+		}
+	} else {
+		for(auto i = waiting.lower_bound(fileName); i != waiting.end() && i->first == fileName; ++i) {
+			if(i->second.size == size && i->second.timestamp == timestamp) {
+				jobId = i->second.jobId;
+				dequeued(i->second);
+				waiting.erase(i);
+				break;
+			}
+		}
+	}
+	if(jobId != 0) {
+		// That request is answered by the file being hashed, whose volume is already counted.
+		volumeDone(currentVolume);
+	} else {
+		jobId = newJobId();
+	}
+	currentFileSize = requestedSize_ = size;
+	currentTimestamp = requestedTimestamp_ = timestamp;
+	currentJobId = requestedJobId_ = jobId;
+	currentTerminal = false;
+	currentSize = size;
+}
+
+void HashManager::Hasher::dequeued(const HashRequest& request) noexcept {
+	if(queuedFiles > 0) --queuedFiles;
+	const auto bytes = static_cast<uint64_t>(std::max<int64_t>(request.size, 0));
+	queuedBytes = bytes >= queuedBytes ? 0 : queuedBytes - bytes;
 }
 
 bool HashManager::Hasher::pause() noexcept {
@@ -1342,13 +1684,19 @@ void HashManager::Hasher::stopHashing(const string& baseDir) {
 	vector<pair<string, HashRequest>> cancelled;
 	{
 		Lock l(cs);
-		for(auto i = w.begin(); i != w.end();) {
-			if(strncmp(baseDir.c_str(), i->first.c_str(), baseDir.size()) == 0) {
-				for(const auto& request: i->second) cancelled.emplace_back(i->first, request);
-				i = w.erase(i);
-			} else {
-				++i;
-			}
+		// Both queues are sorted by path, so the files under baseDir form one range.
+		auto inBase = [&baseDir](const string& path) { return path.compare(0, baseDir.size(), baseDir) == 0; };
+		for(auto i = w.lower_bound(baseDir); i != w.end() && inBase(i->first);) {
+			cancelled.emplace_back(i->first, i->second);
+			dequeued(i->second);
+			volumeDone(HashManager::getVolume(i->first));
+			i = w.erase(i);
+		}
+		for(auto i = waiting.lower_bound(baseDir); i != waiting.end() && inBase(i->first);) {
+			cancelled.emplace_back(i->first, i->second);
+			dequeued(i->second);
+			volumeDone(HashManager::getVolume(i->first));
+			i = waiting.erase(i);
 		}
 	}
 	for(const auto& item: cancelled) {
@@ -1361,15 +1709,8 @@ void HashManager::Hasher::stopHashing(const string& baseDir) {
 void HashManager::Hasher::getStats(string& curFile, uint64_t& bytesLeft, size_t& filesLeft) const {
 	Lock l(cs);
 	curFile = currentFile;
-	filesLeft = 0;
-	for(const auto& item: w) filesLeft += item.second.size();
-	if (running)
-		filesLeft++;
-	bytesLeft = 0;
-	for (auto& i: w) {
-		for(const auto& request: i.second) bytesLeft += request.size;
-	}
-	bytesLeft += currentSize;
+	filesLeft = queuedFiles + (running ? 1 : 0);
+	bytesLeft = queuedBytes + static_cast<uint64_t>(std::max<int64_t>(currentSize, 0));
 }
 
 void HashManager::Hasher::instantPause() {
@@ -1425,9 +1766,30 @@ bool HashManager::Hasher::fastHash(File& file, TigerTree& tth, int64_t size, CRC
 }
 
 int HashManager::Hasher::run() {
+#ifndef _WIN32
+	// Elsewhere this applies to the calling thread only. On Windows whoever starts the hasher sets
+	// it (HashManager::hasherPriority), so it can't overwrite a priority set meanwhile.
 	setThreadPriority(Thread::IDLE);
+#endif
 
 	struct SnapshotChanged { };
+	SFVDirectoryReader sfvDirectory;
+	// One summary line per folder hashed (unless each file is reported).
+	struct FolderStats {
+		string path;
+		size_t files = 0;
+		int64_t bytes = 0;
+		uint64_t time = 0;
+	} folder;
+	auto reportFolder = [&folder] {
+		if(folder.files > 0 && !SETTING(LOG_HASHED_FILES)) {
+			const auto speed = folder.time > 0 ? folder.bytes * 1000 / static_cast<int64_t>(folder.time) : 0;
+			LogManager::getInstance()->message(str(F_("Finished hashing %1% (%2% files, %3% at %4%/s)") %
+				Util::addBrackets(folder.path) % folder.files % Util::formatBytes(folder.bytes) % Util::formatBytes(speed)),
+				LogMessage::SEV_INFO, _("Hashing"));
+		}
+		folder = FolderStats();
+	};
 	string fname;
 	int64_t requestedSize = 0;
 	uint32_t requestedTimestamp = 0;
@@ -1449,9 +1811,17 @@ int HashManager::Hasher::run() {
 			if(!w.empty()) {
 				auto item = w.begin();
 				currentFile = fname = item->first;
-				const auto request = item->second.front();
-				item->second.pop_front();
-				if(item->second.empty()) w.erase(item);
+				// Stays counted while it is hashed, so more files of its volume come here.
+				currentVolume = HashManager::getVolume(fname);
+				const auto request = item->second;
+				w.erase(item);
+				dequeued(request);
+				// The next snapshot of the same path, if any, takes its place in path order.
+				auto next = waiting.find(fname);
+				if(next != waiting.end()) {
+					w.emplace(fname, next->second);
+					waiting.erase(next);
+				}
 				currentFileSize = requestedSize = request.size;
 				currentTimestamp = requestedTimestamp = request.timestamp;
 				currentJobId = requestedJobId = request.jobId;
@@ -1465,6 +1835,9 @@ int HashManager::Hasher::run() {
 				requestedTimestamp = 0;
 				requestedJobId = 0;
 				idle = true;
+				// .sfv files added while idle are read the next time their directory is hashed.
+				sfvDirectory.clear();
+				reportFolder();
 				continue;
 			}
 		}
@@ -1484,16 +1857,23 @@ int HashManager::Hasher::run() {
 				File f(fname, File::READ, File::OPEN);
 				auto size = f.getSize();
 				auto timestamp = f.getLastModified();
-				if(size != requestedSize || (requestedTimestamp != 0 && timestamp != requestedTimestamp)) {
+				if(pft::hasPrivateMarker(fname)) {
+					// Never shared, so not reported as an error either.
 					f.close();
-					const auto detail = _("The file changed before hashing started");
 					beginTerminal();
 					HashManager::getInstance()->hashFailed(fname, requestedSize, requestedTimestamp,
-						requestedJobId,
-						HashManagerListener::Failure::FILE_CHANGED, detail);
-					LogManager::getInstance()->message(str(F_("%1% not shared; the file changed before hashing started.") %
-						Util::addBrackets(fname)), LogMessage::SEV_WARNING, _("Hashing"));
+						requestedJobId, HashManagerListener::Failure::PRIVATE_FILE, _("Privately received files are not shared"));
 					throw SnapshotChanged();
+				}
+				if(size != requestedSize || (requestedTimestamp != 0 && timestamp != requestedTimestamp)) {
+					// The file changed after it was queued (or a network listing reported a stale
+					// time). Whoever asked about the old snapshot gets a definite answer; the
+					// current content is hashed anyway, so the next refresh finds it hashed.
+					beginTerminal();
+					HashManager::getInstance()->hashFailed(fname, requestedSize, requestedTimestamp,
+						requestedJobId, HashManagerListener::Failure::FILE_CHANGED, _("The file changed before hashing started"));
+					adoptSnapshot(fname, size, timestamp, requestedSize, requestedTimestamp, requestedJobId);
+					terminalPublished = false;
 				}
 
 				auto sizeLeft = size;
@@ -1502,10 +1882,8 @@ int HashManager::Hasher::run() {
 				TigerTree tt(bs);
 
 				CRC32Filter crc32;
-				SFVReader sfv(fname);
-				CRC32Filter* xcrc32 = 0;
-				if(sfv.hasCRC())
-					xcrc32 = &crc32;
+				uint32_t expectedCrc = 0;
+				CRC32Filter* xcrc32 = sfvDirectory.getCRC(fname, expectedCrc) ? &crc32 : nullptr;
 
 				auto lastRead = GET_TICK();
 
@@ -1537,7 +1915,14 @@ int HashManager::Hasher::run() {
 						return !stop;
 					};
 #ifdef _WIN32
-					fr.read(fname, process);
+					// Unbuffered overlapped reads keep large files out of the system cache; smaller
+					// ones are read through the snapshot handle, saving a second open (a network
+					// round trip on a NAS) per file.
+					if(size >= DIRECT_READ_MIN_SIZE) {
+						fr.read(fname, process);
+					} else {
+						fr.read(f, process);
+					}
 #else
 					fr.read(f, process);
 #endif
@@ -1568,7 +1953,7 @@ int HashManager::Hasher::run() {
 						requestedJobId,
 						stop ? HashManagerListener::Failure::CANCELLED : HashManagerListener::Failure::INCOMPLETE,
 						stop ? _("Hashing was cancelled") : _("Hashing did not read the complete file"));
-				} else if(xcrc32 && xcrc32->getValue() != sfv.getCRC()) {
+				} else if(xcrc32 && xcrc32->getValue() != expectedCrc) {
 					beginTerminal();
 					LogManager::getInstance()->message(str(F_("%1% not shared; calculated CRC32 does not match the one found in SFV file.") % Util::addBrackets(fname)),
 						LogMessage::SEV_WARNING, _("Hashing"));
@@ -1578,6 +1963,14 @@ int HashManager::Hasher::run() {
 				} else {
 					beginTerminal();
 					HashManager::getInstance()->hashDone(fname, timestamp, tt, speed, size, requestedJobId);
+					const auto path = Util::getFilePath(fname);
+					if(path != folder.path) {
+						reportFolder();
+						folder.path = path;
+					}
+					folder.files++;
+					folder.bytes += size;
+					folder.time += end > start ? end - start : 0;
 				}
 			} catch(const SnapshotChanged&) {
 				// The exact failure was already reported above.
@@ -1617,6 +2010,8 @@ int HashManager::Hasher::run() {
 		}
 		{
 			Lock l(cs);
+			volumeDone(currentVolume);
+			currentVolume.clear();
 			currentFile.clear();
 			currentSize = 0;
 			currentFileSize = 0;
@@ -1639,18 +2034,29 @@ HashManager::HashPauser::~HashPauser() {
 }
 
 bool HashManager::pauseHashing() noexcept {
-	Lock l(cs);
-	return hasher.pause();
+	// Every hasher, and any added while paused (they start with this count).
+	Lock l(hashersCs);
+	for(const auto& hasher: hashers) {
+		hasher->pause();
+	}
+	return hashersPaused++ > 0;
 }
 
 void HashManager::resumeHashing() noexcept {
-	Lock l(cs);
-	hasher.resume();
+	Lock l(hashersCs);
+	dcassert(hashersPaused > 0);
+	if(hashersPaused == 0) {
+		return;
+	}
+	--hashersPaused;
+	for(const auto& hasher: hashers) {
+		hasher->resume();
+	}
 }
 
 bool HashManager::isHashingPaused() const noexcept {
-	Lock l(cs);
-	return hasher.isPaused();
+	Lock l(hashersCs);
+	return hashersPaused > 0;
 }
 
 } // namespace dcpp

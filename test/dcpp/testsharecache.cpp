@@ -11,9 +11,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <mutex>
 #include <thread>
 
 #define private public
@@ -22,6 +24,7 @@
 #include <dcpp/share/ShareManager.h>
 #include <dcpp/hash/HashManager.h>
 #include <dcpp/transfer/upload/UploadManager.h>
+#include <dcpp/queue/QueueManager.h>
 #undef private
 
 #include <dcpp/hub/ClientManager.h>
@@ -29,6 +32,7 @@
 #include <dcpp/user/CID.h>
 #include <dcpp/favorites/FavoriteManager.h>
 #include <dcpp/core/io/File.h>
+#include <dcpp/core/io/SFVReader.h>
 #include <dcpp/connection/http/HttpManager.h>
 #include <dcpp/events/LogManager.h>
 #include <dcpp/queue/QueueManager.h>
@@ -153,6 +157,7 @@ public:
 		auto sm = ShareManager::getInstance();
 		sm->directories.clear();
 		sm->tthIndex.clear();
+		sm->sharedBytes = 0;
 		sm->bloom.clear();
 	}
 
@@ -255,8 +260,9 @@ TEST_F(ShareCacheTest, round_trips_share_tree_and_indices) {
 	EXPECT_EQ(1700000100, child->getLastWrite());
 	auto file = child->findFile("file.bin");
 	ASSERT_NE(file, child->files.cend());
-	ASSERT_TRUE(file->realPath);
-	EXPECT_EQ(*file->realPath, sharePath + "Child" PATH_SEPARATOR_STR "file.bin");
+	// Derived from the directories (one folder shares this name), so not stored per file.
+	EXPECT_FALSE(file->realPath);
+	EXPECT_EQ(file->getRealPath(), sharePath + "Child" PATH_SEPARATOR_STR "file.bin");
 	EXPECT_EQ(1700000200, file->getLastWrite());
 }
 
@@ -497,18 +503,6 @@ TEST_F(ShareCacheTest, queue_load_checks_deferred_items_when_scan_finished_first
 	});
 	ASSERT_TRUE(sawItem);
 	EXPECT_TRUE(qm->getTargets(shared.tth).empty());
-}
-
-TEST_F(ShareCacheTest, skips_cache_for_unc_share_roots) {
-	populateShare();
-	ShareManager::getInstance()->saveShareCache();
-
-	clearLoadedShare();
-	ShareManager::getInstance()->shares.clear();
-	ShareManager::getInstance()->shares["\\\\server\\share\\"] = "Virtual";
-
-	EXPECT_FALSE(ShareManager::getInstance()->loadShareCache());
-	EXPECT_EQ(ShareManager::getInstance()->getSharedFiles(), 0U);
 }
 
 TEST_F(ShareCacheTest, temp_shares_are_searchable_and_downloadable_only_on_their_route) {
@@ -1290,7 +1284,7 @@ TEST_F(ShareCacheTest, stale_attachment_completion_reports_clear_and_cannot_read
 TEST_F(ShareCacheTest, streams_full_xml_with_correct_uncompressed_size) {
 	populateShare();
 	auto sm = ShareManager::getInstance();
-	sm->forceXmlRefresh = true;
+	++sm->listForce;
 	auto opened = sm->openXmlList("adc://stream.example");
 	string xml;
 	char buffer[37];
@@ -1336,7 +1330,7 @@ TEST_F(ShareCacheTest, private_storage_cannot_be_added_as_public_or_temporary_sh
 	const auto file = cacheFile(root + "private.txt", "private");
 	SettingsManager::getInstance()->set(SettingsManager::ENABLE_RTF_TEMP_SHARES, true);
 	EXPECT_THROW(sm->addDirectory(root, "Private"), ShareException);
-	EXPECT_FALSE(sm->checkInvalidPaths(root));
+	EXPECT_TRUE(pft::PrivatePathScanner().isPrivateRoot(root));
 	EXPECT_FALSE(sm->addValidatedTempShare(file.path, file.size, file.timestamp, file.tth, "adcs://test.invalid", false));
 	EXPECT_FALSE(sm->addValidatedTempShare(file.path, file.size, file.timestamp, file.tth, "adcs://test.invalid", true));
 	EXPECT_TRUE(sm->getTempShares().empty());
@@ -1347,15 +1341,23 @@ TEST_F(ShareCacheTest, private_markers_block_stale_resolution_refresh_and_cache_
 	auto sm = ShareManager::getInstance();
 	const auto path = sharePath + "Child" PATH_SEPARATOR_STR "file.bin";
 	File(path + ":DCPlusPlus.PrivateSend", File::WRITE, File::CREATE | File::TRUNCATE).write("PFT1");
+	// Never served, by TTH or by path, although the shared tree still lists it.
 	EXPECT_THROW(sm->toRealWithSize("TTH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), ShareException);
 	EXPECT_THROW(sm->resolveFile("TTH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "adcs://test.invalid"), ShareException);
+	EXPECT_THROW(sm->resolveFile("/Virtual/Child/file.bin", "adcs://test.invalid"), ShareException);
+	// A scan doesn't open every file; the marked file gets no hash (it isn't in the hash store,
+	// and the hasher refuses it), so it isn't listed, searchable or indexed.
 	const auto refreshed = sm->buildTree(sharePath);
 	ASSERT_EQ(1u, refreshed->directories.size());
-	EXPECT_TRUE(refreshed->directories.begin()->second->files.empty());
+	for(const auto& file: refreshed->directories.begin()->second->files) {
+		EXPECT_FALSE(file.tth) << file.getName();
+	}
+	// A cache written before the marker appeared still can't serve it.
 	sm->saveShareCache();
 	clearLoadedShare();
 	ASSERT_TRUE(sm->loadShareCache());
-	EXPECT_TRUE(sm->tthIndex.empty());
+	EXPECT_THROW(sm->resolveFile("TTH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "adcs://test.invalid"), ShareException);
+	EXPECT_THROW(sm->toRealWithSize("TTH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), ShareException);
 }
 
 TEST_F(ShareCacheTest, scan_excludes_file_symlinks_into_private_storage) {
@@ -1465,4 +1467,850 @@ TEST_F(ShareCacheTest, folders_added_during_a_refresh_are_not_lost) {
 	ASSERT_TRUE(waitForShareScans());
 	EXPECT_EQ(2u, sm->getDirectories().size());
 	EXPECT_EQ(first.size + second.size, sm->getShareSize());
+}
+
+TEST_F(ShareCacheTest, hash_finished_during_a_scan_reaches_the_scanned_tree) {
+	// Scans no longer pause hashing. A file the scan reads before its hash is done can finish
+	// hashing before the scanned tree replaces the live one; that hash must not be lost.
+	auto sm = ShareManager::getInstance();
+	const string contents = "hashed while the scan ran";
+	const auto path = sharePath + "late.bin";
+	std::ofstream(path, std::ios::binary) << contents;
+	TigerTree tree(HashManager::MIN_BLOCK_SIZE);
+	tree.update(contents.data(), contents.size());
+	tree.finalize();
+	File file(path, File::READ, File::OPEN | File::SHARED);
+	const auto size = file.getSize();
+	const auto timestamp = static_cast<uint32_t>(file.getLastModified());
+	file.close();
+
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+		sm->recordScanHashes = true;
+	}
+	auto scanned = sm->buildTree(sharePath);
+	scanned->setName("Virtual");
+	ASSERT_NE(scanned->findFile("late.bin"), scanned->files.end());
+	EXPECT_FALSE(scanned->findFile("late.bin")->tth);
+
+	// The hash finishes while the old (empty) tree is still live.
+	sm->on(HashManagerListener::TTHDone(), path, tree.getRoot(), size, timestamp, 0);
+	EXPECT_FALSE(sm->isTTHShared(tree.getRoot()));
+
+	{
+		WLock l(sm->cs);
+		sm->merge(scanned, sharePath);
+		sm->rebuildIndices();
+		sm->replayScanHashes();
+	}
+	EXPECT_TRUE(sm->isTTHShared(tree.getRoot()));
+	EXPECT_EQ(size, sm->getShareSize());
+}
+
+TEST_F(ShareCacheTest, scan_hash_replay_skips_a_file_changed_after_hashing) {
+	auto sm = ShareManager::getInstance();
+	const auto path = sharePath + "changed.bin";
+	std::ofstream(path, std::ios::binary) << "new contents";
+	const TTHValue oldRoot("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+
+	auto scanned = sm->buildTree(sharePath);
+	scanned->setName("Virtual");
+	const auto lastWrite = scanned->findFile("changed.bin")->getLastWrite();
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+		sm->merge(scanned, sharePath);
+		// A hash of an earlier version of the file, with an older timestamp.
+		sm->scanHashes.push_back({ path, oldRoot, 12, static_cast<uint32_t>(lastWrite - 60) });
+		sm->rebuildIndices();
+		sm->replayScanHashes();
+	}
+	EXPECT_FALSE(sm->isTTHShared(oldRoot));
+}
+
+TEST_F(ShareCacheTest, refresh_does_not_pause_hashing) {
+	auto sm = ShareManager::getInstance();
+	std::ofstream(sharePath + "file.bin") << "data";
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	std::atomic<bool> pausedDuringScan { false };
+	std::atomic<bool> scanning { true };
+	std::thread probe([&] {
+		while(scanning) {
+			if(HashManager::getInstance()->isHashingPaused()) pausedDuringScan = true;
+			std::this_thread::yield();
+		}
+	});
+	sm->refresh(true, false, true);
+	scanning = false;
+	probe.join();
+	EXPECT_FALSE(pausedDuringScan);
+	EXPECT_FALSE(HashManager::getInstance()->isHashingPaused());
+	WLock l(sm->cs);
+	EXPECT_FALSE(sm->recordScanHashes);
+	EXPECT_TRUE(sm->scanHashes.empty());
+}
+
+namespace {
+
+struct HashProbe : public HashManagerListener {
+	struct Event {
+		bool done;
+		string path;
+		int64_t size;
+		uint32_t timestamp;
+		uint64_t jobId;
+		HashManagerListener::Failure reason;
+	};
+	std::mutex mutex;
+	std::condition_variable changed;
+	vector<Event> events;
+
+	void on(TTHDone, const string& path, const TTHValue&, int64_t size, uint32_t timestamp, uint64_t jobId) noexcept override {
+		std::lock_guard<std::mutex> l(mutex);
+		events.push_back({ true, path, size, timestamp, jobId, HashManagerListener::Failure::FILE_IO });
+		changed.notify_all();
+	}
+	void on(TTHFailed, const string& path, int64_t size, uint32_t timestamp, uint64_t jobId,
+		HashManagerListener::Failure reason, const string&) noexcept override
+	{
+		std::lock_guard<std::mutex> l(mutex);
+		events.push_back({ false, path, size, timestamp, jobId, reason });
+		changed.notify_all();
+	}
+	bool waitFor(size_t count) {
+		std::unique_lock<std::mutex> l(mutex);
+		return changed.wait_for(l, std::chrono::seconds(20), [&] { return events.size() >= count; });
+	}
+};
+
+struct FileSnapshot {
+	int64_t size;
+	uint32_t timestamp;
+};
+
+FileSnapshot snapshotOf(const string& path) {
+	File file(path, File::READ, File::OPEN | File::SHARED);
+	return { file.getSize(), file.getLastModified() };
+}
+
+TigerTree treeOf(const string& contents) {
+	TigerTree tree(HashManager::MIN_BLOCK_SIZE);
+	tree.update(contents.data(), contents.size());
+	tree.finalize();
+	return tree;
+}
+
+void writeFile(const string& path, const string& contents) {
+	std::ofstream(path, std::ios::binary | std::ios::trunc) << contents;
+}
+
+void markPrivate(const string& path) {
+	File(path + ":DCPlusPlus.PrivateSend", File::WRITE, File::CREATE | File::TRUNCATE).write("PFT1");
+}
+
+const ShareManager::Directory::File* findShared(const ShareManager::Directory& dir, const string& name) {
+	auto i = dir.findFile(name);
+	return i == dir.files.end() ? nullptr : &*i;
+}
+
+#ifdef _WIN32
+string toAdminShare(const string& localPath) {
+	return string("\\\\localhost\\") + localPath[0] + "$" + localPath.substr(2);
+}
+#endif
+
+}
+
+TEST_F(ShareCacheTest, scan_checks_markers_once_for_files_hashed_before_marker_checks) {
+	auto sm = ShareManager::getInstance();
+	auto hm = HashManager::getInstance();
+	const auto plain = sharePath + "old.bin";
+	const auto marked = sharePath + "old-private.bin";
+	writeFile(plain, "hashed by an older version");
+	writeFile(marked, "privately received, hashed by an older version");
+	markPrivate(marked);
+	for(const auto& path: { plain, marked }) {
+		const auto snapshot = snapshotOf(path);
+		Lock l(hm->cs);
+		hm->store.addFile(path, snapshot.timestamp, treeOf(path == plain ? "hashed by an older version" :
+			"privately received, hashed by an older version"), false, false);
+	}
+
+	const auto tree = sm->buildTree(sharePath);
+	ASSERT_TRUE(findShared(*tree, "old.bin"));
+	EXPECT_TRUE(findShared(*tree, "old.bin")->tth);
+	EXPECT_FALSE(findShared(*tree, "old-private.bin"));
+
+	bool checked = false;
+	const auto plainSnapshot = snapshotOf(plain);
+	const auto markedSnapshot = snapshotOf(marked);
+	Lock l(hm->cs);
+	EXPECT_TRUE(hm->store.getTTH(plain, plainSnapshot.size, plainSnapshot.timestamp, &checked));
+	EXPECT_TRUE(checked);
+	checked = true;
+	EXPECT_TRUE(hm->store.getTTH(marked, markedSnapshot.size, markedSnapshot.timestamp, &checked));
+	EXPECT_FALSE(checked);
+}
+
+TEST_F(ShareCacheTest, hasher_refuses_privately_received_files_and_hashes_changed_files_as_they_are) {
+	auto hm = HashManager::getInstance();
+	hm->startup([](float) {});
+	HashProbe probe;
+	hm->addListener(&probe);
+
+	const auto privateFile = configPath + "received.bin";
+	writeFile(privateFile, "private bytes");
+	markPrivate(privateFile);
+	const auto privateSnapshot = snapshotOf(privateFile);
+	EXPECT_FALSE(hm->requestTTH(privateFile, privateSnapshot.size, privateSnapshot.timestamp).tth);
+	ASSERT_TRUE(probe.waitFor(1));
+
+	// Requested with a stale time, as a network listing can report it.
+	const auto changed = configPath + "changed.bin";
+	writeFile(changed, "current content");
+	const auto current = snapshotOf(changed);
+	const auto request = hm->requestTTH(changed, current.size, current.timestamp - 10);
+	ASSERT_TRUE(probe.waitFor(3));
+	hm->removeListener(&probe);
+
+	EXPECT_FALSE(probe.events[0].done);
+	EXPECT_EQ(HashManagerListener::Failure::PRIVATE_FILE, probe.events[0].reason);
+	EXPECT_FALSE(hm->findTTH(privateFile, privateSnapshot.size, privateSnapshot.timestamp));
+
+	// The requested snapshot gets a definite answer, then the file is hashed as it is.
+	EXPECT_FALSE(probe.events[1].done);
+	EXPECT_EQ(HashManagerListener::Failure::FILE_CHANGED, probe.events[1].reason);
+	EXPECT_EQ(request.jobId, probe.events[1].jobId);
+	EXPECT_TRUE(probe.events[2].done);
+	EXPECT_EQ(current.timestamp, probe.events[2].timestamp);
+	EXPECT_EQ(treeOf("current content").getRoot(), *hm->findTTH(changed, current.size, current.timestamp));
+}
+
+TEST_F(ShareCacheTest, hash_queue_keeps_totals_and_cancels_one_folder) {
+	auto hm = HashManager::getInstance();
+	const auto a = configPath + "One" PATH_SEPARATOR_STR "a.bin";
+	const auto b = configPath + "One" PATH_SEPARATOR_STR "b.bin";
+	const auto c = configPath + "Two" PATH_SEPARATOR_STR "c.bin";
+	const auto first = hm->queueHash(a, 10, 1);
+	EXPECT_EQ(first, hm->queueHash(a, 10, 1));
+	const auto second = hm->queueHash(a, 20, 2);
+	EXPECT_NE(first, second);
+	EXPECT_EQ(second, hm->queueHash(a, 20, 2));
+	hm->queueHash(b, 30, 3);
+	hm->queueHash(c, 40, 4);
+
+	string current;
+	uint64_t bytes = 0;
+	size_t files = 0;
+	hm->getStats(current, bytes, files);
+	EXPECT_EQ(4u, files);
+	EXPECT_EQ(100u, bytes);
+
+	HashProbe probe;
+	hm->addListener(&probe);
+	hm->stopHashing(configPath + "One" PATH_SEPARATOR_STR);
+	hm->removeListener(&probe);
+	EXPECT_EQ(3u, probe.events.size());
+	hm->getStats(current, bytes, files);
+	EXPECT_EQ(1u, files);
+	EXPECT_EQ(40u, bytes);
+}
+
+TEST_F(ShareCacheTest, hash_volumes_come_from_the_path_alone) {
+#ifdef _WIN32
+	EXPECT_EQ("c:", HashManager::getVolume("C:\\Media\\a.bin"));
+	EXPECT_EQ("c:", HashManager::getVolume("\\\\?\\C:\\Media\\a.bin"));
+	EXPECT_EQ("d:", HashManager::getVolume("d:\\a.bin"));
+	EXPECT_EQ("\\\\nas\\media", HashManager::getVolume("\\\\NAS\\Media\\Album\\a.flac"));
+	EXPECT_EQ("\\\\nas\\media", HashManager::getVolume("\\\\?\\UNC\\nas\\media\\a.flac"));
+	EXPECT_EQ("\\\\nas\\media", HashManager::getVolume("\\\\nas\\media"));
+	EXPECT_EQ("\\\\nas\\other", HashManager::getVolume("\\\\nas\\other\\a.flac"));
+	EXPECT_EQ("", HashManager::getVolume("\\\\nas"));
+	EXPECT_EQ("", HashManager::getVolume("\\\\nas\\"));
+	EXPECT_EQ("", HashManager::getVolume("relative\\a.bin"));
+#endif
+}
+
+TEST_F(ShareCacheTest, hash_queue_uses_one_hasher_per_volume_up_to_the_setting) {
+	auto hm = HashManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::MAX_HASH_VOLUMES, 2);
+	// The hasher threads aren't started here, so everything stays queued.
+	const string a = "\\\\nas\\a\\", b = "\\\\nas\\b\\", c = "\\\\nas\\c\\";
+	const auto a1 = hm->queueHash(a + "1.bin", 1000, 1);
+	ASSERT_EQ(1u, hm->hashers.size());
+	const auto b1 = hm->queueHash(b + "1.bin", 10, 1);
+	// A second volume gets a hasher of its own.
+	ASSERT_EQ(2u, hm->hashers.size());
+	EXPECT_TRUE(hm->hashers[0]->hasVolume(HashManager::getVolume(a)));
+	EXPECT_TRUE(hm->hashers[1]->hasVolume(HashManager::getVolume(b)));
+	EXPECT_FALSE(hm->hashers[0]->hasVolume(HashManager::getVolume(b)));
+
+	// Further files of a volume go to its hasher; the same file is still one job.
+	const auto a2 = hm->queueHash(a + "2.bin", 1000, 1);
+	EXPECT_EQ(a1, hm->queueHash(a + "1.bin", 1000, 1));
+	EXPECT_EQ(2u, hm->hashers[0]->queuedFiles);
+	EXPECT_EQ(1u, hm->hashers[1]->queuedFiles);
+
+	// At the limit, a third volume shares the least loaded hasher.
+	const auto c1 = hm->queueHash(c + "1.bin", 5, 1);
+	ASSERT_EQ(2u, hm->hashers.size());
+	EXPECT_TRUE(hm->hashers[1]->hasVolume(HashManager::getVolume(c)));
+	EXPECT_EQ(2u, hm->hashers[1]->queuedFiles);
+	// Job ids are unique across hashers.
+	EXPECT_EQ(4u, (std::set<uint64_t> { a1, a2, b1, c1 }).size());
+
+	string current;
+	uint64_t bytes = 0;
+	size_t files = 0;
+	hm->getStats(current, bytes, files);
+	EXPECT_EQ(4u, files);
+	EXPECT_EQ(2015u, bytes);
+
+	// Cancelling a folder frees its volume.
+	HashProbe probe;
+	hm->addListener(&probe);
+	hm->stopHashing(b);
+	hm->removeListener(&probe);
+	ASSERT_EQ(1u, probe.events.size());
+	EXPECT_EQ(b1, probe.events[0].jobId);
+	EXPECT_FALSE(hm->hashers[1]->hasVolume(HashManager::getVolume(b)));
+	EXPECT_TRUE(hm->hashers[1]->hasVolume(HashManager::getVolume(c)));
+	hm->stopHashing(c);
+	EXPECT_TRUE(hm->hashers[1]->isIdle());
+	EXPECT_FALSE(hm->hashers[0]->isIdle());
+
+	// An idle hasher takes the next new volume; no hasher is added.
+	hm->queueHash(b + "2.bin", 10, 1);
+	EXPECT_TRUE(hm->hashers[1]->hasVolume(HashManager::getVolume(b)));
+	EXPECT_EQ(2u, hm->hashers.size());
+}
+
+TEST_F(ShareCacheTest, one_hasher_reads_every_volume_when_the_setting_is_one) {
+	auto hm = HashManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::MAX_HASH_VOLUMES, 1);
+	hm->queueHash("\\\\nas\\a\\1.bin", 10, 1);
+	hm->queueHash("\\\\nas\\b\\1.bin", 10, 1);
+	hm->queueHash("C:\\Media\\1.bin", 10, 1);
+	EXPECT_EQ(1u, hm->hashers.size());
+	EXPECT_EQ(3u, hm->hashers[0]->queuedFiles);
+}
+
+TEST_F(ShareCacheTest, pausing_hashing_pauses_every_hasher_including_new_ones) {
+	auto hm = HashManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::MAX_HASH_VOLUMES, 3);
+	hm->queueHash("\\\\nas\\a\\1.bin", 10, 1);
+	hm->queueHash("\\\\nas\\b\\1.bin", 10, 1);
+	EXPECT_FALSE(hm->pauseHashing());
+	EXPECT_TRUE(hm->isHashingPaused());
+	// Added while paused: starts paused.
+	hm->queueHash("\\\\nas\\c\\1.bin", 10, 1);
+	ASSERT_EQ(3u, hm->hashers.size());
+	for(const auto& hasher: hm->hashers) {
+		EXPECT_TRUE(hasher->isPaused());
+	}
+	EXPECT_TRUE(hm->pauseHashing());
+	hm->resumeHashing();
+	for(const auto& hasher: hm->hashers) {
+		EXPECT_TRUE(hasher->isPaused());
+	}
+	hm->resumeHashing();
+	EXPECT_FALSE(hm->isHashingPaused());
+	for(const auto& hasher: hm->hashers) {
+		EXPECT_FALSE(hasher->isPaused());
+	}
+}
+
+#ifdef _WIN32
+TEST_F(ShareCacheTest, two_volumes_are_hashed_by_two_hashers) {
+	// The administrative share is another volume path to the same disk.
+	const auto unc = toAdminShare(sharePath);
+	if(!File::isDirectory(unc)) {
+		GTEST_SKIP() << "The administrative share " << unc << " is not reachable";
+	}
+	auto hm = HashManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::MAX_HASH_VOLUMES, 2);
+	// Queued while paused, so each hasher still has its volume when the queue is checked.
+	hm->pauseHashing();
+	hm->startup([](float) {});
+	HashProbe probe;
+	hm->addListener(&probe);
+
+	vector<pair<string, string>> files;
+	for(int i = 0; i < 8; ++i) {
+		const auto name = "volume file " + std::to_string(i) + ".bin";
+		const auto contents = "contents " + std::to_string(i) + string(100000 + i * 1000, static_cast<char>('a' + i));
+		writeFile(sharePath + name, contents);
+		files.emplace_back((i % 2 ? unc : sharePath) + name, contents);
+	}
+	for(const auto& file: files) {
+		const auto snapshot = snapshotOf(file.first);
+		EXPECT_FALSE(hm->requestTTH(file.first, snapshot.size, snapshot.timestamp).tth);
+	}
+	ASSERT_EQ(2u, hm->hashers.size());
+	EXPECT_TRUE(hm->hashers[0]->hasVolume(HashManager::getVolume(sharePath)));
+	EXPECT_TRUE(hm->hashers[1]->hasVolume(HashManager::getVolume(unc)));
+
+	hm->resumeHashing();
+	ASSERT_TRUE(probe.waitFor(files.size()));
+	hm->removeListener(&probe);
+	for(const auto& event: probe.events) {
+		EXPECT_TRUE(event.done) << event.path;
+	}
+	for(const auto& file: files) {
+		const auto snapshot = snapshotOf(file.first);
+		const auto tth = hm->findTTH(file.first, snapshot.size, snapshot.timestamp);
+		ASSERT_TRUE(tth) << file.first;
+		EXPECT_EQ(treeOf(file.second).getRoot(), *tth) << file.first;
+	}
+	for(int i = 0; i < 100 && !(hm->hashers[0]->isIdle() && hm->hashers[1]->isIdle()); ++i) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	EXPECT_TRUE(hm->hashers[0]->isIdle());
+	EXPECT_TRUE(hm->hashers[1]->isIdle());
+}
+#endif
+
+TEST_F(ShareCacheTest, unavailable_share_root_keeps_its_previous_contents) {
+	auto sm = ShareManager::getInstance();
+	const auto root = configPath + "Removable" PATH_SEPARATOR_STR;
+	std::filesystem::create_directories(root + "Album");
+	writeFile(root + "Album" PATH_SEPARATOR_STR "track.flac", "audio");
+	{
+		WLock l(sm->cs);
+		sm->shares[root] = "Removable";
+	}
+	sm->refresh(true, false, true);
+	auto shared = [&] {
+		WLock l(sm->cs);
+		auto dir = sm->directories.find("Removable");
+		if(dir == sm->directories.end()) return false;
+		auto album = dir->second->directories.find("Album");
+		return album != dir->second->directories.end() && findShared(*album->second, "track.flac") != nullptr;
+	};
+	ASSERT_TRUE(shared());
+
+	// The drive or server goes away: a refresh must not empty the share.
+	std::filesystem::rename(root, configPath + "Unplugged");
+	sm->refresh(true, false, true);
+	EXPECT_TRUE(shared());
+
+	// Back again, and changed: the next refresh picks it up.
+	std::filesystem::rename(configPath + "Unplugged", root);
+	std::filesystem::remove(root + "Album" PATH_SEPARATOR_STR "track.flac");
+	sm->refresh(true, false, true);
+	EXPECT_FALSE(shared());
+}
+
+TEST_F(ShareCacheTest, automatic_refresh_waits_at_least_as_long_as_the_last_refresh_took) {
+	auto sm = ShareManager::getInstance();
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	sm->refresh(true, false, true);
+	const uint64_t finished = sm->lastFullUpdate;
+	const uint64_t interval = static_cast<uint64_t>(SETTING(AUTO_REFRESH_TIME)) * 60 * 1000;
+	ASSERT_GT(interval, 0u);
+
+	// A scan that took two intervals pushes the next one back by two intervals.
+	sm->lastRefreshDuration = 2 * interval;
+	sm->on(TimerManagerListener::Minute(), finished + interval + 1);
+	EXPECT_FALSE(sm->isRefreshing());
+	EXPECT_EQ(finished, sm->lastFullUpdate.load());
+
+	sm->on(TimerManagerListener::Minute(), finished + 2 * interval);
+	for(int i = 0; i < 1000 && (sm->isRefreshing() || sm->lastFullUpdate == finished); ++i)
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	EXPECT_NE(finished, sm->lastFullUpdate.load());
+	sm->join();
+}
+
+TEST_F(ShareCacheTest, stopping_abandons_a_scan_and_keeps_the_share) {
+	auto sm = ShareManager::getInstance();
+	for(int i = 0; i < 50; ++i)
+		writeFile(sharePath + "file" + std::to_string(i) + ".bin", "x");
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	sm->refresh(true, false, true);
+	{
+		WLock l(sm->cs);
+		ASSERT_EQ(50u, sm->directories["Virtual"]->files.size());
+	}
+	sm->stopping = true;
+	pft::PrivatePathScanner privacy;
+	ShareManager::Directory::Ptr tree;
+	EXPECT_FALSE(sm->scanRoot(privacy, sharePath, "Virtual", tree));
+	sm->refresh(true, false, true);
+	sm->stopping = false;
+	WLock l(sm->cs);
+	EXPECT_EQ(50u, sm->directories["Virtual"]->files.size());
+}
+
+TEST_F(ShareCacheTest, finished_download_replaces_the_shared_entry_and_is_indexed) {
+	auto sm = ShareManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::ADD_FINISHED_INSTANTLY, true);
+	const auto path = sharePath + "download.bin";
+	writeFile(path, "first version");
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	const auto oldFile = cacheFile(path, "first version");
+	sm->refresh(true, false, true);
+	ASSERT_TRUE(sm->isTTHShared(oldFile.tth));
+
+	// Downloaded again over the shared file.
+	const auto newFile = cacheFile(path, "second, longer version");
+	sm->on(QueueManagerListener::FileMoved(), path);
+
+	EXPECT_TRUE(sm->isTTHShared(newFile.tth));
+	EXPECT_FALSE(sm->isTTHShared(oldFile.tth));
+	WLock l(sm->cs);
+	const auto& files = sm->directories["Virtual"]->files;
+	ASSERT_EQ(1u, files.size());
+	EXPECT_EQ(newFile.size, files.begin()->getSize());
+	EXPECT_EQ(newFile.tth, *files.begin()->tth);
+	EXPECT_EQ(files.begin()->getSize(), sm->getShareSize());
+}
+
+TEST_F(ShareCacheTest, uploads_during_a_refresh_use_the_stored_hash_instead_of_rehashing) {
+	auto sm = ShareManager::getInstance();
+	auto um = UploadManager::getInstance();
+	auto hm = HashManager::getInstance();
+	const auto path = sharePath + "upload.bin";
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	const auto file = cacheFile(path, "requested while the share refreshes");
+	sm->refresh(true, false, true);
+	ASSERT_TRUE(sm->isTTHShared(file.tth));
+	{
+		Lock l(hm->cs);
+		hm->verificationCache.clear();
+	}
+
+	ShareManager::refreshActive = true;
+	UserConnection connection(false);
+	connection.setHubUrl("adc://hub.example.invalid");
+	connection.setUser(ClientManager::getInstance()->getUser(CID::generate()));
+	const bool prepared = um->prepareFile(connection, Transfer::names[Transfer::TYPE_FILE], "TTH/" + file.tth.toBase32(), 0, -1);
+	ShareManager::refreshActive = false;
+	ASSERT_TRUE(prepared);
+	{
+		Lock l(um->cs);
+		EXPECT_EQ(path, um->uploads.back()->getPath());
+		um->removeUpload(um->uploads.back());
+	}
+	// Served on the stored record's word; the file wasn't read again.
+	Lock l(hm->cs);
+	EXPECT_TRUE(hm->verificationCache.empty());
+}
+
+#ifdef _WIN32
+TEST_F(ShareCacheTest, unc_shares_can_be_added_and_are_scanned) {
+	const auto unc = toAdminShare(sharePath);
+	if(!File::isDirectory(unc)) {
+		GTEST_SKIP() << "The administrative share " << unc << " is not reachable";
+	}
+	auto sm = ShareManager::getInstance();
+	std::filesystem::create_directories(sharePath + "Sub");
+	writeFile(sharePath + "Sub" PATH_SEPARATOR_STR "network.bin", "over SMB");
+
+	// The old private-storage check treated every UNC path as private.
+	EXPECT_FALSE(pft::isPrivatePath(unc));
+	EXPECT_FALSE(pft::PrivatePathScanner().isPrivateRoot(unc));
+	ASSERT_NO_THROW(sm->addDirectory(unc, "Network"));
+	ASSERT_TRUE(waitForShareScans());
+	{
+		WLock l(sm->cs);
+		auto dir = sm->directories.find("Network");
+		ASSERT_NE(sm->directories.end(), dir);
+		auto sub = dir->second->directories.find("Sub");
+		ASSERT_NE(dir->second->directories.end(), sub);
+		EXPECT_TRUE(findShared(*sub->second, "network.bin"));
+	}
+
+	// Private storage reached through the administrative share is still private.
+	const auto storage = pft::storageRoot();
+	std::filesystem::create_directories(storage + "Received");
+	writeFile(storage + "Received" PATH_SEPARATOR_STR "inside.txt", "private");
+	EXPECT_TRUE(pft::PrivatePathScanner().isPrivateRoot(toAdminShare(storage)));
+	EXPECT_TRUE(pft::PrivatePathScanner().isPrivateRoot(toAdminShare(storage + "Received" PATH_SEPARATOR_STR)));
+	EXPECT_TRUE(pft::isPrivatePath(toAdminShare(storage + "Received" PATH_SEPARATOR_STR "inside.txt")));
+	EXPECT_THROW(sm->addDirectory(toAdminShare(storage), "Private"), ShareException);
+}
+
+TEST_F(ShareCacheTest, cache_loads_for_unc_share_roots) {
+	const auto unc = toAdminShare(sharePath);
+	if(!File::isDirectory(unc)) {
+		GTEST_SKIP() << "The administrative share " << unc << " is not reachable";
+	}
+	auto sm = ShareManager::getInstance();
+	const auto file = cacheFile(sharePath + "cached.bin", "from the share cache");
+	{
+		WLock l(sm->cs);
+		sm->shares[unc] = "Network";
+	}
+	const auto uncFile = unc + "cached.bin";
+	ASSERT_TRUE(HashManager::getInstance()->verifyFileTTH(uncFile, file.size, file.tth));
+	sm->refresh(true, false, true);
+	ASSERT_TRUE(sm->isTTHShared(file.tth));
+	clearLoadedShare();
+	ASSERT_TRUE(sm->loadShareCache());
+	EXPECT_TRUE(sm->isTTHShared(file.tth));
+}
+#endif
+
+TEST(SFVDirectoryReaderTest, reads_each_directory_once_and_agrees_with_sfv_reader) {
+	const auto base = std::filesystem::temp_directory_path() /
+		("dcpp-sfv-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(base / "one");
+	std::filesystem::create_directories(base / "two");
+	const auto one = (base / "one").u8string() + PATH_SEPARATOR_STR;
+	const auto two = (base / "two").u8string() + PATH_SEPARATOR_STR;
+	writeFile(one + "a.sfv", "; comment\r\nfirst.bin 1234abcd\r\nsecond.bin\tdeadbeef\r\n");
+	writeFile(one + "b.sfv", "third.bin 00000042\r\n");
+	writeFile(two + "c.sfv", "first.bin cafef00d\r\n");
+
+	SFVDirectoryReader reader;
+	for(const auto& path: { one + "first.bin", one + "second.bin", one + "third.bin", one + "missing.bin",
+		two + "first.bin", two + "second.bin" })
+	{
+		SFVReader single(path);
+		uint32_t crc = 0;
+		EXPECT_EQ(single.hasCRC(), reader.getCRC(path, crc)) << path;
+		if(single.hasCRC()) {
+			EXPECT_EQ(single.getCRC(), crc) << path;
+		}
+	}
+	uint32_t crc = 0;
+	EXPECT_TRUE(reader.getCRC(one + "third.bin", crc));
+	EXPECT_EQ(0x42u, crc);
+	std::error_code ec;
+	std::filesystem::remove_all(base, ec);
+}
+
+TEST_F(ShareCacheTest, finished_downloads_are_registered_as_hashed_when_their_tree_is_known) {
+	auto sm = ShareManager::getInstance();
+	auto hm = HashManager::getInstance();
+	SettingsManager::getInstance()->set(SettingsManager::ADD_FINISHED_INSTANTLY, true);
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	sm->refresh(true, false, true);
+
+	// Larger than one block, with its full tree stored as a download does before the data.
+	string large(3 * HashManager::MIN_BLOCK_SIZE + 123, 'L');
+	TigerTree largeTree(HashManager::MIN_BLOCK_SIZE);
+	largeTree.update(large.data(), large.size());
+	largeTree.finalize();
+	ASSERT_TRUE(hm->addTree(largeTree));
+	const auto largeTemp = configPath + "large.dctmp";
+	writeFile(largeTemp, large);
+	QueueManager::moveFile_(largeTemp, sharePath + "large.bin", largeTree.getRoot());
+	const auto largeSnapshot = snapshotOf(sharePath + "large.bin");
+	EXPECT_EQ(largeTree.getRoot(), hm->findTTH(sharePath + "large.bin", largeSnapshot.size, largeSnapshot.timestamp));
+	EXPECT_TRUE(sm->isTTHShared(largeTree.getRoot()));
+
+	// One block: the root alone describes it.
+	const auto small = treeOf("small download");
+	writeFile(configPath + "small.dctmp", "small download");
+	QueueManager::moveFile_(configPath + "small.dctmp", sharePath + "small.bin", small.getRoot());
+	EXPECT_TRUE(sm->isTTHShared(small.getRoot()));
+
+	// Larger than one block without its tree: hashed as usual, never assumed.
+	string unknown(2 * HashManager::MIN_BLOCK_SIZE, 'U');
+	TigerTree unknownTree(HashManager::MIN_BLOCK_SIZE);
+	unknownTree.update(unknown.data(), unknown.size());
+	unknownTree.finalize();
+	writeFile(configPath + "unknown.dctmp", unknown);
+	QueueManager::moveFile_(configPath + "unknown.dctmp", sharePath + "unknown.bin", unknownTree.getRoot());
+	const auto unknownSnapshot = snapshotOf(sharePath + "unknown.bin");
+	EXPECT_FALSE(hm->findTTH(sharePath + "unknown.bin", unknownSnapshot.size, unknownSnapshot.timestamp));
+	EXPECT_FALSE(sm->isTTHShared(unknownTree.getRoot()));
+}
+
+TEST_F(ShareCacheTest, merged_names_resolve_every_folders_files_after_refresh_and_cache_load) {
+	auto sm = ShareManager::getInstance();
+	const auto sep = string(PATH_SEPARATOR_STR);
+	std::filesystem::create_directories(sharePath + "Common");
+	std::filesystem::create_directories(secondSharePath + "Common");
+	writeFile(sharePath + "only1.bin", "first only");
+	writeFile(sharePath + "Common" + sep + "a.bin", "first a");
+	writeFile(secondSharePath + "only2.bin", "second only");
+	writeFile(secondSharePath + "Common" + sep + "a.bin", "second a");
+	writeFile(secondSharePath + "Common" + sep + "b.bin", "second b");
+
+	// One folder first, whose files derive their paths; then a second joins the name.
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Media";
+	}
+	sm->refresh(true, false, true);
+	ASSERT_NO_THROW(sm->addDirectory(secondSharePath, "Media"));
+	ASSERT_TRUE(waitForShareScans());
+
+	auto check = [&](const char* when) {
+		SCOPED_TRACE(when);
+		EXPECT_EQ(sharePath + "only1.bin", sm->toReal("/Media/only1.bin"));
+		EXPECT_EQ(secondSharePath + "only2.bin", sm->toReal("/Media/only2.bin"));
+		EXPECT_EQ(secondSharePath + "Common" + sep + "b.bin", sm->toReal("/Media/Common/b.bin"));
+		// The two a.bin files: one keeps its name, the other is renamed; each resolves to its own.
+		std::set<string> paths { sm->toReal("/Media/Common/a.bin"), sm->toReal("/Media/Common/a (1).bin") };
+		EXPECT_EQ((std::set<string> { sharePath + "Common" + sep + "a.bin", secondSharePath + "Common" + sep + "a.bin" }), paths);
+	};
+	check("after adding the second folder");
+	sm->refresh(true, false, true);
+	check("after a full refresh");
+	sm->saveShareCache();
+	clearLoadedShare();
+	ASSERT_TRUE(sm->loadShareCache());
+	check("after loading the cache");
+}
+
+TEST_F(ShareCacheTest, searches_uploads_lists_hashes_and_refreshes_run_together) {
+	// The share lock is a reader/writer lock: searches, uploads, file lists and totals read in
+	// parallel while hash results and refreshes change the share. Run them all at once and check
+	// that nothing deadlocks, every reader sees a consistent share, and the indices add up.
+	auto sm = ShareManager::getInstance();
+	const string sep = PATH_SEPARATOR_STR;
+	const string hub = "adc://stress.example.invalid";
+	struct Stable { string path; int64_t size; TTHValue tth; };
+	vector<Stable> stable;
+	for(int d = 0; d < 3; ++d) {
+		std::filesystem::create_directories(sharePath + "Folder " + std::to_string(d));
+		for(int i = 0; i < 40; ++i) {
+			const auto path = sharePath + "Folder " + std::to_string(d) + sep + "stress file " + std::to_string(d * 100 + i) + ".bin";
+			const auto file = cacheFile(path, "stable contents " + std::to_string(d * 100 + i));
+			stable.push_back({ file.path, file.size, file.tth });
+		}
+	}
+	std::filesystem::create_directories(sharePath + "Changing");
+	vector<string> changing;
+	for(int i = 0; i < 8; ++i) {
+		changing.push_back(cacheFile(sharePath + "Changing" + sep + "changing " + std::to_string(i) + ".bin", "first " + std::to_string(i)).path);
+	}
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	sm->refresh(true, false, true);
+	for(const auto& f: stable) {
+		ASSERT_TRUE(sm->isTTHShared(f.tth));
+	}
+
+	std::atomic<bool> stop { false };
+	std::atomic<int> failures { 0 };
+	std::atomic<int> searches { 0 }, uploads { 0 }, lists { 0 }, hashes { 0 }, refreshes { 0 };
+	auto fail = [&](const string& what) {
+		if(failures++ < 5) ADD_FAILURE() << what;
+	};
+
+	vector<std::future<void>> workers;
+	for(int t = 0; t < 3; ++t) {
+		workers.push_back(std::async(std::launch::async, [&, t] {
+			while(!stop) {
+				auto results = t == 0 ? sm->search(string("stress$file"), SearchManager::SIZE_DONTCARE, 0, SearchManager::TYPE_ANY, 500, hub) :
+					t == 1 ? sm->search(StringList { "ANstress", "ANfile" }, 500, hub) :
+					sm->search(StringList { "ANstress" }, 500);
+				if(results.size() < stable.size()) fail("a search missed shared files: " + std::to_string(results.size()));
+				++searches;
+			}
+		}));
+	}
+	for(int t = 0; t < 2; ++t) {
+		workers.push_back(std::async(std::launch::async, [&, t] {
+			size_t i = t;
+			while(!stop) {
+				const auto& f = stable[i++ % stable.size()];
+				try {
+					auto real = t == 0 ? sm->toRealWithSize("TTH/" + f.tth.toBase32()) :
+						sm->toRealWithSize("TTH/" + f.tth.toBase32(), hub, CID::generate());
+					if(real.first != f.path || real.second != f.size) fail("an upload resolved to " + real.first);
+					auto paths = sm->getRealPaths(f.tth, hub, CID());
+					if(std::find(paths.begin(), paths.end(), f.path) == paths.end()) fail("getRealPaths lost " + f.path);
+					if(sm->toVirtual(f.tth).empty()) fail("toVirtual failed");
+				} catch(const Exception& e) {
+					fail("an upload failed: " + e.getError());
+				}
+				++uploads;
+			}
+		}));
+	}
+	workers.push_back(std::async(std::launch::async, [&] {
+		while(!stop) {
+			try {
+				++sm->listForce;
+				if(sm->getListFile(hub).empty()) fail("no file list");
+				std::unique_ptr<MemoryInputStream> partial(sm->generatePartialList("/Virtual/", true, hub));
+				if(!partial) fail("no partial list");
+				if(sm->getShareSize() <= 0 || sm->getSharedFiles() < stable.size()) fail("share totals dropped");
+				if(sm->getShareSizeForHub(hub) <= 0 || sm->getSharedFiles(hub) < stable.size()) fail("hub totals dropped");
+				ByteVector bloom;
+				sm->getBloom(bloom, 8, 4096, 24, hub);
+			} catch(const Exception& e) {
+				fail("a file list failed: " + e.getError());
+			}
+			++lists;
+		}
+	}));
+	workers.push_back(std::async(std::launch::async, [&] {
+		// Hash results that change the share: each changing file gets new contents and a new root.
+		int round = 0;
+		while(!stop) {
+			for(const auto& path: changing) {
+				const auto contents = "round " + std::to_string(++round) + " of " + path;
+				{
+					std::ofstream output(path, std::ios::binary | std::ios::trunc);
+					output << contents;
+				}
+				TigerTree tree(HashManager::MIN_BLOCK_SIZE);
+				tree.update(contents.data(), contents.size());
+				tree.finalize();
+				if(!HashManager::getInstance()->verifyFileTTH(path, static_cast<int64_t>(contents.size()), tree.getRoot()))
+					fail("hashing " + path + " failed");
+				++hashes;
+			}
+		}
+	}));
+	workers.push_back(std::async(std::launch::async, [&] {
+		while(!stop) {
+			sm->refresh(true, false, true);
+			++refreshes;
+		}
+	}));
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	stop = true;
+	for(auto& w: workers) {
+		ASSERT_EQ(std::future_status::ready, w.wait_for(std::chrono::seconds(60))) << "a worker is stuck (deadlock)";
+	}
+	EXPECT_EQ(0, failures.load());
+	EXPECT_GT(searches.load(), 0);
+	EXPECT_GT(uploads.load(), 0);
+	EXPECT_GT(lists.load(), 0);
+	EXPECT_GT(hashes.load(), 0);
+	EXPECT_GT(refreshes.load(), 0);
+	std::cout << "    " << searches << " searches, " << uploads << " upload lookups, " << lists << " file lists, "
+		<< hashes << " hash results, " << refreshes << " refreshes" << std::endl;
+
+	// The incremental totals match a recount.
+	WLock l(sm->cs);
+	int64_t bytes = 0;
+	for(const auto& item: sm->tthIndex) {
+		bytes += item.second->getSize();
+		EXPECT_EQ(item.first, *item.second->tth);
+	}
+	EXPECT_EQ(bytes, sm->sharedBytes);
+	for(const auto& f: stable) {
+		EXPECT_TRUE(sm->tthIndex.count(f.tth)) << f.path;
+	}
 }

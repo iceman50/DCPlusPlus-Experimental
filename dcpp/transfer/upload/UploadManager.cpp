@@ -92,12 +92,10 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 			if(aFile == Transfer::USER_LIST_NAME_BZ || aFile == Transfer::USER_LIST_NAME) {
 				if(aFile == Transfer::USER_LIST_NAME) {
 					sourceFile = _("File list");
-				} else if(ShareManager::getInstance()->hasCustomShare(aSource.getHubUrl())) {
-					preparedList.reset(ShareManager::getInstance()->generateFileList(
-						aSource.getHubUrl(), aFile == Transfer::USER_LIST_NAME_BZ));
-					sourceFile = _("File list");
 				} else {
-					sourceFile = ShareManager::getInstance()->toRealWithSize(aFile).first;
+					// The full list, or the one for this hub's share profile; both are generated
+					// files, rebuilt only when the share changed.
+					sourceFile = ShareManager::getInstance()->getListFile(aSource.getHubUrl());
 				}
 				type = Transfer::TYPE_FULL_LIST;
 				miniSlot = true;
@@ -274,9 +272,30 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 			}
 		}
 
+		// The same proof normal sharing relies on: the file still has the size and modification
+		// time its stored hash was made for. Only a file without such a record is read in full,
+		// so a refresh of a large network share doesn't turn every upload into a re-hash.
+		auto isRequestedFile = [&](const string& path) {
+			try {
+				File file(path, File::READ, File::OPEN | File::SHARED);
+				const auto size = file.getSize();
+				const auto timestamp = file.getLastModified();
+				file.close();
+				if(size != expectedFileSize) {
+					return false;
+				}
+				if(const auto stored = HashManager::getInstance()->findTTH(path, size, timestamp)) {
+					return *stored == *requestedRoot;
+				}
+			} catch(const FileException&) {
+				return false;
+			}
+			return HashManager::getInstance()->verifyFileTTH(path, expectedFileSize, *requestedRoot);
+		};
+
 		// Try the path from the cached virtual lookup first, then fall back to any
 		// current shared path with the same TTH that this hub is allowed to see.
-		if(HashManager::getInstance()->verifyFileTTH(sourceFile, expectedFileSize, *requestedRoot)) {
+		if(isRequestedFile(sourceFile)) {
 			return true;
 		}
 
@@ -285,7 +304,7 @@ bool UploadManager::prepareFile(UserConnection& aSource, const string& aType, co
 				continue;
 			}
 
-			if(HashManager::getInstance()->verifyFileTTH(path, expectedFileSize, *requestedRoot)) {
+			if(isRequestedFile(path)) {
 				sourceFile = path;
 				return true;
 			}

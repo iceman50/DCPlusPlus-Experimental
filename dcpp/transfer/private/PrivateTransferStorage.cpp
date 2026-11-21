@@ -26,13 +26,23 @@ namespace pft {
 namespace {
 const std::string publicationPrefix = ".DCPlusPlus-PrivateSend-";
 
-bool isPublicationStaging(const std::filesystem::path& path) {
-	for(const auto& component : path) {
-		const auto name = component.u8string();
-		if(name.size() == publicationPrefix.size() + 32 &&
-			Util::strnicmp(name, publicationPrefix, publicationPrefix.size()) == 0 &&
-			isHex(name.substr(publicationPrefix.size()), 16))
+bool isStagingName(const std::string& name) {
+	return name.size() == publicationPrefix.size() + 32 &&
+		Util::strnicmp(name, publicationPrefix, publicationPrefix.size()) == 0 &&
+		isHex(name.substr(publicationPrefix.size()), 16);
+}
+
+/** Whether any component of the path is a publication staging directory. Allocates only for
+ * components of exactly the staging name's length. */
+bool hasStagingComponent(const std::string& path) {
+	size_t start = 0;
+	while(start < path.size()) {
+		auto end = path.find_first_of("\\/", start);
+		if(end == std::string::npos)
+			end = path.size();
+		if(end - start == publicationPrefix.size() + 32 && isStagingName(path.substr(start, end - start)))
 			return true;
+		start = end + 1;
 	}
 	return false;
 }
@@ -53,27 +63,292 @@ std::string defaultDownloadPath(const std::string& name) {
 namespace {
 
 bool withinRoot(const std::string& p, const std::string& r) {
+	if(r.empty())
+		return false;
 	return Util::strnicmp(p, r, r.size()) == 0 || Util::stricmp(p, r.substr(0, r.size() - 1)) == 0;
 }
 
-/** Canonical form of a path with exactly one trailing separator; empty when canonicalization
- * fails. Canonicalization follows directory junctions and normalizes '..'. */
-std::string canonicalDirectory(const std::string& path) {
+std::string withSeparator(std::string path) {
+	if(!path.empty() && path.back() != '\\' && path.back() != '/')
+		path += PATH_SEPARATOR;
+	return path;
+}
+
+bool isSeparator(char c) {
+	return c == '\\' || c == '/';
+}
+
+#ifdef _WIN32
+std::wstring withoutExtendedPrefix(const std::wstring& path) {
+	if(path.compare(0, 8, L"\\\\?\\UNC\\") == 0)
+		return L"\\\\" + path.substr(8);
+	if(path.compare(0, 4, L"\\\\?\\") == 0)
+		return path.substr(4);
+	return path;
+}
+
+/** Absolute form with '.', '..' and '/' resolved the way Win32 resolves them. No file system access. */
+std::string lexicalPath(const std::string& path) {
+	const auto wide = Text::toT(path);
+	const auto needed = GetFullPathNameW(wide.c_str(), 0, nullptr, nullptr);
+	if(needed == 0)
+		return path;
+	std::wstring buffer(needed, L'\0');
+	const auto length = GetFullPathNameW(wide.c_str(), needed, &buffer[0], nullptr);
+	if(length == 0 || length >= needed)
+		return path;
+	buffer.resize(length);
+	return Text::fromT(withoutExtendedPrefix(buffer));
+}
+
+/** Length of the volume or share root at the start of a lexical path: "C:\" or "\\server\share". */
+size_t rootLength(const std::string& path) {
+	if(path.size() >= 3 && path[1] == ':' && isSeparator(path[2]))
+		return 3;
+	if(path.size() >= 2 && isSeparator(path[0]) && isSeparator(path[1])) {
+		auto server = path.find_first_of("\\/", 2);
+		if(server == std::string::npos)
+			return path.size();
+		auto share = path.find_first_of("\\/", server + 1);
+		return share == std::string::npos ? path.size() : share;
+	}
+	return 0;
+}
+
+bool isRemote(const std::string& lexical) {
+	if(lexical.size() >= 2 && isSeparator(lexical[0]) && isSeparator(lexical[1]))
+		return true;
+	if(lexical.size() >= 3 && lexical[1] == ':') {
+		const auto drive = Text::toT(lexical.substr(0, 3));
+		return GetDriveTypeW(drive.c_str()) == DRIVE_REMOTE;
+	}
+	return false;
+}
+
+struct Identity {
+	DWORD volume = 0;
+	DWORD high = 0;
+	DWORD low = 0;
+	bool valid() const { return volume != 0 || high != 0 || low != 0; }
+	bool operator==(const Identity& rhs) const { return volume == rhs.volume && high == rhs.high && low == rhs.low; }
+};
+
+HANDLE openForQuery(const std::string& path) {
+	// Follows reparse points, so junctions, symbolic links and mount points resolve to their target.
+	return CreateFileW(File::toNativePath(path).c_str(), FILE_READ_ATTRIBUTES,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+}
+
+Identity identityOf(HANDLE h) {
+	Identity id;
+	BY_HANDLE_FILE_INFORMATION info {};
+	if(GetFileInformationByHandle(h, &info)) {
+		id.volume = info.dwVolumeSerialNumber;
+		id.high = info.nFileIndexHigh;
+		id.low = info.nFileIndexLow;
+	}
+	return id;
+}
+
+Identity identityOf(const std::string& path) {
+	const auto h = openForQuery(path);
+	if(h == INVALID_HANDLE_VALUE)
+		return {};
+	const auto id = identityOf(h);
+	CloseHandle(h);
+	return id;
+}
+
+std::string finalPathOf(HANDLE h) {
+	for(const DWORD flags: { DWORD(FILE_NAME_NORMALIZED | VOLUME_NAME_DOS), DWORD(FILE_NAME_OPENED | VOLUME_NAME_DOS) }) {
+		std::wstring buffer(512, L'\0');
+		auto length = GetFinalPathNameByHandleW(h, &buffer[0], static_cast<DWORD>(buffer.size()), flags);
+		if(length >= buffer.size()) {
+			buffer.resize(static_cast<size_t>(length) + 1);
+			length = GetFinalPathNameByHandleW(h, &buffer[0], static_cast<DWORD>(buffer.size()), flags);
+		}
+		if(length > 0 && length < buffer.size()) {
+			buffer.resize(length);
+			return Text::fromT(withoutExtendedPrefix(buffer));
+		}
+	}
+	return {};
+}
+
+bool isUnavailable(DWORD error) {
+	switch(error) {
+	case ERROR_NOT_READY:
+	case ERROR_BAD_NETPATH:
+	case ERROR_BAD_NET_NAME:
+	case ERROR_NETNAME_DELETED:
+	case ERROR_UNEXP_NET_ERR:
+	case ERROR_DEV_NOT_EXIST:
+	case ERROR_INVALID_DRIVE:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/** The real location of a lexical path: its nearest existing ancestor resolved through junctions,
+ * symbolic links, subst drives and network drive mappings, followed by the missing components.
+ * Empty when the location can't be determined for a reason other than missing components.
+ * @param id Receives the identity of the path itself when it exists.
+ * @param unavailable_ Set when nothing on the path exists (a disconnected drive or server). */
+std::string resolvedPath(const std::string& lexical, Identity* id = nullptr, bool* unavailable_ = nullptr) {
+	const auto root = rootLength(lexical);
+	if(root == 0)
+		return {};
+	const bool trailing = !lexical.empty() && isSeparator(lexical.back());
+	auto existing = lexical;
+	while(existing.size() > root && isSeparator(existing.back()))
+		existing.pop_back();
+	std::string rest;
+	for(;;) {
+		const auto h = openForQuery(existing.size() == root && root > 3 ? existing + PATH_SEPARATOR_STR : existing);
+		if(h != INVALID_HANDLE_VALUE) {
+			if(id && rest.empty())
+				*id = identityOf(h);
+			auto result = finalPathOf(h);
+			CloseHandle(h);
+			if(result.empty())
+				return {};
+			if(!rest.empty())
+				result = withSeparator(result) + rest;
+			return trailing ? withSeparator(result) : result;
+		}
+		const auto error = GetLastError();
+		if(isUnavailable(error)) {
+			if(unavailable_)
+				*unavailable_ = true;
+			return {};
+		}
+		if(error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
+			return {};
+		if(existing.size() <= root) {
+			if(unavailable_)
+				*unavailable_ = true;
+			return {};
+		}
+		const auto separator = existing.find_last_of("\\/");
+		if(separator == std::string::npos || separator < root - (root > 3 ? 0 : 1))
+			return {};
+		const auto leaf = existing.substr(separator + 1);
+		rest = rest.empty() ? leaf : leaf + PATH_SEPARATOR_STR + rest;
+		existing.erase(separator < root ? root : separator);
+	}
+}
+
+/** Whether the path, or one of its existing ancestors, is the directory with the given identity. */
+bool isWithinIdentity(const std::string& lexical, const Identity& target) {
+	if(!target.valid())
+		return false;
+	const auto root = rootLength(lexical);
+	if(root == 0)
+		return false;
+	auto current = lexical;
+	while(current.size() > root && isSeparator(current.back()))
+		current.pop_back();
+	for(;;) {
+		const auto id = identityOf(current.size() == root && root > 3 ? current + PATH_SEPARATOR_STR : current);
+		if(id.valid() && id == target)
+			return true;
+		if(current.size() <= root)
+			return false;
+		const auto separator = current.find_last_of("\\/");
+		if(separator == std::string::npos || separator + 1 <= root)
+			current.erase(root);
+		else
+			current.erase(separator);
+	}
+}
+#else
+std::string lexicalPath(const std::string& path) {
+	return std::filesystem::u8path(path).lexically_normal().u8string();
+}
+
+bool isRemote(const std::string&) {
+	return false;
+}
+
+struct Identity {
+	bool valid() const { return false; }
+};
+
+std::string resolvedPath(const std::string& lexical, Identity* = nullptr, bool* = nullptr) {
 	std::error_code ec;
-	auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(path), ec);
+	const auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(lexical), ec);
 	if(ec)
 		return {};
-	auto result = canonical.u8string();
-	while(!result.empty() && (result.back() == '/' || result.back() == '\\'))
-		result.pop_back();
-	return result + PATH_SEPARATOR_STR;
+	return canonical.u8string();
+}
+
+bool isWithinIdentity(const std::string&, const Identity&) {
+	return false;
+}
+#endif
+
+/** The storage root as written, as resolved, and its identity (when it exists). */
+struct StorageLocation {
+	std::string lexical;
+	std::string resolved;
+	Identity id;
+};
+
+StorageLocation storageLocation() {
+	StorageLocation location;
+	location.lexical = withSeparator(lexicalPath(storageRoot()));
+	const auto resolved = resolvedPath(location.lexical, &location.id);
+	if(!resolved.empty())
+		location.resolved = withSeparator(resolved);
+	return location;
+}
+
+/** Checks a path's real location against the storage root and staging names.
+ * @param ancestors Also compare the identities of the path's ancestors with the storage root,
+ * which catches aliases that resolve to another name for the same directory (such as
+ * \\localhost\C$\...). */
+bool isPrivateLocationResolved(const std::string& lexical, const StorageLocation& storage, bool ancestors) {
+	Identity id;
+	bool unavailable = false;
+	const auto resolved = resolvedPath(lexical, &id, &unavailable);
+	if(resolved.empty()) {
+		// Nothing exists there (a disconnected drive or server), so it can't lead anywhere.
+		if(unavailable)
+			return false;
+		// Local paths fail closed. A network path whose server can't report its final name is
+		// compared as written: private storage is local, so only an alias could lead into it.
+		if(!isRemote(lexical))
+			return true;
+	} else {
+		if(withinRoot(resolved, storage.resolved) || withinRoot(resolved, storage.lexical) || hasStagingComponent(resolved))
+			return true;
+	}
+	if(storage.id.valid()) {
+		if(id.valid() && id == storage.id)
+			return true;
+		// Walk the resolved location: a link's own ancestors say nothing about where it leads.
+		if(ancestors && isWithinIdentity(resolved.empty() ? lexical : resolved, storage.id))
+			return true;
+	}
+	return false;
+}
+
+} // namespace
+
+bool isPrivateLocation(const std::string& path) {
+	return isPrivateLocation(path, storageRoot());
+}
+
+bool isPrivateLocation(const std::string& path, const std::string& root) {
+	return withinRoot(path, root) || hasStagingComponent(path);
 }
 
 bool hasPrivateMarker(const std::string& path) {
 #ifdef _WIN32
 	// NTFS streams follow hard links and renames, so aliases of received files
 	// remain excluded even outside the protected receive directory.
-	const auto marker = Text::toT(path) + L":DCPlusPlus.PrivateSend";
+	const auto marker = File::toNativePath(path + ":DCPlusPlus.PrivateSend");
 	const auto h = CreateFileW(marker.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
 		OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
 	if(h != INVALID_HANDLE_VALUE) {
@@ -86,59 +361,57 @@ bool hasPrivateMarker(const std::string& path) {
 	return false;
 }
 
-} // namespace
-
 bool isPrivatePath(const std::string& path) {
-	if(isPublicationStaging(std::filesystem::u8path(path)))
+	const auto lexical = lexicalPath(path);
+	const auto storage = storageLocation();
+	if(withinRoot(lexical, storage.lexical) || hasStagingComponent(lexical))
 		return true;
-	auto root = storageRoot();
-	if(withinRoot(path, root))
+	if(isPrivateLocationResolved(lexical, storage, true))
 		return true;
-
-	// A canonicalization failure denies sharing rather than interpreting an ambiguous path.
-	std::error_code ec;
-	const auto canonical = std::filesystem::weakly_canonical(std::filesystem::u8path(path), ec);
-	if(ec)
-		return true;
-	if(isPublicationStaging(canonical))
-		return true;
-
-	const auto canonicalRoot = canonicalDirectory(root);
-	if(canonicalRoot.empty())
-		return true;
-	if(withinRoot(canonical.u8string(), canonicalRoot))
-		return true;
-	return hasPrivateMarker(path);
+	return hasPrivateMarker(lexical);
 }
+
+struct PrivatePathScanner::Storage {
+	StorageLocation location;
+	std::string leafName;
+};
 
 PrivatePathScanner::PrivatePathScanner() :
-	root(storageRoot()),
-	canonicalRoot(canonicalDirectory(root))
-{ }
-
-PrivatePathScanner::Directory PrivatePathScanner::enter(const std::string& directory) const {
-	Directory dir;
-	dir.path = directory;
-	dir.staging = isPublicationStaging(std::filesystem::u8path(directory));
-	dir.canonical = canonicalDirectory(directory);
-	if(!dir.canonical.empty())
-		dir.staging = dir.staging || isPublicationStaging(std::filesystem::u8path(dir.canonical));
-	return dir;
+	storage(std::make_shared<Storage>())
+{
+	storage->location = storageLocation();
+	auto leaf = storage->location.lexical;
+	while(!leaf.empty() && isSeparator(leaf.back()))
+		leaf.pop_back();
+	storage->leafName = Util::getFileName(leaf);
 }
 
-bool PrivatePathScanner::isPrivateFile(const Directory& dir, const std::string& name) const {
-	// Same checks, in the same order, as isPrivatePath(dir.path + name). A regular file adds no
-	// junction of its own, so its canonical path is its directory's canonical path plus its name.
-	if(dir.staging || isPublicationStaging(std::filesystem::u8path(name)))
+bool PrivatePathScanner::isPrivateRoot(const std::string& directory) const {
+	const auto lexical = lexicalPath(directory);
+	if(withinRoot(lexical, storage->location.lexical) || hasStagingComponent(lexical))
 		return true;
-	const auto path = dir.path + name;
-	if(withinRoot(path, root))
+	return isPrivateLocationResolved(lexical, storage->location, true);
+}
+
+bool PrivatePathScanner::isPrivateDirectory(const std::string& directory, const std::string& name, bool reparsePoint) const {
+	if(isStagingName(name) || withinRoot(directory, storage->location.lexical))
 		return true;
-	if(dir.canonical.empty() || canonicalRoot.empty())
+	// A reparse point can lead anywhere. A plain directory is where its parent says it is; only one
+	// named like the storage root can be that root reached through another name for an ancestor.
+	if(reparsePoint)
+		return isPrivateLocationResolved(directory, storage->location, true);
+	if(Util::stricmp(name, storage->leafName) == 0)
+		return isPrivateLocationResolved(directory, storage->location, false);
+	return false;
+}
+
+bool PrivatePathScanner::isPrivateFile(const std::string& path, const std::string& name, bool reparsePoint) const {
+	if(isStagingName(name) || withinRoot(path, storage->location.lexical))
 		return true;
-	if(withinRoot(dir.canonical + name, canonicalRoot))
-		return true;
-	return hasPrivateMarker(path);
+	// A symbolic link can point anywhere; a regular file's marker is checked when it is hashed.
+	if(reparsePoint)
+		return isPrivateLocationResolved(path, storage->location, true) || hasPrivateMarker(path);
+	return false;
 }
 
 #ifdef _WIN32

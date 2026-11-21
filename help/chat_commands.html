@@ -127,7 +127,8 @@ entries for files that are no longer shared and old hashes for files that have c
 or removed since. This can notably improve the startup time of DC++ when large number
 of files are shared. Note that rebuilding is most effective when shares have not changed
 a lot in the current DC++ session so it is recommended to restart DC++ before 
-issuing a /rebuild command.</dd>
+issuing a /rebuild command. It isn't run while the share is being refreshed, as it would also
+remove the hashes of files that are still shared but not yet scanned.</dd>
   <dt><untranslated>/log &lt;status, system, downloads, uploads&gt;</untranslated></dt>
   <dd>If no parameter is specified, it launches the log for the hub or
 private chat with the associated application in Windows. If one of the

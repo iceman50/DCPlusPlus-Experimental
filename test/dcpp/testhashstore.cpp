@@ -279,14 +279,18 @@ TEST_F(HashStoreTest, v1_sqlite_schema_is_migrated_and_orphans_are_dropped) {
 
 	HashManager::HashStore store;
 	store.load([](float) {});
-	EXPECT_EQ(2, store.getSchemaVersion());
-	EXPECT_TRUE(store.getTTH(fileName, tree.getFileSize(), timeStamp));
+	EXPECT_EQ(3, store.getSchemaVersion());
+	bool markerChecked = true;
+	EXPECT_TRUE(store.getTTH(fileName, tree.getFileSize(), timeStamp, &markerChecked));
+	// Migrated rows predate the Private Send marker check.
+	EXPECT_FALSE(markerChecked);
 	EXPECT_FALSE(store.getTTH(orphanName, tree.getFileSize(), timeStamp + 1));
 
 	SQLiteDB db(path("HashStore.sqlite3"));
 	EXPECT_EQ(1, scalarInt(db, "SELECT COUNT(*) FROM files"));
 	EXPECT_EQ(1, scalarInt(db, "SELECT COUNT(*) FROM trees"));
-	EXPECT_EQ(2, scalarInt(db, "PRAGMA user_version"));
+	EXPECT_EQ(3, scalarInt(db, "PRAGMA user_version"));
+	EXPECT_EQ(0, scalarInt(db, "SELECT checked FROM files"));
 	EXPECT_EQ("1", metadataValue(db, "legacy_migration_complete"));
 }
 

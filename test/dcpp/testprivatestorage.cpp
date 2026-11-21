@@ -238,11 +238,12 @@ TEST_F(PrivateStorage, private_tree_aliases_and_names_fail_closed) {
 	}
 }
 
-TEST_F(PrivateStorage, scanner_agrees_with_private_path_for_regular_files) {
+TEST_F(PrivateStorage, scanner_and_full_check_resolve_names_junctions_and_markers) {
 	const auto shared = base / "shared";
 	const auto received = base / "PrivateSend" / "Received";
 	const auto staging = base / (".DCPlusPlus-PrivateSend-" + pft::randomHex(16));
-	for(const auto& dir : { shared, received, staging })
+	const auto lookalike = shared / "PrivateSend";
+	for(const auto& dir : { shared, received, staging, lookalike })
 		std::filesystem::create_directories(dir);
 	File((shared / "public.txt").u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("public");
 	File((shared / "marked.txt").u8string(), File::WRITE, File::CREATE | File::TRUNCATE).write("marked");
@@ -255,29 +256,52 @@ TEST_F(PrivateStorage, scanner_agrees_with_private_path_for_regular_files) {
 
 	const auto junction = shared / "junction";
 	const auto command = "mklink /J \"" + junction.u8string() + "\" \"" + received.u8string() + "\" >NUL 2>&1";
-	const bool haveJunction = std::system(command.c_str()) == 0 && std::filesystem::exists(junction);
+	ASSERT_EQ(0, std::system(command.c_str()));
+	ASSERT_TRUE(std::filesystem::exists(junction));
+	const auto dir = [](const std::filesystem::path& p) { return p.u8string() + PATH_SEPARATOR_STR; };
+
+	// The full check, for single paths.
+	EXPECT_FALSE(pft::isPrivatePath((shared / "public.txt").u8string()));
+	EXPECT_TRUE(pft::isPrivatePath((shared / "marked.txt").u8string()));
+	EXPECT_TRUE(pft::isPrivatePath((shared / staged).u8string()));
+	EXPECT_TRUE(pft::isPrivatePath((received / "inside.txt").u8string()));
+	EXPECT_TRUE(pft::isPrivatePath((staging / "unfinished.txt").u8string()));
+	EXPECT_FALSE(pft::isPrivatePath((base / "PrivateSendFile").u8string()));
+	EXPECT_FALSE(pft::isPrivatePath(source));
+	EXPECT_FALSE(pft::isPrivatePath((shared / "missing.txt").u8string()));
+	EXPECT_FALSE(pft::isPrivatePath(dir(lookalike)));
+	// Junctions into private storage are resolved, not compared by name.
+	EXPECT_TRUE(pft::isPrivatePath((junction / "inside.txt").u8string()));
+	EXPECT_TRUE(pft::isPrivatePath(dir(junction)));
+
+	// Names only, no file system access.
+	EXPECT_TRUE(pft::isPrivateLocation((received / "inside.txt").u8string()));
+	EXPECT_TRUE(pft::isPrivateLocation((staging / "unfinished.txt").u8string()));
+	EXPECT_FALSE(pft::isPrivateLocation((shared / "marked.txt").u8string()));
+	EXPECT_FALSE(pft::isPrivateLocation((base / "PrivateSendFile").u8string()));
+	EXPECT_TRUE(pft::hasPrivateMarker((shared / "marked.txt").u8string()));
+	EXPECT_FALSE(pft::hasPrivateMarker((shared / "public.txt").u8string()));
 
 	const pft::PrivatePathScanner scanner;
-	std::vector<std::pair<std::filesystem::path, std::string>> cases = {
-		{ shared, "public.txt" }, { shared, "marked.txt" }, { shared, staged }, { received, "inside.txt" },
-		{ staging, "unfinished.txt" }, { base, "PrivateSendFile" }, { base, "source.txt" }, { shared, "missing.txt" },
-	};
-	if(haveJunction)
-		cases.emplace_back(junction, "inside.txt");
-	for(const auto& [dir, name] : cases) {
-		const auto dirPath = dir.u8string() + PATH_SEPARATOR_STR;
-		EXPECT_EQ(pft::isPrivatePath(dirPath + name), scanner.isPrivateFile(scanner.enter(dirPath), name)) << dirPath + name;
-	}
-	const auto sharedDir = scanner.enter(shared.u8string() + PATH_SEPARATOR_STR);
-	EXPECT_FALSE(scanner.isPrivateFile(sharedDir, "public.txt"));
-	EXPECT_TRUE(scanner.isPrivateFile(sharedDir, "marked.txt"));
-	EXPECT_TRUE(scanner.isPrivateFile(sharedDir, staged));
-	EXPECT_TRUE(scanner.isPrivateFile(scanner.enter(received.u8string() + PATH_SEPARATOR_STR), "inside.txt"));
-	EXPECT_TRUE(scanner.isPrivateFile(scanner.enter(staging.u8string() + PATH_SEPARATOR_STR), "unfinished.txt"));
-	// Junctions into private storage are compared above but not asserted private: weakly_canonical
-	// does not resolve junctions with this toolchain, so isPrivatePath misses them too.
-	if(haveJunction)
-		std::filesystem::remove(junction);
+	EXPECT_FALSE(scanner.isPrivateRoot(dir(shared)));
+	EXPECT_TRUE(scanner.isPrivateRoot(dir(received)));
+	EXPECT_TRUE(scanner.isPrivateRoot(dir(junction)));
+	EXPECT_TRUE(scanner.isPrivateRoot(dir(base / "PrivateSend")));
+	EXPECT_TRUE(scanner.isPrivateRoot(dir(staging)));
+
+	EXPECT_TRUE(scanner.isPrivateDirectory(dir(received), "Received", false));
+	EXPECT_TRUE(scanner.isPrivateDirectory(dir(staging), staging.filename().u8string(), false));
+	EXPECT_TRUE(scanner.isPrivateDirectory(dir(junction), "junction", true));
+	EXPECT_FALSE(scanner.isPrivateDirectory(dir(lookalike), "PrivateSend", false));
+	EXPECT_FALSE(scanner.isPrivateDirectory(dir(shared / "plain"), "plain", false));
+
+	EXPECT_FALSE(scanner.isPrivateFile((shared / "public.txt").u8string(), "public.txt", false));
+	// A regular file's marker is checked when it is hashed, not by the scan.
+	EXPECT_FALSE(scanner.isPrivateFile((shared / "marked.txt").u8string(), "marked.txt", false));
+	EXPECT_TRUE(scanner.isPrivateFile((shared / staged).u8string(), staged, false));
+	EXPECT_TRUE(scanner.isPrivateFile((received / "inside.txt").u8string(), "inside.txt", false));
+
+	std::filesystem::remove(junction);
 }
 
 TEST_F(PrivateStorage, startup_removes_only_partial_files) {

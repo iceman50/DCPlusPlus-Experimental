@@ -188,6 +188,10 @@ void SQLiteDB::throwLastError(const string& context) const {
 	throw SQLiteException(context + ": " + getError(), db ? (sqlite3_errcode(db) & 0xff) : SQLITE_CANTOPEN);
 }
 
+int64_t SQLiteDB::changes() const noexcept {
+	return db ? static_cast<int64_t>(sqlite3_changes(db)) : 0;
+}
+
 SQLiteStatement::SQLiteStatement(sqlite3* aDb, sqlite3_stmt* aStmt) noexcept : db(aDb), stmt(aStmt) {
 }
 

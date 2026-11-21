@@ -19,6 +19,7 @@
 #ifndef DCPLUSPLUS_DCPP_QUEUE_MANAGER_H
 #define DCPLUSPLUS_DCPP_QUEUE_MANAGER_H
 
+#include <optional>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -42,6 +43,8 @@
 namespace dcpp {
 
 using std::function;
+using std::nullopt;
+using std::optional;
 using std::list;
 using std::pair;
 using std::unordered_multimap;
@@ -189,12 +192,16 @@ private:
 		FileMover() : files(8) { }
 		virtual ~FileMover() { join(); }
 
-		void moveFile(const string& source, const string& target);
+		void moveFile(const string& source, const string& target, const optional<TTHValue>& root);
 		virtual int run();
 
 	private:
 		static std::atomic_flag active;
-		typedef pair<string, string> FilePair;
+		struct FilePair {
+			string first;
+			string second;
+			optional<TTHValue> root;
+		};
 		PointerQueue<FilePair> files;
 	} mover;
 
@@ -307,8 +314,9 @@ private:
 		const string& initialDir = Util::emptyString);
 
 	void load(const SimpleXML& aXml);
-	void moveFile(const string& source, const string& target);
-	static void moveFile_(const string& source, const string& target);
+	/** @param root The verified content of a finished download, registered as hashed once moved. */
+	void moveFile(const string& source, const string& target, const optional<TTHValue>& root = nullopt);
+	static void moveFile_(const string& source, const string& target, const optional<TTHValue>& root = nullopt);
 	void moveStuckFile(QueueItem* qi);
 	void rechecked(QueueItem* qi);
 

@@ -3,6 +3,7 @@
 // (DC++ bug 2122791: 80,000-150,000 queued files). Override the size with DCPP_BENCH_QUEUE_ITEMS.
 #include "testbase.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -52,6 +53,8 @@ string base32(uint64_t seed, size_t bytes) {
 
 TEST(benchqueueload, large_queue_load_and_save) {
 	const auto items = std::getenv("DCPP_BENCH_QUEUE_ITEMS") ? std::atoi(std::getenv("DCPP_BENCH_QUEUE_ITEMS")) : 150000;
+	const auto users = std::getenv("DCPP_BENCH_QUEUE_USERS") ? std::max(1, std::atoi(std::getenv("DCPP_BENCH_QUEUE_USERS"))) : 2000;
+	const bool dontDlShared = std::getenv("DCPP_BENCH_DONT_DL_SHARED") != nullptr;
 	const auto base = std::filesystem::temp_directory_path() /
 		("dcpp-queue-bench-" + std::to_string(Clock::now().time_since_epoch().count()));
 	std::filesystem::create_directories(base);
@@ -74,7 +77,7 @@ TEST(benchqueueload, large_queue_load_and_save) {
 			if(i % 3 == 0)
 				xml += "\t\t<Segment Start=\"0\" Size=\"1048576\"/>\r\n";
 			for(int s = 0; s < 2; ++s)
-				xml += "\t\t<Source CID=\"" + base32(1000000 + (i * 7 + s * 13) % 2000, 24) + "\" Hub=\"adc://hub.example:411\"/>\r\n";
+				xml += "\t\t<Source CID=\"" + base32(1000000 + (i * 7 + s * 13) % users, 24) + "\" Hub=\"adc://hub.example:411\"/>\r\n";
 			xml += "\t</Download>\r\n";
 			if(xml.size() > (1 << 20)) { out.write(xml); xml.clear(); }
 		}
@@ -83,7 +86,7 @@ TEST(benchqueueload, large_queue_load_and_save) {
 	}
 
 	SettingsManager::newInstance();
-	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_SHARED, false);
+	SettingsManager::getInstance()->set(SettingsManager::DONT_DL_ALREADY_SHARED, dontDlShared);
 	LogManager::newInstance();
 	TimerManager::newInstance();
 	HashManager::newInstance();

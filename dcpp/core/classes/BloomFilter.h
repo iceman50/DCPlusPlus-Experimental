@@ -53,6 +53,13 @@ public:
 		table.clear();
 		table.resize(s);
 	}
+	/** Empty the filter and give it a new size (bits). */
+	void reset(size_t tableSize) {
+		table.assign(tableSize, false);
+	}
+	size_t size() const { return table.size(); }
+	/** Number of positions add(s) sets. */
+	static size_t positions(const string& s) { return s.length() >= N ? s.length() - N + 1 : 0; }
 #ifdef TESTER
 	void print_table_status() {
 		int tot = 0;

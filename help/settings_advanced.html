@@ -103,8 +103,13 @@ that DC++ does not recognize to the hub as normal chat.</dd>
   <dt>Add finished files to share instantly (if shared)</dt>
   <dd cshelp="IDH_SETTINGS_ADVANCED_ADD_FINISHED_INSTANTLY">If you download files directly to a shared directory, enabling
 this option will add the files to your share as soon as they're
-finished. Searches will return the file, and users can download it. It
-will not appear in your file list until the next refresh.</dd>
+finished. Searches will return the file, users can download it, and it
+appears in your file list right away. A finished download is not hashed
+again: its content was already verified while it was downloaded.</dd>
+  <dt>Report each hashed file in the system log</dt>
+  <dd cshelp="IDH_SETTINGS_ADVANCED_LOG_HASHED_FILES">Adds a line to the system log for every
+file that is hashed. When this is off (the default), hashing reports one summary per folder
+instead, which keeps the system log readable while a large share is hashed.</dd>
   <dt>Use CTRL for line history</dt>
   <dd cshelp="IDH_SETTINGS_ADVANCED_USE_CTRL_FOR_LINE_HISTORY">Press up arrow while holding down CTRL to scroll through line
 history. If not enabled, you can still use ALT.</dd>

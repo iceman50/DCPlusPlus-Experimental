@@ -349,8 +349,8 @@ void QueueManager::UserQueue::remove(QueueItem* qi, const UserPtr& aUser, bool r
 	}
 }
 
-void QueueManager::FileMover::moveFile(const string& source, const string& target) {
-	files.push(new FilePair(source, target));
+void QueueManager::FileMover::moveFile(const string& source, const string& target, const optional<TTHValue>& root) {
+	files.push(new FilePair { source, target, root });
 	if(!active.test_and_set()) {
 		start();
 	}
@@ -365,7 +365,7 @@ int QueueManager::FileMover::run() {
 			return 0;
 		}
 
-		moveFile_(next->first, next->second);
+		moveFile_(next->first, next->second, next->root);
 	}
 	return 0;
 }
@@ -1061,18 +1061,23 @@ Download* QueueManager::getDownload(UserConnection& aSource) noexcept {
 	return d;
 }
 
-void QueueManager::moveFile(const string& source, const string& target) {
+void QueueManager::moveFile(const string& source, const string& target, const optional<TTHValue>& root) {
 	File::ensureDirectory(target);
 	if(File::getSize(source) > MOVER_LIMIT) {
-		mover.moveFile(source, target);
+		mover.moveFile(source, target, root);
 	} else {
-		moveFile_(source, target);
+		moveFile_(source, target, root);
 	}
 }
 
-void QueueManager::moveFile_(const string& source, const string& target) {
+void QueueManager::moveFile_(const string& source, const string& target, const optional<TTHValue>& root) {
 	try {
 		File::renameFile(source, target);
+		// A finished download was verified against its tree while it was downloaded; record it as
+		// hashed before the share sees it, so it isn't read again (AirDC++ does the same).
+		if(root) {
+			HashManager::getInstance()->addVerifiedFile(target, *root);
+		}
 		getInstance()->fire(QueueManagerListener::FileMoved(), target);
 	} catch(const FileException& e1) {
 		// Try to just rename it to the correct name at least
@@ -1091,7 +1096,7 @@ void QueueManager::moveFile_(const string& source, const string& target) {
 }
 
 void QueueManager::moveStuckFile(QueueItem* qi) {
-	moveFile(qi->getTempTarget(), qi->getTarget());
+	moveFile(qi->getTempTarget(), qi->getTarget(), qi->isFinished() ? optional<TTHValue>(qi->getTTH()) : nullopt);
 
 	if(qi->isFinished()) {
 		userQueue.remove(qi);
@@ -1243,7 +1248,9 @@ void QueueManager::putDownload(Download* aDownload, bool finished) noexcept {
 				if(q->isFinished()) {
 					// Check if we need to move the file
 					if(!d->getTempTarget().empty() && (Util::stricmp(d->getPath().c_str(), d->getTempTarget().c_str()) != 0) ) {
-						moveFile(d->getTempTarget(), d->getPath());
+						moveFile(d->getTempTarget(), d->getPath(), q->getTTH());
+					} else {
+						HashManager::getInstance()->addVerifiedFile(d->getPath(), q->getTTH());
 					}
 
 					if (SETTING(LOG_FINISHED_DOWNLOADS)) {

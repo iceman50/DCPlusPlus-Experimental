@@ -29,7 +29,10 @@ based on personal experience. A file list announced as larger than this is refus
   <dt id="autorefresh">Auto refresh time</dt>
   <dd cshelp="IDH_SETTINGS_EXPERT_AUTO_REFRESH_TIME">This controls the interval at which your shared directories
 are rescanned for new and changed content. This is measured
-in minutes. (default: 60 minutes)</dd>
+in minutes from the end of the previous refresh, and the next refresh never starts sooner than
+the previous one took, so a share that takes long to scan (on network drives, for example) isn't
+rescanned without a break. Hashing continues while folders are scanned, and a shared folder that
+can't be reached keeps its previous contents. (default: 60 minutes)</dd>
   <dt>Settings save interval</dt>
   <dd cshelp="IDH_SETTINGS_EXPERT_SETTINGS_SAVE_INTERVAL">This controls the interval at which
   your settings are automatically saved; good to prevent losses in case of crashes. This is

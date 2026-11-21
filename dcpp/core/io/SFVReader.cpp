@@ -29,9 +29,7 @@
 
 namespace dcpp {
 
-bool SFVReader::tryFile(const string& sfvFile, const string& fileName) {
-	string sfv = File(sfvFile, File::READ, File::OPEN).read();
-
+bool SFVReader::findCRC(const string& sfv, const string& fileName, uint32_t& crc_) noexcept {
 	string::size_type i = 0;
 	while( (i = Util::findSubString(sfv, fileName, i)) != string::npos) {
 		// Either we're at the beginning of the file or the line...otherwise skip...
@@ -43,14 +41,14 @@ bool SFVReader::tryFile(const string& sfvFile, const string& fileName) {
 					i = j;
 					continue;
 				}
-				sscanf(sfv.c_str() + j, "%x", &crc32);
-				crcFound = true;
+				uint32_t value = 0;
+				sscanf(sfv.c_str() + j, "%x", &value);
+				crc_ = value;
 				return true;
 			}
 		}
 		i += fileName.length();
 	}
-
 	return false;
 }
 
@@ -61,13 +59,46 @@ void SFVReader::load(const string& fileName) noexcept {
 
 	for(auto& i: files) {
 		try {
-			if (tryFile(i, fname)) {
+			if (findCRC(File(i, File::READ, File::OPEN).read(), fname, crc32)) {
+				crcFound = true;
 				return;
 			}
 		} catch(const FileException&) {
 			// Ignore...
 		}
 	}
+}
+
+bool SFVDirectoryReader::getCRC(const string& fileName, uint32_t& crc_) {
+	const auto path = Util::getFilePath(fileName);
+	if(!loaded || path != directory) {
+		directory = path;
+		loaded = true;
+		sfvContents.clear();
+		for(const auto& sfvFile: File::findFiles(path, "*.sfv")) {
+			try {
+				sfvContents.push_back(File(sfvFile, File::READ, File::OPEN).read());
+			} catch(const FileException&) {
+				// Ignore, as SFVReader does.
+			}
+		}
+	}
+	if(sfvContents.empty()) {
+		return false;
+	}
+	const auto name = Util::getFileName(fileName);
+	for(const auto& sfv: sfvContents) {
+		if(SFVReader::findCRC(sfv, name, crc_)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void SFVDirectoryReader::clear() noexcept {
+	directory.clear();
+	loaded = false;
+	sfvContents.clear();
 }
 
 } // namespace dcpp

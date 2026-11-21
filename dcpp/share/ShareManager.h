@@ -37,6 +37,7 @@
 
 #include <dcpp/core/classes/Exception.h>
 #include <dcpp/core/thread/CriticalSection.h>
+#include <dcpp/core/thread/SharedCriticalSection.h>
 #include <dcpp/util/text/StringSearch.h>
 #include <dcpp/core/Singleton.h>
 #include <dcpp/core/classes/BloomFilter.h>
@@ -179,7 +180,8 @@ public:
 	bool hasPendingDirectories() const noexcept;
 	/** True while this share root is waiting for, or in, its background scan. */
 	bool isDirectoryPending(const string& realPath) const noexcept;
-	void setDirty() { xmlDirty = true; }
+	/** The share changed: file lists are rebuilt at most every 15 minutes (or when forced). */
+	void setDirty() { ++listVersion; }
 
 	SearchResultList search(const StringList& adcParams, size_t maxResults) noexcept;
 	SearchResultList search(const StringList& adcParams, size_t maxResults, const string& hubUrl) noexcept;
@@ -192,7 +194,7 @@ public:
 	MemoryInputStream* generatePartialList(const string& dir, bool recurse, const string& hubUrl) const;
 	MemoryInputStream* getTree(const string& virtualFile) const;
 	MemoryInputStream* getTree(const string& virtualFile, const string& hubUrl, const CID& user = CID()) const;
-	MemoryInputStream* generateFileList(const string& hubUrl, bool compressed) const;
+	MemoryInputStream* generateFileList(const string& hubUrl, bool compressed);
 	std::pair<std::unique_ptr<InputStream>, int64_t> openXmlList(const string& hubUrl);
 	bool hasCustomShare(const string& hubUrl) const;
 
@@ -217,26 +219,31 @@ public:
 	string validateVirtual(const string& /*aVirt*/) const noexcept;
 	bool hasVirtual(const string& name) const noexcept;
 
+	/** Searches run in parallel (under the shared lock), so the counter is atomic. */
 	void addHits(uint32_t aHits) {
 		hits += aHits;
 	}
+	uint32_t getHits() const noexcept { return hits; }
+	void setHits(uint32_t aHits) noexcept { hits = aHits; }
 
-	const string& getOwnListFile() {
-		generateXmlList();
-		return getBZXmlFile();
+	string getOwnListFile() {
+		return getList(ShareAccess { true, { } }).path;
 	}
+	/** The compressed file list a hub's users get (the full list, or the hub's share profile). */
+	string getListFile(const string& hubUrl);
+	/** Whether the path is one of the file lists generated for this share. */
+	bool isOwnListFile(const string& path) const;
 
 	bool isTTHShared(const TTHValue& tth){
-		Lock l(cs);
+		RLock l(cs);
 		return tthIndex.find(tth) != tthIndex.end();
 	}
 
 	void updateFilterCache();
 
-	GETSET(uint32_t, hits, Hits);
-	GETSET(string, bzXmlFile, BZXmlFile);
-
 private:
+	std::atomic<uint32_t> hits;
+
 	struct SearchQuery;
 
 	struct ShareAccess {
@@ -270,17 +277,18 @@ private:
 				bool operator()(const string& a, const File& b) const { return (Util::stricmp(a, b.getName()) < 0); }
 			};
 
-			/** Store this file's real path and ensure its virtual name doesn't clash with the names
-			of the parent directory's sub-directories or files; rename to "file (N).ext" otherwise.
+			/** Ensure this file's virtual name doesn't clash with the names of the parent directory's
+			sub-directories or files; rename to "file (N).ext" otherwise. The real path is stored when
+			it can't be derived from the directories: for a renamed file, or with keepRealPath.
 			@param sourcePath Real path (on the disk) of the directory this file came from. */
-			void validateName(const string& sourcePath);
+			void validateName(const string& sourcePath, bool keepRealPath = false);
 
 			string getADCPath() const { return parent->getADCPath() + name; }
 			string getFullName() const { return parent->getFullName() + name; }
 			string getRealPath() const { return realPath ? *realPath : parent->getRealPath(name); }
 
 			GETSET(string, name, Name);
-			optional<string> realPath; // Exact path on disk; older cache records may not have this.
+			optional<string> realPath; // Exact path on disk, when getRealPath() can't derive it (renamed files, merged names).
 			optional<TTHValue> tth;
 			GETSET(int64_t, size, Size);
 			GETSET(time_t, lastWrite, LastWrite);
@@ -362,14 +370,35 @@ private:
 		bool isDirectory;
 	};
 
-	int64_t xmlListLen;
-	optional<TTHValue> xmlRoot;
-	int64_t bzXmlListLen;
-	optional<TTHValue> bzXmlRoot;
-	unique_ptr<File> bzXmlRef;
-
-	bool xmlDirty;
-	bool forceXmlRefresh; /// bypass the 15-minutes guard
+	/** A generated file list: the full list (key "") or one per share profile. */
+	struct FileList {
+		string path; ///< bzip2-compressed
+		std::shared_ptr<File> ref; ///< Keeps the current list open
+		int64_t xmlLen = 0;
+		int64_t bzLen = 0;
+		optional<TTHValue> xmlRoot;
+		optional<TTHValue> bzRoot;
+		uint64_t dirtyVersion = 0; ///< listVersion it was built from
+		uint64_t forceVersion = 0; ///< listForce it was built from
+		uint64_t generated = 0;
+	};
+	/** By profile key; guarded by fileListsCs. Generation is serialized by listCs, taken before cs. */
+	unordered_map<string, FileList> fileLists;
+	/** Guards fileLists only; never held while taking another lock. */
+	mutable FastCriticalSection fileListsCs;
+	mutable CriticalSection listCs;
+	/** List files replaced while still open (being uploaded); guarded by listCs. */
+	StringList staleListFiles;
+	/** Changed without the share lock by setDirty() (settings pages). */
+	std::atomic<uint64_t> listVersion { 1 };
+	std::atomic<uint64_t> listForce { 1 };
+	/** The list for a hub's view, rebuilt first when needed. Never call with cs held. */
+	FileList getList(const ShareAccess& access);
+	AdcCommand getListInfo(const string& aFile, const ShareAccess& access);
+	static string getProfileKey(const ShareAccess& access);
+	void removeStaleLists() noexcept;
+	void writeListXml(OutputStream& os, const ShareAccess& access) const;
+	void writeDirectoryXml(OutputStream& os, const Directory::Ptr& dir, string& indent, string& tmp) const;
 	bool refreshDirs;
 	bool update;
 
@@ -379,10 +408,13 @@ private:
 	static std::atomic<bool> refreshActive;
 	std::atomic<bool> cacheUnverified { false };
 
-	uint64_t lastXmlUpdate;
-	uint64_t lastFullUpdate;
+	std::atomic<uint64_t> lastFullUpdate;
 
-	mutable CriticalSection cs;
+	/** The share lock. Searches, uploads, file lists and size queries hold it shared, so they run
+	 * in parallel; changes to the share (hash results, refresh swaps, finished downloads, temporary
+	 * shares, share settings) hold it exclusively. A thread holding it shared must never ask for it
+	 * exclusively (see SharedCriticalSection). */
+	mutable SharedCriticalSection cs;
 
 	// List of root directory items
 	unordered_map<string, Directory::Ptr, noCaseStringHash, noCaseStringEq> directories;
@@ -397,7 +429,71 @@ private:
 	bool scanPendingDirectories();
 	void startPendingScan() noexcept;
 
+	/** A hash that finished while a refresh was scanning. Hashing keeps running during scans, so
+	 * a scan can read a file before its hash is done and then replace the tree the hash updated. */
+	struct ScanHash {
+		string realPath;
+		TTHValue root;
+		int64_t size;
+		uint32_t timestamp;
+	};
+	/** Recorded while recordScanHashes is set; replayed onto each tree a refresh swaps in. Guarded by cs. */
+	vector<ScanHash> scanHashes;
+	bool recordScanHashes = false;
+	/** Give the shared file at realPath its hash. With sameTimestamp, skip a file whose
+	 * timestamp differs, as the file then changed after it was hashed. Requires cs. */
+	void applyHash(const string& realPath, const TTHValue& root, int64_t size, uint32_t timestamp, bool sameTimestamp);
+	void replayScanHashes();
+
+	/** A finished download added to the share while a refresh was scanning (ADD_FINISHED_INSTANTLY);
+	 * the scanned tree may predate it, so it is added again after each swap. Guarded by cs. */
+	struct MovedFile {
+		string realPath;
+		int64_t size;
+		time_t lastWrite;
+		optional<TTHValue> tth;
+	};
+	vector<MovedFile> movedFiles;
+	/** Add a file to the live tree if its directory is shared and it isn't there yet. Requires cs. */
+	bool addMovedFile(const MovedFile& file);
+	void replayMovedFiles();
+
+	/** Rebuild the indices after a tree swap and re-apply what changed during the scan. Requires cs. */
+	void afterTreeChange();
+	/** Swap in a virtual name's new tree, updating the indices for that name only. Requires cs. */
+	void replaceTree(const string& virtualName, const Directory::Ptr& tree);
+	/** Remove a tree's files from the TTH index. Requires cs. */
+	void unindexTree(const Directory& dir);
+	/** Set by replaceTree: duplicates are left unindexed rather than removed. Guarded by cs. */
+	bool deferDuplicates = false;
+	/** Real folders shared under a virtual name, in share order. Requires cs. */
+	StringList getRealRoots(const string& virtualName) const;
+	/** Scan one share root into tree_ (merged when tree_ already holds another root of the same
+	 * virtual name). @return false when the root couldn't be scanned completely (unavailable, or
+	 * stopping) and its previous contents should be kept. */
+	bool scanRoot(const pft::PrivatePathScanner& privacy, const string& realPath, const string& virtualName,
+		Directory::Ptr& tree_);
+
+	/** Set when shutting down: scans stop at the next directory entry and their results are dropped. */
+	std::atomic<bool> stopping { false };
+	/** Length of the last full refresh; the next automatic one waits at least this long. */
+	std::atomic<uint64_t> lastRefreshDuration { 0 };
+
 	unordered_map<TTHValue, const Directory::File*> tthIndex;
+	/** Sum of the sizes in tthIndex, kept as it changes. Guarded by cs. */
+	int64_t sharedBytes = 0;
+	/** Changes whenever tthIndex does. Guarded by cs. */
+	uint64_t indexVersion = 1;
+	struct ShareTotals {
+		uint64_t version = 0;
+		int64_t size = 0;
+		size_t files = 0;
+	};
+	/** By profile key, valid while version == indexVersion. Guarded by totalsCs (filled under the
+	 * shared share lock, so several readers may update it at once). */
+	mutable unordered_map<string, ShareTotals> profileTotals;
+	mutable FastCriticalSection totalsCs;
+	ShareTotals getTotals(const ShareAccess& access) const;
 
 	vector<TempShareInfo> tempShares;
 	static bool tempShareExpired(const TempShareInfo& item, uint64_t tick) noexcept;
@@ -447,15 +543,21 @@ private:
 		uint64_t generation) const noexcept;
 	ChatAttachmentRequestState beginChatAttachmentCallback(uint64_t requestId,
 		uint64_t generation) noexcept;
+	ResolvedFileInfo resolveFileLocked(const string& virtualFile, const string& hubUrl, const CID& user);
+	/** @throw ShareException when the file carries the Private Send marker. */
+	static void checkNotMarked(const string& realPath);
 	ShareAccess getShareAccess(const string& hubUrl) const;
 	bool isVirtualAllowed(const string& virtualName, const ShareAccess& access) const;
 	bool isFileAllowed(const Directory::File& file, const ShareAccess& access) const;
-	string generateFileListData(const string& hubUrl, bool compressed) const;
+	string generateFileListData(const string& hubUrl, bool compressed);
 
 	Directory::Ptr buildTree(const string& realPath, optional<std::reference_wrapper<const string>> dirName = nullopt,
 		const Directory::Ptr& parent = nullptr, time_t lastWrite = 0);
+	/** @param keepRealPaths Store each file's real path: the virtual name is shared from several folders. */
 	Directory::Ptr scanTree(const pft::PrivatePathScanner& privacy, const string& realPath,
-		optional<std::reference_wrapper<const string>> dirName, const Directory::Ptr& parent, time_t lastWrite);
+		optional<std::reference_wrapper<const string>> dirName, const Directory::Ptr& parent, time_t lastWrite, bool keepRealPaths);
+	/** Store the real path of every file under dir that doesn't have one. */
+	static void keepRealPaths(Directory& dir, const string& dirRealPath);
 	bool checkHidden(const string& realPath) const;
 	bool checkInvalidFileName(const string& realPath) const;
 	bool checkInvalidPaths(const string& realPath) const;
@@ -505,7 +607,7 @@ private:
 	/** Create or upgrade the share-cache schema; destructive migrations should use a new schema version. */
 	void createShareCacheSchema(SQLiteDB& db);
 	/** Recursively write one directory subtree using stable parent ids for fast parent-ordered loading. */
-	void saveShareCacheDirectory(SQLiteStatement& dirStmt, SQLiteStatement& fileStmt, const Directory& dir,
+	void saveShareCacheDirectory(SQLiteStatement& dirStmt, SQLiteStatement& fileStmt, const Directory::Ptr& dir,
 		optional<int64_t> parentId, int64_t& nextId, uint64_t& directoryCount, uint64_t& fileCount) const;
 
 	// QueueManagerListener

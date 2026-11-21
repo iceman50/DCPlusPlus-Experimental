@@ -190,7 +190,7 @@ void SystemFrame::refreshLog() {
 
 void SystemFrame::openFile(const string& path) const {
 	// see if we are opening our own file list.
-	if(path == ShareManager::getInstance()->getBZXmlFile()) {
+	if(ShareManager::getInstance()->isOwnListFile(path)) {
 		DirectoryListingFrame::openOwnList(getParent());
 		return;
 	}

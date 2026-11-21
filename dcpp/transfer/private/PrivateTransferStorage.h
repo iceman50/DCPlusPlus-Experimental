@@ -17,32 +17,39 @@ namespace pft {
  * provenance marker even when the recipient chooses another directory. */
 std::string storageRoot();
 std::string defaultDownloadPath(const std::string& name);
+/** Whether an absolute, normalized path lies in private storage or publication staging, judged by
+ * its name alone. No file system access: use it for paths that come from a share scan, whose
+ * roots and directories were checked by PrivatePathScanner. */
+bool isPrivateLocation(const std::string& path);
+/** As above, with storageRoot() already looked up (for checking many paths). */
+bool isPrivateLocation(const std::string& path, const std::string& root);
+/** Whether the file carries the Private Send marker. One open of an alternate data stream. */
+bool hasPrivateMarker(const std::string& path);
+/** The full check for a single path chosen outside a share scan (a share root being added, a chat
+ * attachment, a finished download, a receive target): its name, its real location through
+ * junctions, symbolic links, subst drives, network paths and aliases of the storage root, and
+ * the marker. Works for local, mapped and UNC paths. */
 bool isPrivatePath(const std::string& path);
 
-/** isPrivatePath for share scans. It canonicalizes the private root once and each scanned directory
- * once instead of per file, which on a network drive costs several round trips per file. For a
- * regular file isPrivateFile(enter(dir), name) == isPrivatePath(dir + name); a file that is itself a
- * reparse point (symlink) must go through isPrivatePath. */
+/** Private-storage checks for a share scan. Directories cost no file system access unless they
+ * are reparse points or named like the storage root; regular files are judged by name, and their
+ * markers are checked when they are hashed (HashManager) or found in the hash store unchecked. */
 class PrivatePathScanner {
 public:
-	struct Directory {
-		std::string path;      ///< As given; ends with a separator.
-		std::string canonical; ///< With a trailing separator; empty if canonicalization failed.
-		bool staging = false;  ///< A component of the path or its canonical form is publication staging.
-	};
-
 	PrivatePathScanner();
-	/** @param directory Real directory path ending with a separator. */
-	Directory enter(const std::string& directory) const;
-	bool isPrivateFile(const Directory& dir, const std::string& name) const;
+	/** A share root: its name, real location and ancestors. */
+	bool isPrivateRoot(const std::string& directory) const;
+	/** A directory found by the scan inside a root that isn't private.
+	 * @param directory Real path, ending with a separator. */
+	bool isPrivateDirectory(const std::string& directory, const std::string& name, bool reparsePoint) const;
+	/** A file found by the scan inside a directory that isn't private. */
+	bool isPrivateFile(const std::string& path, const std::string& name, bool reparsePoint) const;
 
 private:
-	std::string root;
-	std::string canonicalRoot;
+	struct Storage;
+	std::shared_ptr<Storage> storage;
 };
 
-/** Startup only: old grants cannot survive restart; remove owned partials
- * without following reparse points or touching completed received files. */
 bool purgeUnfinished() noexcept;
 
 /** Stable regular-file handle. Windows ancestors are pinned against rename and

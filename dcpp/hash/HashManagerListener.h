@@ -37,7 +37,9 @@ public:
 		CRC_MISMATCH,
 		INCOMPLETE,
 		CANCELLED,
-		HASH_STORE
+		HASH_STORE,
+		/** The file carries the Private Send marker and is never hashed for sharing. */
+		PRIVATE_FILE
 	};
 
 	/** A hash job completed for the exact file snapshot described by size and timestamp. */

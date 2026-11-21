@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace dcpp {
 
@@ -51,8 +52,26 @@ private:
 	uint32_t crc32;
 	bool crcFound;
 
-	bool tryFile(const string& sfvFile, const string& fileName);
+	friend class SFVDirectoryReader;
+	/** Find fileName's CRC32 in the contents of one .sfv file. */
+	static bool findCRC(const string& sfv, const string& fileName, uint32_t& crc_) noexcept;
 
+};
+
+/** SFVReader for the files of one directory after another (as the hasher visits them): a
+ * directory's .sfv files are listed and read once rather than once per file, which is a
+ * directory listing and several reads per file on a network drive. */
+class SFVDirectoryReader {
+public:
+	/** Same result as SFVReader(fileName).hasCRC() / getCRC() for the .sfv files that existed
+	 * when the file's directory was first read. */
+	bool getCRC(const string& fileName, uint32_t& crc_);
+	void clear() noexcept;
+
+private:
+	string directory;
+	bool loaded = false;
+	std::vector<string> sfvContents;
 };
 
 } // namespace dcpp
