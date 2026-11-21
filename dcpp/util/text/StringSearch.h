@@ -60,37 +60,60 @@ public:
 
 	/** Match a text against the pattern */
 	bool match(const string& aText) const noexcept {
-
-		// Lower-case representation of UTF-8 string, since we no longer have that 1 char = 1 byte...
-		string lower;
-		Text::toLower(aText, lower);
-
-		// uint8_t to avoid problems with signed char pointer arithmetic
-		uint8_t *tx = (uint8_t*)lower.c_str();
-		uint8_t *px = (uint8_t*)pattern.c_str();
-
-		string::size_type plen = pattern.length();
-
+		const string::size_type plen = pattern.length();
 		if(aText.length() < plen) {
 			return false;
 		}
 
-		uint8_t *end = tx + aText.length() - plen + 1;
+		// Text::toLower maps ASCII letters A-Z to a-z and leaves other ASCII as is (CharLowerW does
+		// so in every locale), so an ASCII text - most file names - is compared in place. Searches
+		// match every shared name against every term; lowercasing each into a new string made a
+		// search of a large share mostly memory allocation.
+		const auto* text = reinterpret_cast<const uint8_t*>(aText.c_str());
+		bool ascii = true;
+		for(string::size_type i = 0; i < aText.length(); ++i) {
+			if(text[i] >= 0x80) {
+				ascii = false;
+				break;
+			}
+		}
+		if(ascii) {
+			return find(text, aText.length(), [](uint8_t c) { return static_cast<uint8_t>(c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c); });
+		}
+
+		// Lower-case representation of UTF-8 string, since we no longer have that 1 char = 1 byte...
+		static thread_local string lower;
+		lower.clear();
+		Text::toLower(aText, lower);
+		return find(reinterpret_cast<const uint8_t*>(lower.c_str()), lower.length(), [](uint8_t c) { return c; });
+	}
+
+private:
+	/** Sunday's quick search of a null-terminated text, each text byte passed through lower(). */
+	template<typename Lower>
+	bool find(const uint8_t* tx, string::size_type length, Lower lower) const noexcept {
+		const auto* px = reinterpret_cast<const uint8_t*>(pattern.c_str());
+		const string::size_type plen = pattern.length();
+		if(length < plen) {
+			return false;
+		}
+
+		const uint8_t* end = tx + length - plen + 1;
 		while(tx < end) {
 			size_t i = 0;
-			for(; px[i] && (px[i] == tx[i]); ++i)
+			for(; px[i] && (px[i] == lower(tx[i])); ++i)
 				;		// Empty!
 
 			if(px[i] == 0)
 				return true;
 
-			tx += delta1[tx[plen]];
+			// tx[plen] is at most the terminating null.
+			tx += delta1[lower(tx[plen])];
 		}
 
 		return false;
 	}
 
-private:
 	enum { ASIZE = 256 };
 	/**
 	 * Delta1 shift, uint16_t because we expect all patterns to be shorter than 2^16

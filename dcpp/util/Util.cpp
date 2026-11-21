@@ -1010,9 +1010,32 @@ wstring::size_type Util::findSubString(const wstring& aString, const wstring& aS
 	return static_cast<wstring::size_type>(wstring::npos);
 }
 
+namespace {
+// Text::toLower maps ASCII as A-Z -> a-z and leaves other ASCII as is, in every locale (CharLowerW
+// maps I to i even for Turkish), so ASCII characters - nearly every byte of most names - are
+// compared without decoding them and without a CharLowerW call each. Share trees order and look
+// up millions of names this way.
+inline bool isAscii(char c) {
+	return static_cast<unsigned char>(c) < 0x80;
+}
+
+inline int asciiLower(char c) {
+	return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : static_cast<unsigned char>(c);
+}
+}
+
 int Util::stricmp(const char* a, const char* b) {
 	wchar_t ca = 0, cb = 0;
 	while(*a) {
+		if(isAscii(*a) && isAscii(*b)) {
+			const int la = asciiLower(*a), lb = asciiLower(*b);
+			if(la != lb) {
+				return la - lb;
+			}
+			++a;
+			++b;
+			continue;
+		}
 		ca = cb = 0;
 		int na = Text::utf8ToWc(a, ca);
 		int nb = Text::utf8ToWc(b, cb);
@@ -1034,6 +1057,15 @@ int Util::strnicmp(const char* a, const char* b, size_t n) {
 	const char* end = a + n;
 	wchar_t ca = 0, cb = 0;
 	while(*a && a < end) {
+		if(isAscii(*a) && isAscii(*b)) {
+			const int la = asciiLower(*a), lb = asciiLower(*b);
+			if(la != lb) {
+				return la - lb;
+			}
+			++a;
+			++b;
+			continue;
+		}
 		ca = cb = 0;
 		int na = Text::utf8ToWc(a, ca);
 		int nb = Text::utf8ToWc(b, cb);
@@ -1392,6 +1424,11 @@ size_t noCaseStringHash::operator()(const string& s) const {
 	size_t x = 0;
 	auto end = s.data() + s.size();
 	for(auto str = s.data(); str < end; ) {
+		if(isAscii(*str)) {
+			x = x * 32 - x + static_cast<size_t>(asciiLower(*str));
+			++str;
+			continue;
+		}
 		wchar_t c = 0;
 		int n = Text::utf8ToWc(str, c);
 		if(n < 0) {
