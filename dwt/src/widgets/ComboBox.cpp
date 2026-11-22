@@ -37,6 +37,11 @@
 
 #include "AppearanceDraw.h"
 
+#include <map>
+
+#include <commctrl.h>
+#include <dwt/util/win32/Dpi.h>
+
 namespace dwt {
 
 const TCHAR ComboBox::windowClass[] = WC_COMBOBOX;
@@ -257,6 +262,43 @@ bool ComboBox::handleMessage(const MSG& msg, LRESULT& retVal) {
 	return false;
 }
 
+namespace {
+
+/** The room a combo box takes around its text: its frame, its text field's insets and its
+ * drop-down button, which current Windows themes draw wider than a small icon. Measured once per
+ * DPI on a hidden combo box of normal size, so that it doesn't depend on the size the combo box
+ * being measured happens to have (none, before its first layout). */
+int textChrome(HWND reference) {
+	static std::map<unsigned, int> cache;
+	const auto dpi = util::win32::getDpi(reference);
+	const auto known = cache.find(dpi);
+	if(known != cache.end()) {
+		return known->second;
+	}
+
+	int chrome = ::GetSystemMetrics(SM_CYFIXEDFRAME) * 2 + ::GetSystemMetrics(SM_CXSMICON);
+	// Hidden and top-level, so that no parent hears of it.
+	HWND probe = ::CreateWindowEx(0, WC_COMBOBOX, _T(""), WS_POPUP | CBS_DROPDOWNLIST, 0, 0, 200, 200,
+		nullptr, nullptr, ::GetModuleHandle(nullptr), nullptr);
+	if(probe) {
+		::SendMessage(probe, WM_SETFONT, ::SendMessage(reference, WM_GETFONT, 0, 0), FALSE);
+		COMBOBOXINFO info = { sizeof(COMBOBOXINFO) };
+		RECT window, client;
+		if(::GetComboBoxInfo(probe, &info) && ::GetWindowRect(probe, &window) && ::GetClientRect(probe, &client) &&
+			info.rcItem.right > info.rcItem.left)
+		{
+			const auto measured = info.rcItem.left + (client.right - info.rcItem.right) +
+				((window.right - window.left) - client.right);
+			chrome = util::win32::scale(static_cast<int>(measured), dpi, util::win32::getDpi(probe));
+		}
+		::DestroyWindow(probe);
+	}
+	cache[dpi] = chrome;
+	return chrome;
+}
+
+}
+
 Point ComboBox::getPreferredSize() {
 	// Pixels between text and arrow
 	const int MARGIN = 2;
@@ -269,7 +311,9 @@ Point ComboBox::getPreferredSize() {
 		ret.x = std::max(ret.x, ext.x);
 	}
 
-	ret.x += ::GetSystemMetrics(SM_CYFIXEDFRAME) * 2 + ::GetSystemMetrics(SM_CXSMICON) + MARGIN;
+	// The text is drawn a little inside the text field on both sides.
+	const int TEXT_INSET = 3;
+	ret.x += textChrome(handle()) + 2 * TEXT_INSET + MARGIN;
 	ret.y = static_cast<long>(sendMessage(CB_GETITEMHEIGHT, static_cast<WPARAM>(-1), 0)) + ::GetSystemMetrics(SM_CXFIXEDFRAME) * 2;
 	return ret;
 }
