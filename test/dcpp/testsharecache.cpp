@@ -413,6 +413,60 @@ TEST_F(ShareCacheTest, replaces_old_share_cache_schema_without_self_lock) {
 	EXPECT_EQ(ShareManager::getInstance()->toReal("/Virtual/Child/file.bin"), sharePath + "Child" PATH_SEPARATOR_STR "file.bin");
 }
 
+TEST_F(ShareCacheTest, extension_filter_leaves_matching_files_out_of_the_share) {
+	auto sm = ShareManager::getInstance();
+	sm->shares[sharePath] = "Virtual";
+	cacheFile(sharePath + "keep.txt", "keep");
+	cacheFile(sharePath + "skip.nfo", "skip");
+	cacheFile(sharePath + "picture.png", "picture");
+	cacheFile(sharePath + "SHOUT.NFO", "shout");
+	cacheFile(sharePath + "readme.info", "info");
+	auto findShared = [](const ShareManager::Directory& dir, const string& name) {
+		return dir.findFile(name) != dir.files.end();
+	};
+	// Every way of writing an extension that people use, in any letter case.
+	for(const auto& filter: { "nfo;png", ".nfo;.png", "*.nfo;*.png", " nfo ; png ", "NFO;PNG" }) {
+		SettingsManager::getInstance()->set(SettingsManager::SHARING_SKIPLIST_EXTENSIONS, string(filter));
+		sm->refresh(true, false, true);
+		auto root = sm->directories["Virtual"];
+		ASSERT_TRUE(root) << filter;
+		EXPECT_TRUE(findShared(*root, "keep.txt")) << filter;
+		EXPECT_FALSE(findShared(*root, "skip.nfo")) << filter;
+		EXPECT_FALSE(findShared(*root, "picture.png")) << filter;
+		EXPECT_FALSE(findShared(*root, "SHOUT.NFO")) << filter;
+		// An extension, not any name ending in those letters.
+		EXPECT_TRUE(findShared(*root, "readme.info")) << filter;
+	}
+}
+
+TEST_F(ShareCacheTest, a_refresh_asked_for_during_another_runs_after_it) {
+	auto sm = ShareManager::getInstance();
+	auto hm = HashManager::getInstance();
+	{
+		WLock l(sm->cs);
+		sm->shares[sharePath] = "Virtual";
+	}
+	cacheFile(sharePath + "keep.txt", "keep");
+	cacheFile(sharePath + "skip.nfo", "skip");
+	sm->refresh(true, false, true);
+	ASSERT_TRUE(sm->directories["Virtual"]->findFile("skip.nfo") != sm->directories["Virtual"]->files.end());
+
+	{
+		// The scan reads the hash store, so it waits here while a filter is added.
+		Lock l(hm->cs);
+		sm->refresh(true);
+		ASSERT_TRUE(sm->isRefreshing());
+		SettingsManager::getInstance()->set(SettingsManager::SHARING_SKIPLIST_EXTENSIONS, string("nfo"));
+		// Settings asks for a refresh while the first one runs: it is queued, not refused.
+		sm->refresh(true);
+	}
+	sm->join();
+	EXPECT_FALSE(sm->isRefreshing());
+	auto root = sm->directories["Virtual"];
+	EXPECT_TRUE(root->findFile("keep.txt") != root->files.end());
+	EXPECT_TRUE(root->findFile("skip.nfo") == root->files.end()) << "The queued refresh did not run with the new filter";
+}
+
 TEST_F(ShareCacheTest, rejects_cache_when_share_settings_change) {
 	populateShare();
 	ShareManager::getInstance()->saveShareCache();

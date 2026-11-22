@@ -406,6 +406,8 @@ private:
 
 	static std::atomic_flag refreshing;
 	static std::atomic<bool> refreshActive;
+	/** A full refresh was asked for while another ran; it runs as soon as that one ends. */
+	std::atomic<bool> refreshQueued { false };
 	std::atomic<bool> cacheUnverified { false };
 
 	std::atomic<uint64_t> lastFullUpdate;
@@ -519,7 +521,8 @@ private:
 	BloomFilter<5> bloom;
 
 	std::list<StringMatch> cachedFilterSkiplistRegEx;
-	std::list<StringMatch> cachedFilterSkiplistFileExtensions;
+	/** Extensions to leave out, each with its leading dot (".nfo"). */
+	std::vector<string> cachedFilterSkiplistFileExtensions;
 	std::list<StringMatch> cachedFilterSkiplistPaths;
 
 	const Directory::File& findFile(const string& virtualFile) const;
@@ -565,6 +568,8 @@ private:
 	bool checkRegEx(const StringMatch& matcher, const string& match) const;
 
 	void updateFilterCache(const std::string& strSetting, std::list<StringMatch>& lst);
+	/** Run the refreshes asked for while the last one ran, one after the other. */
+	void runQueuedRefreshes();
 	void updateFilterCache(const std::string& strSetting, const std::string& strExtraPattern, bool escapeDot, std::list<StringMatch>& lst);
 
 	/** Rebuild TTH and bloom indexes after replacing the share tree; expectedFiles pre-sizes large TTH maps. */

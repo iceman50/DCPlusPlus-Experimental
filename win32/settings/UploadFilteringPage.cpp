@@ -159,8 +159,8 @@ void UploadFilteringPage::write()
 	{
 		PropPage::write(items);
 
-		ShareManager::getInstance()->updateFilterCache();
-
+		// The refresh reads the new filters before it scans (also when it has to wait for a
+		// refresh already running).
 		ShareManager::getInstance()->setDirty();
 
 		ShareManager::getInstance()->refresh(true);

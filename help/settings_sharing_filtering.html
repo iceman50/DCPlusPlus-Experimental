@@ -28,7 +28,7 @@ refresh of the file list, and may cause the client to appear to freeze.
   </dd>
   <dt>File extension filtering</dt>
   <dd cshelp="IDH_SETTINGS_UPLOAD_SKIPLIST_EXTENSIONS">
-      Filters out any file with an extension that is listed here. Use semicolon to separate multiple extensions. For example, the value txt;png will remove any file that has the extensions txt or png.
+      Filters out any file with an extension that is listed here, in any letter case. Use semicolon to separate multiple extensions. For example, the value txt;png (or .txt;.png, or *.txt;*.png) will remove any file whose name ends in .txt or .png. A change applies at the next refresh, which starts at once, or as soon as a refresh already running has finished.
   </dd><dt>Path filtering</dt>
   <dd cshelp="IDH_SETTINGS_UPLOAD_SKIPLIST_PATHS">
       Filters out any path that is listed here. Use semicolon to separate multiple paths. For example, the value "download;secret_files" will remove any directory that has download or secret_files in the path.

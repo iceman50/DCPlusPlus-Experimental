@@ -1687,12 +1687,12 @@ bool ShareManager::checkInvalidFileName(const string& name) const
 		}
 	}
 
-	for(auto& f: cachedFilterSkiplistFileExtensions)
+	// Whatever the letter case: Windows file names don't distinguish it.
+	for(auto& extension: cachedFilterSkiplistFileExtensions)
 	{
-		if(checkRegEx(f, name))
+		if(name.size() > extension.size() &&
+			Util::stricmp(name.c_str() + name.size() - extension.size(), extension.c_str()) == 0)
 		{
-			dcdebug("Filtering away the file '%s' with the pattern matching '%s'\n", name.c_str(), f.pattern.c_str());
-
 			return false;
 		}
 	}
@@ -1749,8 +1749,22 @@ bool ShareManager::checkRegEx(const StringMatch& matcher, const string& match) c
 void ShareManager::updateFilterCache()
 {
 	updateFilterCache(SETTING(SHARING_SKIPLIST_REGEX), cachedFilterSkiplistRegEx);
-	updateFilterCache(SETTING(SHARING_SKIPLIST_EXTENSIONS), "$", true, cachedFilterSkiplistFileExtensions);
 	updateFilterCache(SETTING(SHARING_SKIPLIST_PATHS), cachedFilterSkiplistPaths);
+
+	// "nfo", ".nfo" and "*.nfo" all mean files whose name ends in ".nfo". Spaces around an entry
+	// are ignored. (DC++ 0.884 turned each entry into a regular expression, so "*.nfo" matched
+	// nothing and "nfo" also matched "readme.info".)
+	cachedFilterSkiplistFileExtensions.clear();
+	for(auto extension: StringTokenizer<string>(SETTING(SHARING_SKIPLIST_EXTENSIONS), ';').getTokens())
+	{
+		Util::trim(extension);
+		const auto start = extension.find_first_not_of("*.");
+		if(start == string::npos)
+		{
+			continue;
+		}
+		cachedFilterSkiplistFileExtensions.push_back("." + extension.substr(start));
+	}
 }
 
 void ShareManager::updateFilterCache(const std::string& strSetting, std::list<StringMatch>& lst)
@@ -2360,8 +2374,17 @@ void ShareManager::startupRefresh(function<void (float)> progressF) noexcept {
 
 void ShareManager::refresh(bool dirs, bool aUpdate, bool block, function<void (float)> progressF) noexcept {
 	if(refreshing.test_and_set()) {
-		LogManager::getInstance()->message(_("File list refresh in progress, please wait for it to finish before trying to refresh again"),
-			LogMessage::SEV_WARNING, _("Sharing"));
+		if(dirs) {
+			// Settings that change what is shared (filters, folders) take effect without waiting
+			// for the next automatic refresh, which on a large network share may be hours away.
+			if(!refreshQueued.exchange(true)) {
+				LogManager::getInstance()->message(_("File list refresh in progress; the share will be refreshed again when it finishes"),
+					LogMessage::SEV_INFO, _("Sharing"));
+			}
+		} else {
+			LogManager::getInstance()->message(_("File list refresh in progress, please wait for it to finish before trying to refresh again"),
+				LogMessage::SEV_WARNING, _("Sharing"));
+		}
 		return;
 	}
 	refreshActive = true;
@@ -2373,6 +2396,7 @@ void ShareManager::refresh(bool dirs, bool aUpdate, bool block, function<void (f
 
 	if(block) {
 		runRefresh(progressF);
+		runQueuedRefreshes();
 
 	} else {
 		try {
@@ -2398,15 +2422,32 @@ StringPairList ShareManager::getDirectories() const noexcept {
 
 int ShareManager::run() {
 	runRefresh();
-	// A folder added after the refresh scanned its pending list, but before it released the
-	// refresh flag, found the flag taken and left its scan to this thread.
-	while(!stopping && hasPendingDirectories() && !refreshing.test_and_set()) {
-		refreshActive = true;
-		update = true;
-		refreshDirs = false;
-		runRefresh();
-	}
+	runQueuedRefreshes();
 	return 0;
+}
+
+void ShareManager::runQueuedRefreshes() {
+	while(!stopping) {
+		// A full refresh asked for while the last one ran.
+		if(refreshQueued && !refreshing.test_and_set()) {
+			refreshQueued = false;
+			refreshActive = true;
+			update = true;
+			refreshDirs = true;
+			runRefresh();
+			continue;
+		}
+		// A folder added after the refresh scanned its pending list, but before it released the
+		// refresh flag, found the flag taken and left its scan to this thread.
+		if(hasPendingDirectories() && !refreshing.test_and_set()) {
+			refreshActive = true;
+			update = true;
+			refreshDirs = false;
+			runRefresh();
+			continue;
+		}
+		break;
+	}
 }
 
 bool ShareManager::scanRoot(const pft::PrivatePathScanner& privacy, const string& realPath, const string& virtualName,
