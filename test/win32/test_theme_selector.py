@@ -1,6 +1,7 @@
 # Copyright (C) 2026 iceman50
 """Exercise the built application's theme dropdown using a disposable local profile."""
 import argparse
+from collections import Counter
 import ctypes as c
 from ctypes import wintypes as w
 import json
@@ -116,6 +117,43 @@ def main():
                 path.with_suffix(".json").write_text(json.dumps(windows, indent=2))
             child = w.RECT()
             user.GetWindowRect(combo, c.byref(child))
+            native = expected_background is None
+            if native:
+                # The rebar between the toolbar and the band (below the band may be its border).
+                host = w.RECT()
+                user.GetWindowRect(user.GetParent(combo), c.byref(host))
+                x, y = host.left - bounds.left - 3, (host.top + host.bottom) // 2 - bounds.top
+                blue, green, red = data[(y * width + x) * 4:(y * width + x) * 4 + 3]
+                expected_background = red | (green << 8) | (blue << 16)
+            if not frame:
+                # The caption beside the dropdown is mostly background: it must be the
+                # rebar's, not the dialog color (a gray block on a white toolbar).
+                label = w.RECT()
+                labels = []
+
+                @callback
+                def find_label(child_hwnd, _):
+                    name = c.create_unicode_buffer(128)
+                    user.GetClassNameW(child_hwnd, name, len(name))
+                    if "Label" in name.value:
+                        labels.append(child_hwnd)
+                    return True
+
+                user.EnumChildWindows(user.GetParent(combo), find_label, 0)
+                assert labels, "Missing theme caption"
+                user.GetWindowRect(labels[0], c.byref(label))
+                colors = Counter()
+                for y in range(label.top - bounds.top, label.bottom - bounds.top):
+                    for x in range(label.left - bounds.left, label.right - bounds.left):
+                        blue, green, red = data[(y * width + x) * 4:(y * width + x) * 4 + 3]
+                        colors[red | (green << 8) | (blue << 16)] += 1
+                background = colors.most_common(1)[0][0]
+                # The static control's buffered painting may round a channel by one.
+                close = all(abs(((background >> shift) & 0xff) - ((expected_background >> shift) & 0xff)) <= 2
+                            for shift in (0, 8, 16))
+                assert close, f"Theme caption background {background:06x}, rebar {expected_background:06x}"
+            if native:
+                return
             y = child.bottom - bounds.top + 2
             if frame:
                 band = w.RECT()
@@ -267,8 +305,13 @@ def main():
                 bounds = w.RECT()
                 user.GetWindowRect(combo, c.byref(bounds))
                 assert bounds.right > bounds.left and bounds.bottom > bounds.top, "Empty theme selector bounds"
-                if not restart:
-                    assert user.GetWindowLongPtrW(window, -16) & 0xC00000 == 0xC00000, "Light startup lost its native caption"
+                if not restart and args.snapshot:
+                    # The native light look, before any palette is chosen.
+                    user.ShowWindow(window, 3 if args.maximized else 4)
+                    if not args.maximized:
+                        user.SetWindowPos(window, None, 30, 30, 1800, 700, 0x10)
+                    time.sleep(1)
+                    snapshot(parent, args.snapshot.with_name("light-" + args.snapshot.name), combo, None)
                 check_settings_menu(window, process)
                 def theme_index(title):
                     value = c.create_unicode_buffer(title)

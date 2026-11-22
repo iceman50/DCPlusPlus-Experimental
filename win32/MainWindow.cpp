@@ -68,6 +68,7 @@
 #include <dwt/Application.h>
 #include <dwt/DWTException.h>
 #include <dwt/util/win32/Dwm.h>
+#include <dwt/util/win32/UxTheme.h>
 #include <dwt/widgets/Button.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/ComboBox.h>
@@ -606,6 +607,27 @@ void MainWindow::initThemeSelector() {
 	themeBand->column(1).align = dwt::GridInfo::STRETCH;
 	auto label = themeBand->addChild(dwt::Label::Seed(T_("Theme")));
 	label->setFont(UiFonts::font);
+	// Without a palette the rebar draws its visual style's background, which is not the
+	// dialog color the band and its caption would otherwise fill themselves with (a gray
+	// block around "Theme" on a white toolbar). A palette paints both in its own color.
+	const auto native = [] { return !dwt::Application::instance().getAppearance().isManual(); };
+	themeBand->addCallback(dwt::Message(WM_ERASEBKGND), [this, native](const MSG& msg, LRESULT& ret) {
+		if(!native() || !msg.wParam) return false;
+		dwt::util::win32::uxtheme::drawThemeParentBackground(themeBand->handle(), reinterpret_cast<HDC>(msg.wParam), nullptr);
+		ret = TRUE;
+		return true;
+	});
+	// dwt passes WM_CTLCOLORSTATIC on to the label as WM_CTLCOLOR.
+	label->addCallback(dwt::Message(WM_CTLCOLOR), [label, native](const MSG& msg, LRESULT& ret) {
+		if(!native() || !msg.wParam) return false;
+		const auto dc = reinterpret_cast<HDC>(msg.wParam);
+		// The band's erase handler above passes this on to the rebar.
+		dwt::util::win32::uxtheme::drawThemeParentBackground(label->handle(), dc, nullptr);
+		::SetBkMode(dc, TRANSPARENT);
+		::SetTextColor(dc, ::GetSysColor(COLOR_BTNTEXT));
+		ret = reinterpret_cast<LRESULT>(::GetStockObject(NULL_BRUSH));
+		return true;
+	});
 	themeSelector = themeBand->addChild(ControlSeeds::comboBox);
 	themeSelector->setAccessibleName(T_("Theme"));
 	const auto updateSelectorColors = [combo = themeSelector] {
