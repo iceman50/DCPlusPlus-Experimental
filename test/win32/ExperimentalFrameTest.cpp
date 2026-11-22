@@ -584,6 +584,16 @@ void movedOptionsApplyAtOnce(dwt::Window* window, dwt::Application& app) {
 	auto settings = SettingsManager::getInstance();
 	auto frame = open(window, app, 1800, 1000);
 
+	// File lists: the download limit and the XML limit, both in MiB.
+	auto download = field(frame, L"Largest file list to download");
+	type(download, L"100");
+	enter(download);
+	check(settings->get(SettingsManager::MAX_FILELIST_DOWNLOAD_SIZE) == 100, "The file list download limit did not apply");
+	auto xml = field(frame, L"Largest file list to open (XML)");
+	type(xml, L"300");
+	enter(xml);
+	check(settings->get(SettingsManager::MAX_FILELIST_SIZE) == 300, "The file list XML limit did not apply");
+
 	// Check boxes moved from Settings > Advanced and from the Message outbox dialog.
 	for(const auto& option: { std::make_pair(L"Report each hashed file in the system log", SettingsManager::LOG_HASHED_FILES),
 		std::make_pair(L"Keep messages for offline users and send them later", SettingsManager::ENABLE_MESSAGE_OUTBOX),
@@ -659,7 +669,8 @@ void movedOptionsApplyAtOnce(dwt::Window* window, dwt::Application& app) {
 	}
 
 	close(frame, app);
-	for(auto setting: { SettingsManager::EMOTICON_SIZE })
+	for(auto setting: { SettingsManager::MAX_FILELIST_DOWNLOAD_SIZE, SettingsManager::MAX_FILELIST_SIZE,
+		SettingsManager::EMOTICON_SIZE })
 	{
 		settings->unset(setting);
 	}

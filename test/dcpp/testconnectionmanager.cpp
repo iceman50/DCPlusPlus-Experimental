@@ -761,3 +761,30 @@ TEST_F(ConnectionManagerTest, full_lists_larger_than_the_open_limit_are_refused)
 		EXPECT_EQ(-1, File::getSize(path + extension));
 	}
 }
+
+TEST_F(ConnectionManagerTest, full_lists_larger_than_the_download_limit_are_refused) {
+	const string hub = "dchub://one.example";
+	auto settings = SettingsManager::getInstance();
+	// No limit on the XML that may be opened: the download limit alone refuses the list.
+	settings->set(SettingsManager::MAX_FILELIST_SIZE, 0);
+	settings->set(SettingsManager::MAX_FILELIST_DOWNLOAD_SIZE, 1);
+	auto qm = QueueManager::getInstance();
+	auto u = user(4);
+	qm->addList(HintedUser(u, hub), 0);
+	auto uc = peer(u, "token", false, false);
+	uc->socket = BufferedSocket::getSocket(0);
+	uc->socket->setSocket(unique_ptr<Socket>(new Socket(Socket::TYPE_TCP)));
+	auto d = qm->getDownload(*uc);
+	ASSERT_TRUE(d && d->getType() == Transfer::TYPE_FULL_LIST);
+	const auto path = d->getPath();
+
+	DownloadManager::getInstance()->startData(uc, 0, 1024 * 1024 + 1, false, false);
+	EXPECT_EQ(nullptr, uc->getDownload());
+	auto item = qm->fileQueue.find(path);
+	EXPECT_TRUE(!item || !item->isSource(u));
+	for(const auto& extension: { ".xml", ".xml.bz2", ".xml.zst" }) {
+		EXPECT_EQ(-1, File::getSize(path + extension));
+	}
+	settings->unset(SettingsManager::MAX_FILELIST_SIZE);
+	settings->unset(SettingsManager::MAX_FILELIST_DOWNLOAD_SIZE);
+}

@@ -284,17 +284,26 @@ void DownloadManager::startData(UserConnection* aSource, int64_t start, int64_t 
 			return;
 		}
 	}
-	if(d->getType() == Transfer::TYPE_FULL_LIST && SETTING(MAX_FILELIST_SIZE) > 0 &&
-		bytes > static_cast<int64_t>(SETTING(MAX_FILELIST_SIZE)) * 1024 * 1024)
-	{
-		// Opening the list enforces the same limit on its XML. The announced size is the XML size,
-		// or the smaller compressed size for .bz2 lists, so a larger list could never be opened.
-		const auto path = d->getPath();
-		const auto user = aSource->getUser();
-		failDownload(aSource, str(F_("File list is larger than the maximum file list size (%1%)") %
-			Util::formatBytes(static_cast<int64_t>(SETTING(MAX_FILELIST_SIZE)) * 1024 * 1024)));
-		QueueManager::getInstance()->removeSource(path, user, QueueItem::Source::FLAG_FILE_NOT_AVAILABLE, false);
-		return;
+	if(d->getType() == Transfer::TYPE_FULL_LIST) {
+		// Settings in MiB; 0 means no limit.
+		const auto mib = [](int setting) { return static_cast<int64_t>(setting) * 1024 * 1024; };
+		string refusal;
+		if(SETTING(MAX_FILELIST_DOWNLOAD_SIZE) > 0 && bytes > mib(SETTING(MAX_FILELIST_DOWNLOAD_SIZE))) {
+			refusal = str(F_("File list is larger than the largest file list to download (%1%)") %
+				Util::formatBytes(mib(SETTING(MAX_FILELIST_DOWNLOAD_SIZE))));
+		} else if(SETTING(MAX_FILELIST_SIZE) > 0 && bytes > mib(SETTING(MAX_FILELIST_SIZE))) {
+			// Opening the list enforces this limit on its XML. The announced size is the XML size, or
+			// the smaller compressed size for .bz2 lists, so a larger list could never be opened.
+			refusal = str(F_("File list is larger than the maximum file list size (%1%)") %
+				Util::formatBytes(mib(SETTING(MAX_FILELIST_SIZE))));
+		}
+		if(!refusal.empty()) {
+			const auto path = d->getPath();
+			const auto user = aSource->getUser();
+			failDownload(aSource, refusal);
+			QueueManager::getInstance()->removeSource(path, user, QueueItem::Source::FLAG_FILE_NOT_AVAILABLE, false);
+			return;
+		}
 	}
 	if(d->getSize() == -1) {
 		if(bytes >= 0) {

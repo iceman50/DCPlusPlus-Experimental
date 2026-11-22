@@ -148,7 +148,7 @@ const string SettingsManager::settingTags[] =
 	"OutboxMaxEntries", "OutboxMaxMessageBytes", "OutboxExpiryDays",
 	"AdcMinSaltLength", "BBSMaxBoards",
 	"ArchiveMaxEntries", "ArchiveMaxFileBytes", "ArchiveMaxTotalBytes",
-	"MaxReceivedPartialListBytes", "MaxHashVolumes",
+	"MaxReceivedPartialListBytes", "MaxHashVolumes", "MaxFilelistDownloadSize",
 	"SENTRY",
 	// Bools
 	"AddFinishedInstantly", "AdlsBreakOnFirst",
@@ -416,6 +416,8 @@ SettingsManager::SettingsManager() {
 	setDefault(SEARCH_HISTORY, 10);
 	setDefault(SET_MINISLOT_SIZE, 512);
 	setDefault(MAX_FILELIST_SIZE, 512);
+	// MiB, as the file list XML limit above; 0 = no limit.
+	setDefault(MAX_FILELIST_DOWNLOAD_SIZE, 512);
 	setDefault(PRIO_HIGHEST_SIZE, 64);
 	setDefault(PRIO_HIGH_SIZE, 0);
 	setDefault(PRIO_NORMAL_SIZE, 0);

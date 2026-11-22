@@ -627,14 +627,20 @@ TransfersTab::TransfersTab(TabViewPtr parent, LiveSettings& live) :
 void TransfersTab::build() {
 	{
 		auto group = addGroup(LEFT, T_("File lists"));
-		auto cur = group->addChild(Grid::Seed(4, 1));
+		auto cur = group->addChild(Grid::Seed(7, 1));
 		cur->column(0).mode = GridInfo::FILL;
+		addInt(cur, T_("Largest file list to download"), SettingsManager::MAX_FILELIST_DOWNLOAD_SIZE,
+			IDH_SETTINGS_EXPERIMENTAL_MAX_FILELIST_DOWNLOAD_SIZE, T_("MiB (0 = no limit)"), 0, noLimit);
+		addInt(cur, T_("Largest file list to open (XML)"), SettingsManager::MAX_FILELIST_SIZE,
+			IDH_SETTINGS_EXPERT_MAX_FILELIST_SIZE, T_("MiB (0 = no limit)"), 0, noLimit);
 		addInt(cur, T_("Generated partial file list limit"), SettingsManager::MAX_PARTIAL_LIST_BYTES,
 			IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 		addInt(cur, T_("Received partial file list limit"), SettingsManager::MAX_RECEIVED_PARTIAL_LIST_BYTES,
 			IDH_SETTINGS_EXPERIMENTAL_MAX_RECEIVED_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 		addCheck(cur, T_("Prefer Zstandard over zlib when the peer supports both"), SettingsManager::PREFER_ZSTD);
 		addCheck(cur, T_("Cache file lists on disk and load file entries on demand"), SettingsManager::FILELIST_CACHE);
+		cur->addChild(Label::Seed(T_("The XML limit is also under Settings > Advanced > Experts only.")))
+			->setHelpId(IDH_SETTINGS_EXPERT_MAX_FILELIST_SIZE);
 	}
 
 	{
