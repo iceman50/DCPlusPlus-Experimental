@@ -104,6 +104,13 @@ void Grid::create( const Seed & cs )
 	onEnabled([this](bool b) { handleEnabled(b); });
 }
 
+Grid::MeasureScope::MeasureScope() : scope(new PreferredSizeScope()) {
+}
+
+Grid::MeasureScope::~MeasureScope() {
+	delete static_cast<PreferredSizeScope*>(scope);
+}
+
 Point Grid::getPreferredSize() {
 	// Make sure we have WidgetInfo's for every child...
 	auto children = getChildren<Control>();

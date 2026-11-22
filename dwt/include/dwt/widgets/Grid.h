@@ -72,6 +72,19 @@ class Grid :
 {
 	typedef Container BaseType;
 public:
+	/** While one exists, grids measure each control once: preferred sizes are reused by every grid
+	 * measured or laid out meanwhile. Only for work that changes nothing it measures. */
+	class MeasureScope {
+	public:
+		MeasureScope();
+		~MeasureScope();
+		MeasureScope(const MeasureScope&) = delete;
+		MeasureScope& operator=(const MeasureScope&) = delete;
+
+	private:
+		void* scope;
+	};
+
 	/// Class type
 	typedef Grid ThisType;
 
