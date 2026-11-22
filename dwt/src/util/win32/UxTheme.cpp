@@ -30,6 +30,7 @@
 */
 
 #include <dwt/util/win32/UxTheme.h>
+#include <dwt/util/win32/Version.h>
 
 namespace dwt { namespace util { namespace win32 { namespace uxtheme {
 
@@ -95,6 +96,36 @@ HRESULT getThemePartSize(HTHEME theme, HDC dc, int part, int state,
 
 BOOL isThemeBackgroundPartiallyTransparent(HTHEME theme, int part, int state) {
 	return ::IsThemeBackgroundPartiallyTransparent(theme, part, state);
+}
+
+bool setNativeMenusDark(bool dark) {
+	// Before 1903 these ordinals are other functions (135 took a BOOL), so the
+	// version check must come first.
+	if(!ensureVersion(TEN_1909)) {
+		return false;
+	}
+	enum PreferredAppMode { Default = 0, ForceDark = 2 };
+	typedef int (WINAPI *SetPreferredAppMode)(int mode);
+	typedef void (WINAPI *FlushMenuThemes)();
+	static const auto module = ::GetModuleHandleW(L"uxtheme.dll");
+	static const auto setPreferredAppMode = reinterpret_cast<SetPreferredAppMode>(
+		reinterpret_cast<void*>(module ? ::GetProcAddress(module, MAKEINTRESOURCEA(135)) : nullptr));
+	static const auto flushMenuThemes = reinterpret_cast<FlushMenuThemes>(
+		reinterpret_cast<void*>(module ? ::GetProcAddress(module, MAKEINTRESOURCEA(136)) : nullptr));
+	if(!setPreferredAppMode) {
+		return false;
+	}
+	// Default, not ForceLight: a light palette keeps Windows' own menus as they are.
+	static int current = -1;
+	const int mode = dark ? ForceDark : Default;
+	if(mode != current) {
+		current = mode;
+		setPreferredAppMode(mode);
+		if(flushMenuThemes) {
+			flushMenuThemes();
+		}
+	}
+	return true;
 }
 
 } } } }

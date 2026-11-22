@@ -62,6 +62,13 @@ HRESULT getThemePartSize(HTHEME theme, HDC dc, int part, int state,
 	RECT* rect, THEMESIZE sizeType, SIZE* size);
 BOOL isThemeBackgroundPartiallyTransparent(HTHEME theme, int part, int state);
 
+/** Have Windows draw the menus it draws itself (items a shell extension adds to a
+ * context menu, the window menu) dark or light, borders, separators and text
+ * included. DWT draws its own menu items, but not those. Uses uxtheme's
+ * SetPreferredAppMode and FlushMenuThemes (Windows 10 1903 and later; exported
+ * by ordinal only); returns false where they don't exist. */
+bool setNativeMenusDark(bool dark);
+
 } } } }
 
 #endif

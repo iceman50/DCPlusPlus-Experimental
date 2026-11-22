@@ -48,6 +48,11 @@ namespace dwt {
 
 namespace {
 
+/** Perceived brightness below half (the formula the theme presets use). */
+bool isDarkColor(COLORREF color) {
+	return GetRValue(color) * 299 + GetGValue(color) * 587 + GetBValue(color) * 114 < 128000;
+}
+
 enum ScrollDecorationType {
 	SCROLL_DECORATION_VERTICAL,
 	SCROLL_DECORATION_HORIZONTAL,
@@ -869,6 +874,11 @@ void Appearance::updateActivePalette() {
 
 	backgroundBrush = new Brush(active.background);
 	surfaceBrush = new Brush(active.surface);
+
+	// The menus Windows draws itself, such as the items the shell adds to a context menu,
+	// would otherwise be drawn light (white border and separators, gray text) on a dark
+	// menu background.
+	util::win32::uxtheme::setNativeMenusDark(isManual() && isDarkColor(active.background));
 }
 
 void Appearance::changed() {
