@@ -11,9 +11,12 @@
 #include <win32/SingleInstance.h>
 #include <win32/components/TypedTable.h>
 #include <win32/settings/AppearancePage.h>
-#include <win32/settings/ExperimentalPage.h>
 #include <win32/frames/private_transfer/PrivateSendDlg.h>
 #define private public
+#define protected public
+#include <win32/frames/experimental/ExperimentalFrame.h>
+#include <win32/frames/experimental/ExperimentalTabs.h>
+#undef protected
 #include <dcpp/hub/NmdcHub.h>
 #include <dcpp/hub/ClientManager.h>
 #include <dcpp/connection/UserConnection.h>
@@ -48,6 +51,7 @@
 #include <dcpp/queue/QueueManager.h>
 #include <dcpp/share/ShareManager.h>
 #include <dcpp/favorites/FavoriteManager.h>
+#include <dcpp/user/UserMatchManager.h>
 #include <atomic>
 #include <dcpp/core/io/File.h>
 #include <dcpp/core/localization/ResourceManager.h>
@@ -466,6 +470,7 @@ int dwtMain(dwt::Application& app) {
 		ShareManager::newInstance();
 		HttpManager::newInstance();
 		FavoriteManager::newInstance();
+		UserMatchManager::newInstance();
 		GeoManager::newInstance();
 		IconManager::initialize();
 		for(const auto& input : { L"/stats", L"/stats preview", L"/stats invalid" }) {
@@ -664,39 +669,38 @@ int dwtMain(dwt::Application& app) {
 			DestroyWindow(privateDialog.handle());
 		}
 
-		auto page = new ExperimentalPage(window);
-		page->resize(dwt::Rectangle(0, 0, 620, 620));
-		page->layout();
-		page->setVisible(true);
+		auto experimentalTabs = window->addChild(dwt::TabView::Seed());
+		experimentalTabs->resize(dwt::Rectangle(0, 0, 620, 1400));
+		ExperimentalFrame::openWindow(experimentalTabs);
+		auto experimental = ExperimentalFrame::frame;
+		check(experimental != nullptr, "The Experimental window did not open");
 		for(unsigned i = 0; i < 200; ++i)
 			app.dispatch();
-		snapshot(page->handle(), directory + "sharing-dark.bmp");
-		EnumChildWindows(
-			page->handle(),
-			[](HWND child, LPARAM) -> BOOL {
-				if(auto tabs = dynamic_cast<dwt::TabView*>(dwt::hwnd_cast<dwt::Widget*>(child)))
-					tabs->setActive(tabs->getChildren().back());
-				return TRUE;
-			},
-			0);
-		page->layout();
-		HWND password = nullptr;
-		auto borders = findCaption(page->handle(), L"Show borders around themed dialogs");
-		check(borders != nullptr, "Dialog borders are missing from Experimental Interface");
+		snapshot(experimental->handle(), directory + "sharing-dark.bmp");
+		// The dialog border option is on the Themes tab; a hidden check box ignores BM_CLICK.
+		experimental->tabs->setActive(experimental->pages[ExperimentalFrame::PAGE_THEMES]);
+		experimental->layout();
+		auto borders = findCaption(experimental->handle(), L"Show borders around themed dialogs");
+		check(borders != nullptr, "Dialog borders are missing from the Experimental window");
 		SendMessage(borders, BM_CLICK, 0, 0);
-		check(!app.getAppearance().getDialogBorders(), "Dialog border preview did not apply");
+		check(!app.getAppearance().getDialogBorders(), "The dialog border option did not apply at once");
+		experimental->tabs->setActive(experimental->pages[ExperimentalFrame::PAGE_OTHER]);
+		experimental->layout();
+		HWND password = nullptr;
 		auto setLimit = [&](const wchar_t* caption, const wchar_t* value) {
-			auto label = findCaption(page->handle(), caption);
+			auto label = findCaption(experimental->handle(), caption);
 			check(label != nullptr, "Offline message limit setting is missing");
 			auto edit = GetWindow(label, GW_HWNDNEXT);
 			check(dwt::hwnd_cast<dwt::TextBox*>(edit) != nullptr, "Offline message limit field is missing");
 			SetWindowTextW(edit, value);
+			// Enter applies a field without waiting for typing to pause.
+			SendMessage(edit, WM_KEYDOWN, VK_RETURN, 0);
 		};
 		setLimit(L"Maximum retained messages", L"123");
 		setLimit(L"Maximum message size", L"32");
 		setLimit(L"Pending messages expire after", L"14");
 		EnumChildWindows(
-			page->handle(),
+			experimental->handle(),
 			[](HWND child, LPARAM data) -> BOOL {
 				if(dynamic_cast<dwt::TextBox*>(dwt::hwnd_cast<dwt::Widget*>(child)) && SendMessage(child, EM_GETPASSWORDCHAR, 0, 0))
 					*reinterpret_cast<HWND*>(data) = child;
@@ -706,13 +710,13 @@ int dwtMain(dwt::Application& app) {
 		check(password != nullptr, "MaxMind license key field is missing or unmasked");
 		RECT bounds, client;
 		GetWindowRect(password, &bounds);
-		MapWindowPoints(nullptr, page->handle(), reinterpret_cast<POINT*>(&bounds), 2);
-		GetClientRect(page->handle(), &client);
+		MapWindowPoints(nullptr, experimental->handle(), reinterpret_cast<POINT*>(&bounds), 2);
+		GetClientRect(experimental->handle(), &client);
 		check(bounds.left >= 0 && bounds.right <= client.right && bounds.top >= 0 && bounds.bottom <= client.bottom &&
 				bounds.right > bounds.left,
 			"MaxMind key field is clipped");
 		SetWindowTextW(password, Text::toT(key).c_str());
-		page->write();
+		SendMessage(password, WM_KEYDOWN, VK_RETURN, 0);
 		check(SETTING(OUTBOX_MAX_ENTRIES) == 123 && SETTING(OUTBOX_MAX_MESSAGE_BYTES) == 32 * 1024 &&
 			SETTING(OUTBOX_EXPIRY_DAYS) == 14, "Offline message settings were not applied in the expected units");
 		auto& outboxStore = MessageOutboxManager::getInstance()->getStore();
@@ -721,44 +725,27 @@ int dwtMain(dwt::Application& app) {
 		queued.hub = "adcs://settings-test.invalid"; queued.text = string(32 * 1024, 'x');
 		outboxStore.enqueue(queued, 100);
 		check(outboxStore.list().back().expires == 100 + 14 * 86400, "Applied limits did not reach the running outbox");
-		check(!SETTING(THEMED_DIALOG_BORDERS), "Dialog border preference did not save from Experimental Interface");
-		check(GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY)) == key, "Experimental settings did not protect the license key");
-		snapshot(page->handle(), directory + "settings-dark.bmp");
-		EnumChildWindows(
-			page->handle(),
-			[](HWND child, LPARAM) -> BOOL {
-				if(auto tabs = dynamic_cast<dwt::TabView*>(dwt::hwnd_cast<dwt::Widget*>(child)))
-					tabs->setActive(tabs->getChildren().at(0));
-				return TRUE;
-			},
-			0);
+		check(!SETTING(THEMED_DIALOG_BORDERS), "The dialog border preference did not apply from the Experimental window");
+		check(GeoIPUpdate::unprotectKey(SETTING(MAXMIND_LICENSE_KEY)) == key, "The Experimental window did not protect the license key");
+		snapshot(experimental->handle(), directory + "settings-dark.bmp");
+		experimental->tabs->setActive(experimental->pages.front());
 		for(int width : { 580, 780, 620 }) {
-			page->resize(dwt::Rectangle(0, 0, width, 620));
-			page->layout();
+			experimentalTabs->resize(dwt::Rectangle(0, 0, width, 1400));
+			experimental->layout();
 		}
 
 		for(unsigned i = 0; i < 200; ++i)
 			app.dispatch();
-		snapshot(page->handle(), directory + "sharing-dark-resized.bmp");
-		DestroyWindow(page->handle());
-		check(!app.getAppearance().getDialogBorders(), "Saved dialog border preference did not survive closing Settings");
-		{
-			auto cancelled = new ExperimentalPage(window);
-			cancelled->resize(dwt::Rectangle(0, 0, 620, 620));
-			cancelled->setVisible(true);
-			EnumChildWindows(cancelled->handle(), [](HWND child, LPARAM) -> BOOL {
-				if(auto tabs = dwt::hwnd_cast<dwt::TabView*>(child))
-					tabs->setActive(tabs->getChildren().back());
-				return TRUE;
-			}, 0);
-			cancelled->layout();
-			auto preview = findCaption(cancelled->handle(), L"Show borders around themed dialogs");
-			check(preview != nullptr, "Dialog border preview is missing");
-			SendMessage(preview, BM_CLICK, 0, 0);
-			check(app.getAppearance().getDialogBorders(), "Dialog border preview did not toggle");
-			DestroyWindow(cancelled->handle());
-			check(!app.getAppearance().getDialogBorders(), "Cancelling Settings did not restore dialog borders");
+		snapshot(experimental->handle(), directory + "sharing-dark-resized.bmp");
+		// The window closes from an asynchronous call, which runs once the message queue is empty.
+		experimental->close(true);
+		// Sleep only when the queue is empty: timers keep it from ever being empty right after a sleep.
+		for(auto end = GetTickCount64() + 4000; ExperimentalFrame::frame && GetTickCount64() < end; ) {
+			if(!app.dispatch()) Sleep(5);
 		}
+		check(!ExperimentalFrame::frame, "The Experimental window did not close");
+		check(!app.getAppearance().getDialogBorders() && !SETTING(THEMED_DIALOG_BORDERS),
+			"Closing the Experimental window changed the dialog border preference");
 		DestroyWindow(window->handle());
 
 		// Optional live check against a public synthetic fixture, never user settings.
@@ -787,6 +774,7 @@ int dwtMain(dwt::Application& app) {
 		GeoManager::getInstance()->close();
 		GeoManager::deleteInstance();
 		WindowManager::deleteInstance();
+		UserMatchManager::deleteInstance();
 		PrivateChatManager::deleteInstance();
 		MessageOutboxManager::deleteInstance();
 		DirectTransferManager::deleteInstance();

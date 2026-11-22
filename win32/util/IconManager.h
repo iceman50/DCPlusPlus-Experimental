@@ -11,7 +11,9 @@
 #define DCPLUSPLUS_WIN32_ICON_MANAGER_H
 
 #include <cstddef>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <dwt/resources/Icon.h>
@@ -23,6 +25,8 @@
  * Archive members are read with strict size and path limits,
  * materialized in the process temporary directory for Win32 LoadImage, and cached by resource and size.
  */
+namespace dcpp { class Archive; }
+
 class IconManager {
 public:
 	static constexpr const char* EMBEDDED_PACK = "@embedded";
@@ -58,6 +62,31 @@ public:
 	static dwt::IconPtr toolbarIcon(unsigned id);
 	static const char* getFileName(unsigned resourceId) noexcept;
 	static Package inspectPackage(const std::string& path);
+
+	/** Every icon a package can replace, in a fixed order. */
+	static std::vector<unsigned> getIconIds();
+	/** The package an ICON_PACK value uses with the current light or dark appearance: its path,
+	 * or an empty string for the icons in the executable. */
+	static std::string resolvePackage(const std::string& setting);
+
+	/** The icons of one package, without switching the application to it. The executable's icon
+	 * stands in for one the package doesn't have. */
+	class Preview {
+	public:
+		/** `package` is a package path, or empty (or EMBEDDED_PACK) for the executable's icons. */
+		explicit Preview(const std::string& package);
+		~Preview();
+		/** An icon of the package; the package stays open while the preview exists, and its icons
+		 * are read straight from it, without temporary files. */
+		dwt::IconPtr load(unsigned resourceId, long size);
+		/** Whether the package could be read; the executable's icons are shown otherwise. */
+		bool isPackage() const { return !path.empty(); }
+
+	private:
+		std::string path;
+		std::unordered_map<std::string, std::string> entries;
+		std::unique_ptr<dcpp::Archive> archive;
+	};
 	static std::vector<Package> getPackages();
 	static std::string getDirectory();
 };

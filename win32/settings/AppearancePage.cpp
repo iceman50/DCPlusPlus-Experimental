@@ -50,7 +50,7 @@ PropPage::ListItem AppearancePage::listItems[] = {
 };
 
 AppearancePage::AppearancePage(dwt::Widget* parent) :
-	PropPage(parent, 6, 1),
+	PropPage(parent, 5, 1),
 	options(0),
 	languages(0) {
 	setHelpId(IDH_APPEARANCEPAGE);
@@ -101,17 +101,6 @@ AppearancePage::AppearancePage(dwt::Widget* parent) :
 		cur->setWidget(spin);
 
 		cur->addChild(Label::Seed(T_("lines")));
-	}
-
-	{
-		auto group = grid->addChild(GroupBox::Seed(T_("Country database updates")));
-		auto fields = group->addChild(Grid::Seed(2, 2));
-		fields->column(1).mode = GridInfo::FILL;
-		fields->addChild(Label::Seed(T_("Download URL")));
-		items.emplace_back(fields->addChild(ControlSeeds::Dialog::textBox), SettingsManager::GEOIP_DOWNLOAD_URL, PropPage::T_STR);
-		auto note =
-			fields->addChild(Label::Seed(T_("HTTPS link to a Country .mmdb or .tar.gz file. GitHub release assets are supported.")));
-		fields->setWidget(note, 1, 0, 1, 2);
 	}
 
 	{

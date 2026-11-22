@@ -7,12 +7,13 @@
 </head>
 <body>
 	<h1>Themes</h1>
-	<p>Configure all interface, chat, log, transfer and user-match fonts and colors under
-	<em>Appearance &gt; Themes</em>. Your current appearance is loaded as a custom theme.
+	<p>Configure all interface, chat, log, transfer and user-match fonts and colors on the
+	<em>Themes</em> tab of the <placeholder><a href="settings_experimental.html">Experimental</a></placeholder>
+	window (View &gt; Experimental). Your current appearance is loaded as a custom theme.
 	The table labels display their configured text colors and backgrounds. Single-color interface
 	entries use their configured color for the label with a contrasting backdrop.
-	Select an item to edit its font, text color, background and text effects. Changes remain in
-	the settings draft until you click OK; Cancel discards them.</p>
+	Select an item to edit its font, text color, background and text effects. Changes apply to the
+	whole client a moment after you make them, and are saved automatically.</p>
 	<h2>Mode and theme files</h2>
 	<p>Choose Follow Windows, Light or Dark. Light always uses Windows light controls and interface colors,
 	even when a custom theme was previously selected. Dark uses the saved custom interface palette;
@@ -24,8 +25,8 @@
 	These presets use the custom palette renderer, so the Mode selector remains on Dark even
 	though their surfaces are light. Each theme includes separate upload and download colors,
 	chat nicknames, your own messages, system messages and highlighted mentions.</p>
-	<p>Save theme exports the draft to an XML file. Import theme validates a file and loads it into
-	the draft. Save in the per-user Themes folder to add a preset; Open folder and Reload themes
+	<p>Save theme exports the current theme to an XML file. Import theme validates a file and applies
+	it. Save in the per-user Themes folder to add a preset; Open folder and Reload themes
 	manage the preset list. Files in this folder override application themes with the same filename.</p>
 	<p>Theme XML version 2 includes the interface palette, fonts, content colors and user-match
 	appearance. Exports with duplicate definition names use version 3 to retain each appearance.
@@ -97,8 +98,8 @@
 	turning it off restores the previous single-strike choice. Subscript/superscript and
 	small/all capitals are mutually exclusive.</p>
 	<p>Character spacing, baseline offset and kerning use points. Positive baseline offsets raise
-	the text; negative values lower it. Reset effects restores normal text. OK accepts the draft
-	and Cancel discards it; the theme is applied when the main Settings dialog is accepted.</p>
+	the text; negative values lower it. Reset effects restores normal text. OK applies the effects
+	and Cancel discards them.</p>
 
 	<h2>Text color customization</h2>
 	<p cshelp="IDH_SETTINGS_STYLES_TEXT">
@@ -125,5 +126,13 @@
 	generated (for example to ignore users). These definitions may clutter the view so they are
 	hidden by default.
 	</p>
+	<h2>Dialog borders</h2>
+	<dl style="margin-left: 40px;">
+	  <dt>Show borders around themed dialogs</dt>
+	  <dd cshelp="IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS">Draws a thin outline around custom-themed dialogs using
+	  the theme's border color. The outline scales with display DPI and is subdued for inactive dialogs.
+	  Changes apply at once. Enabled by default. Importing a theme does not change this preference.
+	  Native and high-contrast frames retain their system borders.</dd>
+	</dl>
 </body>
 </html>

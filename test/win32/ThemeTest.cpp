@@ -4,7 +4,10 @@
 #include <win32/util/AppAppearance.h>
 #include <win32/util/UiFonts.h>
 #include <win32/util/ThemeManager.h>
-#include <win32/settings/ThemePage.h>
+#include <win32/frames/experimental/ThemesTab.h>
+#include <win32/settings/base/LiveSettings.h>
+#include <dwt/widgets/ScrolledContainer.h>
+#include <dwt/widgets/TabView.h>
 #include <win32/settings/TextEffectsDlg.h>
 #include <dwt/widgets/CheckBox.h>
 #include <win32/settings/base/SettingsDialog.h>
@@ -20,6 +23,8 @@
 #include <dcpp/core/io/File.h>
 #include <dcpp/core/localization/ResourceManager.h>
 #include <dcpp/user/UserMatchManager.h>
+#include <dcpp/core/timer/TimerManager.h>
+#include <dcpp/hub/ClientManager.h>
 #include <dwt/widgets/Window.h>
 #include <dwt/widgets/ComboBox.h>
 #include <cstdio>
@@ -129,7 +134,22 @@ void settleSettingsMessages() {
 		check(++count < 2000, "Settings paint queue did not settle");
 	}
 }
-void checkThemeControlsReachable(ThemePage* page) {
+/** A Themes tab's scroller. Its first child in Z order can be a dark scrollbar overlay instead. */
+HWND scrollerOf(dwt::Control* page) {
+	for(auto child = GetWindow(page->handle(), GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
+		wchar_t name[128] {};
+		GetClassNameW(child, name, static_cast<int>(std::size(name)));
+		// Only dwt's own windows may be cast.
+		if(std::wstring(name).compare(0, 5, L"N3dwt") == 0 && dwt::hwnd_cast<dwt::ScrolledContainer*>(child)) return child;
+	}
+	return nullptr;
+}
+void checkThemeControlsReachable(dwt::Control* page) {
+	// Controls may be below the scroller's view (that is what it scrolls); inside the scrolled
+	// columns, nothing may be cut off.
+	const auto host = scrollerOf(page);
+	check(host != nullptr, "Themes tab has no scroller");
+	const auto columns = GetWindow(host, GW_CHILD);
 	std::vector<HWND> children;
 	EnumChildWindows(page->handle(), collectChildren, reinterpret_cast<LPARAM>(&children));
 	unsigned editors = 0;
@@ -152,13 +172,12 @@ void checkThemeControlsReachable(ThemePage* page) {
 					text.c_str(), bounds.left, bounds.top, bounds.right, bounds.bottom, client.right, client.bottom);
 				check(false, "Theme editor is clipped inside the page instead of reachable by scrolling");
 			}
-			if(parent == page->handle()) break;
+			if(parent == columns) break;
 		}
 	}
 	check(editors == 9, "Theme page is missing font, color or user matching controls");
-	const auto host = page->getParent()->handle();
 	RECT content, viewport;
-	GetClientRect(page->handle(), &content);
+	GetClientRect(columns, &content);
 	GetClientRect(host, &viewport);
 	for(int axis : { SB_HORZ, SB_VERT }) {
 		const auto size = axis == SB_HORZ ? content.right : content.bottom;
@@ -192,6 +211,9 @@ int dwtMain(dwt::Application& app) {
 		ResourceManager::newInstance();
 		SettingsManager::newInstance();
 		UserMatchManager::newInstance();
+		// Applying user matching definitions updates the users of open hubs.
+		TimerManager::newInstance();
+		ClientManager::newInstance();
 		auto settings = SettingsManager::getInstance();
 		settings->setDefault(SettingsManager::MAIN_FONT, "Segoe UI,-12,400,0,1");
 		settings->set(SettingsManager::NICK, "Theme test");
@@ -523,10 +545,86 @@ int dwtMain(dwt::Application& app) {
 		definition.addRule(std::move(rule));
 		UserMatchManager::getInstance()->setList({ definition }, false);
 
-		// Construct the real settings pages, select a preset through the native
-		// combo notification, and verify that cancellation leaves settings alone.
+		// The theme editor is the Experimental window's Themes tab. Construct it, select a preset
+		// through the native combo notification, and check that it applies without touching the rules.
 		app.getAppearance().configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
-		settings->set(SettingsManager::SETTINGS_PAGE, 23); // Search types, near the bottom.
+		LiveSettings live([](int) { });
+		auto themeTabs = window->addChild(dwt::TabView::Seed());
+		themeTabs->resize(dwt::Rectangle(0, 0, 1100, 850));
+		auto page = new ThemesTab(themeTabs, live);
+		themeTabs->setActive(page);
+		page->ensureBuilt();
+		// The theme presets are listed just after the tab appears.
+		settleSettingsMessages();
+		page->layout();
+		std::vector<HWND> children;
+		EnumChildWindows(page->handle(), collectChildren, reinterpret_cast<LPARAM>(&children));
+		HWND preset = nullptr;
+		bool foundPreview = false;
+		for(auto child : children) {
+			auto widget = dwt::hwnd_cast<dwt::Control*>(child);
+			if(dynamic_cast<dwt::ComboBox*>(widget) && SendMessage(child, CB_GETCOUNT, 0, 0) > 3) preset = child;
+			if(dynamic_cast<dwt::RichTextBox*>(widget)) foundPreview = true;
+		}
+		check(preset && foundPreview, "Theme editor is missing its preset selector or RichEdit preview");
+		// Long preview text must wrap/scroll within the editor, not widen the tab's columns
+		// (and the theme dropdown) to its unwrapped length.
+		const auto scroller = scrollerOf(page);
+		auto columns = scroller ? dwt::hwnd_cast<dwt::Control*>(GetWindow(scroller, GW_CHILD)) : nullptr;
+		check(columns != nullptr, "Themes tab has no columns");
+		for(auto child : children) {
+			auto preview = dynamic_cast<dwt::RichTextBox*>(dwt::hwnd_cast<dwt::Control*>(child));
+			if(!preview) continue;
+			const auto original = preview->getText();
+			const auto width = columns->getPreferredSize().x;
+			preview->setText(dwt::tstring(2048, L'W'));
+			check(columns->getPreferredSize().x == width, "Preview text widened the Themes tab");
+			preview->setText(original);
+		}
+		settleSettingsMessages();
+		const auto editorFont = SETTING(MAIN_FONT);
+		for(auto mode : { dwt::Appearance::Mode::Dark, dwt::Appearance::Mode::Light }) {
+			app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
+			for(const auto& font : { editorFont, string("Segoe UI,-24,400,0,1") }) {
+				settings->set(SettingsManager::MAIN_FONT, font);
+				UiServices::initFont();
+				for(const auto& size : { dwt::Point(689, 585), dwt::Point(650, 420), dwt::Point(1100, 850) }) {
+					themeTabs->resize(dwt::Rectangle(0, 0, size.x, size.y));
+					page->layout();
+					settleSettingsMessages();
+					checkThemeControlsReachable(page);
+					auto selector = dwt::hwnd_cast<dwt::ComboBox*>(preset);
+					check(selector->getWindowSize().x == selector->getPreferredSize().x,
+						"Theme selector stretched to the width of the scrollable editor");
+					check(SendMessage(preset, CB_GETDROPPEDWIDTH, 0, 0) <= selector->getPreferredSize().x + selector->scale(4),
+						"Theme dropdown is wider than its content-sized selector");
+				}
+			}
+		}
+		app.getAppearance().configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
+		settings->set(SettingsManager::MAIN_FONT, editorFont);
+		UiServices::initFont();
+		check(SETTING(CHAT_TEXT_COLOR) == originalColor, "Opening the Themes tab changed the theme");
+		SendMessage(preset, CB_SETCURSEL, 0, 0);
+		SendMessage(GetParent(preset), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(preset), CBN_SELENDOK), reinterpret_cast<LPARAM>(preset));
+		// The theme applies once edits pause, as it repaints the whole client.
+		for(auto end = GetTickCount64() + 4000; static_cast<COLORREF>(SETTING(CHAT_TEXT_COLOR)) != dwt::Appearance::defaultPalette().text &&
+			GetTickCount64() < end; Sleep(5))
+		{
+			app.dispatch();
+		}
+		check(static_cast<COLORREF>(SETTING(CHAT_TEXT_COLOR)) == dwt::Appearance::defaultPalette().text,
+			"Selecting a theme did not apply its chat colors");
+		check(SETTING(THEME_MODE) == SettingsManager::THEME_DARK, "Selecting a theme did not use its palette renderer");
+		const auto definitions = UserMatchManager::getInstance()->getList();
+		check(definitions.size() == 1 && definitions[0].rules == definition.rules &&
+			definitions[0].isSet(UserMatch::IGNORE_CHAT),
+			"Applying a theme changed the user matching definitions' rules");
+		snapshot(page->handle(), directory + "theme-editor.bmp");
+		DestroyWindow(themeTabs->handle());
+
+		// Settings keeps the remaining appearance pages; check how it switches and paints them.
+		settings->set(SettingsManager::SETTINGS_PAGE, 21); // Search types, near the bottom.
 		SettingsDialog dialog(window);
 		dialog.create(dwt::ModalDialog::Seed(dwt::Point(650, 420), WS_SIZEBOX));
 		std::vector<HWND> openingChildren;
@@ -542,67 +640,16 @@ int dwtMain(dwt::Application& app) {
 		GetClientRect(navigation->treeHandle(), &treeClient);
 		check(selectedBounds.top() >= 0 && selectedBounds.bottom() <= treeClient.bottom,
 			"Settings first shows the wrong tree scroll position");
-		auto page = dialog.getPage<ThemePage>();
-		dialog.getPage<UserMatchPage>()->updateStyles();
-		dialog.activatePage<ThemePage>();
-		page->layout();
-		std::vector<HWND> children;
-		EnumChildWindows(page->handle(), collectChildren, reinterpret_cast<LPARAM>(&children));
-		HWND preset = nullptr;
-		bool foundPreview = false;
-		for(auto child : children) {
-			auto widget = dwt::hwnd_cast<dwt::Control*>(child);
-			if(dynamic_cast<dwt::ComboBox*>(widget) && SendMessage(child, CB_GETCOUNT, 0, 0) > 3) preset = child;
-			if(dynamic_cast<dwt::RichTextBox*>(widget)) foundPreview = true;
-		}
-		check(preset && foundPreview, "Theme editor is missing its preset selector or RichEdit preview");
-		// Long preview text must wrap/scroll within the editor, not widen the
-		// entire settings page (and the theme dropdown) to its unwrapped length.
-		for(auto child : children) {
-			auto preview = dynamic_cast<dwt::RichTextBox*>(dwt::hwnd_cast<dwt::Control*>(child));
-			if(!preview) continue;
-			const auto original = preview->getText();
-			const auto width = page->getPreferredSize().x;
-			preview->setText(dwt::tstring(2048, L'W'));
-			check(page->getPreferredSize().x == width, "Preview text widened the theme settings page");
-			preview->setText(original);
-		}
-		ShowWindow(dialog.handle(), SW_SHOWNOACTIVATE);
-		settleSettingsMessages();
-		const auto editorFont = SETTING(MAIN_FONT);
-		for(auto mode : { dwt::Appearance::Mode::Dark, dwt::Appearance::Mode::Light }) {
-			app.getAppearance().configure(mode, dwt::Appearance::defaultPalette());
-			for(const auto& font : { editorFont, string("Segoe UI,-24,400,0,1") }) {
-				settings->set(SettingsManager::MAIN_FONT, font);
-				UiServices::initFont();
-				for(const auto& size : { dwt::Point(689, 585), dwt::Point(650, 420), dwt::Point(1100, 850) }) {
-					dialog.resize(dwt::Rectangle(-32000, -32000, size.x, size.y));
-					settleSettingsMessages();
-					checkThemeControlsReachable(page);
-					auto selector = dwt::hwnd_cast<dwt::ComboBox*>(preset);
-					check(selector->getWindowSize().x == selector->getPreferredSize().x,
-						"Theme selector stretched to the width of the scrollable editor");
-					check(SendMessage(preset, CB_GETDROPPEDWIDTH, 0, 0) <= selector->getPreferredSize().x + selector->scale(4),
-						"Theme dropdown is wider than its content-sized selector");
-				}
-			}
-		}
-		app.getAppearance().configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
-		settings->set(SettingsManager::MAIN_FONT, editorFont);
-		UiServices::initFont();
-		SendMessage(preset, CB_SETCURSEL, 0, 0);
-		SendMessage(GetParent(preset), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(preset), CBN_SELENDOK), reinterpret_cast<LPARAM>(preset));
-		check(SETTING(CHAT_TEXT_COLOR) == originalColor, "Selecting a theme applied settings before OK");
-		const auto definitions = UserMatchManager::getInstance()->getList();
-		check(definitions.size() == 1 && definitions[0].rules == definition.rules &&
-			definitions[0].isSet(UserMatch::IGNORE_CHAT) && definitions[0].style.font == userStyle.font,
-			"Theme draft changed active user matching definitions or appearance");
+		auto matching = dialog.getPage<UserMatchPage>();
+		dialog.activatePage<UserMatchPage>();
 		dialog.resize(dwt::Rectangle(-32000, -32000, 1100, 850));
-		page->layout();
+		matching->layout();
 		ShowWindow(dialog.handle(), SW_SHOWNOACTIVATE);
 		settleSettingsMessages();
-		check(navigation->getText(navigation->getSelected()) == L"Themes",
+		check(navigation->getText(navigation->getSelected()) == L"Styles / User matching",
 			"Deferred settings initialization overwrote a subsequent page selection");
+		children.clear();
+		EnumChildWindows(matching->handle(), collectChildren, reinterpret_cast<LPARAM>(&children));
 		RedrawWindow(dialog.handle(), nullptr, nullptr, RDW_VALIDATE | RDW_NOERASE | RDW_NOFRAME | RDW_ALLCHILDREN);
 		dialog.setText(L"Settings painting regression");
 		dialog.sendMessage(WM_NCACTIVATE, FALSE);
@@ -614,12 +661,12 @@ int dwtMain(dwt::Application& app) {
 		SetWindowPos(dialog.handle(), nullptr, -31990, -31990, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 		for(auto child : children) RemoveWindowSubclass(child, countLayout, 1);
 		check(layouts == 0, "Moving settings relaid out its page controls");
+		dialog.activatePage<CertificatesPage>();
+		check(!IsWindowVisible(matching->handle()), "Switching settings left the previous page visible");
 		dialog.activatePage<UserMatchPage>();
-		check(!IsWindowVisible(page->handle()), "Switching settings left the previous page visible");
-		dialog.activatePage<ThemePage>();
-		check(IsWindowVisible(page->handle()), "Switching settings did not show the theme page");
+		check(IsWindowVisible(matching->handle()), "Switching settings did not show the user matching page");
 		PageCreationProbe creation;
-		SetWindowSubclass(page->getParent()->handle(), watchPageCreation, 9, reinterpret_cast<DWORD_PTR>(&creation));
+		SetWindowSubclass(matching->getParent()->handle(), watchPageCreation, 9, reinterpret_cast<DWORD_PTR>(&creation));
 		SettingsPaintProbe paintProbe;
 		std::vector<HWND> dialogChildren;
 		EnumChildWindows(dialog.handle(), collectChildren, reinterpret_cast<LPARAM>(&dialogChildren));
@@ -643,12 +690,12 @@ int dwtMain(dwt::Application& app) {
 				dialog.activatePage<WindowsPage>();
 				settleSettingsMessages();
 				checkPresentedPage(dialog.getPage<WindowsPage>());
+				dialog.activatePage<CertificatesPage>();
+				settleSettingsMessages();
+				checkPresentedPage(dialog.getPage<CertificatesPage>());
 				dialog.activatePage<UserMatchPage>();
 				settleSettingsMessages();
-				checkPresentedPage(dialog.getPage<UserMatchPage>());
-				dialog.activatePage<ThemePage>();
-				settleSettingsMessages();
-				checkPresentedPage(page);
+				checkPresentedPage(matching);
 				const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - switchStart).count();
 				std::printf("Three settings switches (%s, %ldx%ld): %lld ms; dialog layouts %u, tree layouts %u, tree erases %u, tree paints %u\n", mode == dwt::Appearance::Mode::Dark ? "dark" : "light", size.x, size.y, static_cast<long long>(elapsed), paintProbe.layouts, paintProbe.treeLayouts, paintProbe.treeErases, paintProbe.treePaints);
 				switchLayouts += paintProbe.layouts;
@@ -686,15 +733,15 @@ int dwtMain(dwt::Application& app) {
 		check(!shownWhileHostHidden, "Search types was shown while its host was hidden by redraw suppression");
 		RemoveWindowSubclass(dialog.handle(), watchSettingsPaint, 10);
 		check(switchLayouts == 0 && switchTreeLayouts == 0, "Settings page switches relaid out the entire dialog and navigation tree");
-		RemoveWindowSubclass(page->getParent()->handle(), watchPageCreation, 9);
+		RemoveWindowSubclass(matching->getParent()->handle(), watchPageCreation, 9);
 		check(creation.created > 0 && creation.unprotected == 0, "Lazy page creation happened before suspending redraw");
 		app.getAppearance().configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
-		snapshot(page->handle(), directory + "theme-editor.bmp");
-		page->write();
-		check(static_cast<COLORREF>(SETTING(CHAT_TEXT_COLOR)) == dwt::Appearance::defaultPalette().text, "Applying a preset did not save chat colors");
 		DestroyWindow(dialog.handle());
 		DestroyWindow(window->handle());
 		std::puts("Theme files, live effects, RichEdit previews, dark settings painting, layout and settings isolation passed.");
+		ClientManager::deleteInstance();
+		TimerManager::getInstance()->shutdown();
+		TimerManager::deleteInstance();
 		UserMatchManager::deleteInstance();
 		SettingsManager::deleteInstance();
 		ResourceManager::deleteInstance();

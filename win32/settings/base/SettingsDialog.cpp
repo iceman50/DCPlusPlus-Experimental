@@ -52,8 +52,6 @@
 #include <win32/settings/UploadFilteringPage.h>
 
 #include <win32/settings/AppearancePage.h>
-#include <win32/settings/EmoticonsPage.h>
-#include <win32/settings/ThemePage.h>
 #include <win32/settings/TabsPage.h>
 #include <win32/settings/WindowsPage.h>
 
@@ -64,7 +62,7 @@
 
 #include <win32/settings/AdvancedPage.h>
 #include <win32/settings/ExpertsPage.h>
-#include <win32/settings/ExperimentalPage.h>
+#include <win32/settings/ExperimentalLinkPage.h>
 #include <win32/settings/UCPage.h>
 #include <win32/settings/CertificatesPage.h>
 #include <win32/settings/SearchTypesPage.h>
@@ -77,7 +75,7 @@ using dwt::GridInfo;
 
 using dwt::ToolTip;
 
-const int SettingsDialog::pluginPagePos = 25; // remember to change when adding pages...
+const int SettingsDialog::pluginPagePos = 23; // remember to change when adding pages...
 
 SettingsDialog::SettingsDialog(dwt::Widget* parent) :
 dwt::ModalDialog(parent),
@@ -191,7 +189,9 @@ bool SettingsDialog::initDialog() {
 			auto index = static_cast<int>(pages.size());
 			images->add(*IconManager::load(icon, size.x));
 			auto item = tree->insert(title, parent, TVI_LAST, 0, true, index);
-			if(static_cast<size_t>(index) == setting) {
+			if(initialPage == std::type_index(typeid(void)) ? static_cast<size_t>(index) == setting :
+				initialPage == std::type_index(type))
+			{
 				selectedPage = item;
 			}
 			pages.emplace_back(type, item, icon, std::move(create));
@@ -220,8 +220,6 @@ bool SettingsDialog::initDialog() {
 
 		{
 			HTREEITEM item = addPage(T_("Appearance"), typeid(AppearancePage), [container] { return new AppearancePage(container); }, IDI_DCPP, TVI_ROOT);
-			addPage(T_("Icons"), typeid(EmoticonsPage), [container] { return new EmoticonsPage(container); }, IDI_CHAT, item);
-			addPage(T_("Themes"), typeid(ThemePage), [container] { return new ThemePage(container); }, IDI_STYLES, item);
 			addPage(T_("Styles / User matching"), typeid(UserMatchPage), [container] { return new UserMatchPage(container); }, IDI_USERS, item);
 			addPage(T_("Tabs"), typeid(TabsPage), [container] { return new TabsPage(container); }, IDI_TABS, item);
 			addPage(T_("Windows"), typeid(WindowsPage), [container] { return new WindowsPage(container); }, IDI_WINDOWS, item);
@@ -242,7 +240,7 @@ bool SettingsDialog::initDialog() {
 			addPage(T_("Search types"), typeid(SearchTypesPage), [container] { return new SearchTypesPage(container); }, IDI_SEARCH, item);
 		}
 
-		addPage(T_("Experimental"), typeid(ExperimentalPage), [container] { return new ExperimentalPage(container); }, IDI_EXPERT, TVI_ROOT);
+		addPage(T_("Experimental"), typeid(ExperimentalLinkPage), [container] { return new ExperimentalLinkPage(container); }, IDI_EXPERT, TVI_ROOT);
 		addPage(T_("Plugins"), typeid(PluginPage), [container] { return new PluginPage(container); }, IDI_PLUGINS, TVI_ROOT);
 		// remember to change pluginPagePos accordingly...
 
@@ -507,6 +505,13 @@ void SettingsDialog::setPageHostComposited(bool composited) {
 void SettingsDialog::handleOKClicked() {
 	write();
 	endDialog(IDOK);
+}
+
+void SettingsDialog::closeAndOpenExperimental(int page) {
+	openExperimental = true;
+	experimentalTab = page;
+	handleClosing();
+	handleOKClicked();
 }
 
 void SettingsDialog::handleCtrlTab(bool shift) {

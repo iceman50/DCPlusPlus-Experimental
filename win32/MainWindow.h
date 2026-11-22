@@ -26,6 +26,7 @@
 #include <win32/frames/private_transfer/PrivateSendNotifications.h>
 #include <win32/util/ThemeManager.h>
 #include <atomic>
+#include <typeinfo>
 #include <vector>
 
 #include <dcpp/forward.h>
@@ -81,6 +82,8 @@ public:
 	virtual ~MainWindow();
 
 	void handleSettings();
+	/** Open Settings on the page of this type. */
+	void openSettings(const std::type_info& page);
 
 	static void addPluginCommand(const string& guid, const tstring& text, function<void ()> command, const tstring& icon);
 	static void removePluginCommand(const string& guid, const tstring& text);
@@ -103,6 +106,13 @@ public:
 	static bool hasLockPassword();
 	/// Whether the text is the lock password.
 	static bool checkLockPassword(const tstring& password);
+
+	/** Download the GeoIP database again after its source or credentials changed. */
+	void geoSettingsChanged();
+	/** Show changed theme settings everywhere: fonts, colors, the toolbar's theme picker. */
+	void themeChanged(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont);
+	/** List the themes in the toolbar's theme picker again. */
+	void reloadThemes();
 
 private:
 	class DirectoryListInfo {
@@ -198,11 +208,12 @@ private:
 	tstring tabsTitle; ///< the active tab's title, kept for the caption while locked
 	std::vector<function<void ()>> afterUnlock; ///< actions held back until the client is unlocked
 
+	const std::type_info* settingsPage = nullptr; ///< the page the next Settings opens on
+
 	void initWindow();
 	void initMenu();
 	void initToolbar();
 	void initThemeSelector();
-	void reloadThemes();
 	void applyTheme(const ThemeManager::Theme& theme);
 	void refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont);
 	void initStatusBar();

@@ -22,24 +22,29 @@
 #include <win32/util/ControlSeeds.h>
 #include <win32/util/IconManager.h>
 #include <win32/util/UiFonts.h>
+#include <win32/util/UiServices.h>
 #include <win32/components/TableLayout.h>
 #include <win32/util/ShellActions.h>
-#include <win32/settings/ThemePage.h>
+#include <win32/frames/experimental/ThemesTab.h>
 
 #include <dcpp/settings/SettingsManager.h>
+#include <dcpp/user/UserMatchManager.h>
 #include <cmath>
 
 #include <dwt/widgets/Button.h>
+#include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/ColorDialog.h>
+#include <dwt/widgets/ComboBox.h>
 #include <dwt/widgets/FontDialog.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/GroupBox.h>
 #include <dwt/widgets/Label.h>
 
 #include <win32/resource.h>
-#include <win32/settings/base/SettingsDialog.h>
+#include <win32/MainWindow.h>
 #include <win32/components/TypedTable.h>
 #include <win32/settings/UserMatchPage.h>
+#include <win32/settings/base/LiveSettings.h>
 #include <win32/HtmlToRtf.h>
 #include <win32/RichTextBox.h>
 #include <win32/settings/TextEffectsDlg.h>
@@ -55,12 +60,12 @@ using dwt::Grid;
 using dwt::GridInfo;
 using dwt::Label;
 
-static const TableLayout::ColumnInfo columns[] = {
+static const TableLayout::ColumnInfo styleColumns[] = {
 	{ "", 100, false }
 };
 
-ThemePage::ThemePage(dwt::Widget* parent) :
-PropPage(parent, 2, 1),
+ThemesTab::ThemesTab(TabViewPtr parent, LiveSettings& live) :
+ExperimentalTab(parent, T_("Themes"), IDH_STYLESPAGE, live),
 globalData(0),
 table(0),
 preview(0),
@@ -72,40 +77,54 @@ customBgColor(0),
 bgColor(0),
 showGen(0)
 {
-	setHelpId(IDH_STYLESPAGE);
+}
 
-	grid->column(0).mode = GridInfo::FILL;
-	grid->row(1).mode = GridInfo::FILL;
-	grid->row(1).align = GridInfo::STRETCH;
+void ThemesTab::build() {
+	{
+		auto group = addGroup(LEFT, T_("Theme"), IDH_STYLESPAGE);
+		auto cur = group->addChild(Grid::Seed(4, 1));
+		cur->column(0).mode = GridInfo::FILL;
 
-	auto header = grid->addChild(Grid::Seed(2, 1));
-	header->column(0).mode = GridInfo::FILL;
-	auto choices = header->addChild(Grid::Seed(1, 4));
-	// Keep the selector at its content width even when the editor scrolls horizontally.
-	choices->column(3).align = GridInfo::TOP_LEFT;
-	choices->addChild(Label::Seed(T_("Mode")));
-	themeMode = choices->addChild(ControlSeeds::Dialog::comboBox);
-	for(const auto& name : { T_("Follow Windows"), T_("Light"), T_("Dark") }) themeMode->addValue(name);
-	themeMode->setSelected(std::clamp(SETTING(THEME_MODE), 0, 2));
-	choices->addChild(Label::Seed(T_("Theme")));
-	themePreset = choices->addChild(ControlSeeds::Dialog::comboBox);
-	themePreset->sendMessage(CB_SETMINVISIBLE, 12);
-	themePreset->onSelectionChanged([this] {
-		const auto selected = themePreset->getSelected();
-		if(!loading && selected >= 0 && static_cast<size_t>(selected) < presets.size()) applyTheme(presets[selected]);
-	});
-	auto actions = header->addChild(Grid::Seed(1, 4));
-	actions->addChild(Button::Seed(T_("Save theme...")))->onClicked([this] { saveTheme(); });
-	actions->addChild(Button::Seed(T_("Import theme...")))->onClicked([this] { importTheme(); });
-	actions->addChild(Button::Seed(T_("Open folder")))->onClicked([] { ShellActions::openFile(Text::toT(ThemeManager::getDirectory())); });
-	actions->addChild(Button::Seed(T_("Reload themes")))->onClicked([this] { reloadThemes(); });
+		// Each selector keeps its content width; the row's last column takes the rest.
+		auto modeRow = cur->addChild(Grid::Seed(1, 3));
+		modeRow->column(2).mode = GridInfo::FILL;
+		modeRow->addChild(Label::Seed(T_("Mode")));
+		themeMode = modeRow->addChild(ControlSeeds::Dialog::comboBox);
+		themeMode->setAccessibleName(T_("Theme mode"));
+		for(const auto& name : { T_("Follow Windows"), T_("Light"), T_("Dark") }) themeMode->addValue(name);
+		themeMode->setSelected(std::clamp(SETTING(THEME_MODE), 0, 2));
+		themeMode->onSelectionChanged([this] { if(!loading) scheduleApply(); });
+
+		auto presetRow = cur->addChild(Grid::Seed(1, 3));
+		presetRow->column(2).mode = GridInfo::FILL;
+		presetRow->addChild(Label::Seed(T_("Theme")));
+		themePreset = presetRow->addChild(ControlSeeds::Dialog::comboBox);
+		themePreset->setAccessibleName(T_("Theme"));
+		themePreset->sendMessage(CB_SETMINVISIBLE, 12);
+		themePreset->onSelectionChanged([this] {
+			const auto selected = themePreset->getSelected();
+			if(!loading && selected >= 0 && static_cast<size_t>(selected) < presets.size()) applyTheme(presets[selected]);
+		});
+
+		auto actions = cur->addChild(Grid::Seed(1, 4));
+		actions->addChild(Button::Seed(T_("Save theme...")))->onClicked([this] { saveTheme(); });
+		actions->addChild(Button::Seed(T_("Import theme...")))->onClicked([this] { importTheme(); });
+		actions->addChild(Button::Seed(T_("Open folder")))->onClicked([] { ShellActions::openFile(Text::toT(ThemeManager::getDirectory())); });
+		actions->addChild(Button::Seed(T_("Reload themes")))->onClicked([this] {
+			reloadThemes();
+			if(UiServices::mainWindow) UiServices::mainWindow->reloadThemes();
+		});
+
+		addCheck(cur, T_("Show borders around themed dialogs"), SettingsManager::THEMED_DIALOG_BORDERS,
+			IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS);
+	}
 
 	{
-		auto cur = grid->addChild(GroupBox::Seed(T_("Theme appearance")))->addChild(Grid::Seed(6, 1));
+		auto cur = addGroup(LEFT, T_("Styles"), IDH_STYLESPAGE, true)->addChild(Grid::Seed(6, 1));
 		cur->column(0).mode = GridInfo::FILL;
 		cur->row(0).mode = GridInfo::FILL;
+		cur->row(0).size = cur->scale(160);
 		cur->row(0).align = GridInfo::STRETCH;
-		cur->setSpacing(grid->getSpacing());
 
 		{
 			auto seed = ControlSeeds::Dialog::table;
@@ -122,73 +141,65 @@ showGen(0)
 			table->setGroupImageList(images);
 		}
 
-		{
-			auto seed = ControlSeeds::Dialog::richTextBox;
-			seed.style |= ES_READONLY;
-			preview = cur->addChild(seed);
-			preview->setTextLimit(128 * 1024);
-			preview->setAccessibleName(T_("Live chat appearance preview"));
-			preview->setHelpId(IDH_SETTINGS_STYLES_PREVIEW);
-			cur->row(0).size = cur->scale(80);
-			cur->row(1).mode = GridInfo::FILL;
-			cur->row(1).size = cur->scale(80);
-			cur->row(1).align = GridInfo::STRETCH;
-		}
-
-		auto row = cur->addChild(Grid::Seed(1, 2));
-		row->column(0).mode = GridInfo::FILL;
-		row->setSpacing(cur->getSpacing());
-
-		auto cur2 = row->addChild(Grid::Seed(1, 3));
-		cur2->setHelpId(IDH_SETTINGS_STYLES_FONT);
-
-		customFont = cur2->addChild(CheckBox::Seed(T_("Custom font")));
+		auto row = cur->addChild(Grid::Seed(1, 3));
+		row->setHelpId(IDH_SETTINGS_STYLES_FONT);
+		customFont = row->addChild(CheckBox::Seed(T_("Custom font")));
 		customFont->onClicked([this] { handleCustomFont(); });
-
-		font = cur2->addChild(Button::Seed(T_("Select font")));
+		font = row->addChild(Button::Seed(T_("Select font")));
 		font->onClicked([this] { handleFont(); });
-		effectsButton = cur2->addChild(Button::Seed(T_("Text effects...")));
+		effectsButton = row->addChild(Button::Seed(T_("Text effects...")));
 		effectsButton->onClicked([this] { handleEffects(); });
 
-		cur2 = row->addChild(Grid::Seed(1, 2));
-		cur2->setHelpId(IDH_SETTINGS_STYLES_TEXT);
-
-		customTextColor = cur2->addChild(CheckBox::Seed(T_("Custom text color")));
+		row = cur->addChild(Grid::Seed(1, 2));
+		row->setHelpId(IDH_SETTINGS_STYLES_TEXT);
+		customTextColor = row->addChild(CheckBox::Seed(T_("Custom text color")));
 		customTextColor->onClicked([this] { handleCustomTextColor(); });
-
-		textColor = cur2->addChild(Button::Seed(T_("Select color")));
+		textColor = row->addChild(Button::Seed(T_("Select color")));
 		textColor->onClicked([this] { handleTextColor(); });
 
 		row = cur->addChild(Grid::Seed(1, 2));
-		row->column(0).mode = GridInfo::FILL;
-		row->column(0).align = GridInfo::BOTTOM_RIGHT;
-		row->setSpacing(cur->getSpacing());
-
-		row->addChild(Label::Seed());
-		cur2 = row->addChild(Grid::Seed(1, 2));
-		cur2->setHelpId(IDH_SETTINGS_STYLES_BG);
-
-		customBgColor = cur2->addChild(CheckBox::Seed(T_("Custom background color")));
+		row->setHelpId(IDH_SETTINGS_STYLES_BG);
+		customBgColor = row->addChild(CheckBox::Seed(T_("Custom background color")));
 		customBgColor->onClicked([this] { handleCustomBgColor(); });
-
-		bgColor = cur2->addChild(Button::Seed(T_("Select color")));
+		bgColor = row->addChild(Button::Seed(T_("Select color")));
 		bgColor->onClicked([this] { handleBgColor(); });
 
 		row = cur->addChild(Grid::Seed(1, 2));
-		row->setSpacing(cur->getSpacing());
-
 		auto button = row->addChild(Button::Seed(T_("Configure user matching definitions")));
 		button->setHelpId(IDH_SETTINGS_STYLES_CONF_USER_MATCHING);
 		button->setImage(IconManager::buttonIcon(IDI_USERS));
-		button->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->activatePage<UserMatchPage>(); });
-
+		// Themed drawing puts more room around the icon than the button's ideal size allows for;
+		// an AUTO column takes the larger of this and the ideal size.
+		row->column(0).size = static_cast<size_t>(button->getPreferredSize().x + button->scale(24));
+		button->onClicked([this] {
+			// The rules are edited in Settings, which shows the styles applied here.
+			if(applyPending) apply();
+			if(UiServices::mainWindow) UiServices::mainWindow->openSettings(typeid(UserMatchPage));
+		});
 		showGen = row->addChild(CheckBox::Seed(T_("Show those generated by DC++")));
 		showGen->setHelpId(IDH_SETTINGS_STYLES_SHOW_GEN_MATCHERS);
-		showGen->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->getPage<UserMatchPage>()->updateStyles(); });
+		showGen->onClicked([this] { updateUserMatches(); });
+
+		cur->addChild(Label::Seed(T_("Changes apply to the whole client as you make them.")));
+	}
+
+	{
+		auto cur = addGroup(RIGHT, T_("Preview"), IDH_SETTINGS_STYLES_PREVIEW, true)->addChild(Grid::Seed(2, 1));
+		cur->column(0).mode = GridInfo::FILL;
+		cur->row(0).mode = GridInfo::FILL;
+		cur->row(0).size = cur->scale(160);
+		cur->row(0).align = GridInfo::STRETCH;
+
+		auto seed = ControlSeeds::Dialog::richTextBox;
+		seed.style |= ES_READONLY;
+		preview = cur->addChild(seed);
+		preview->setTextLimit(128 * 1024);
+		preview->setAccessibleName(T_("Live chat appearance preview"));
+		preview->setHelpId(IDH_SETTINGS_STYLES_PREVIEW);
 		cur->addChild(Label::Seed(T_("Preview uses the chat renderer. Some advanced effects depend on Windows RichEdit support.")));
 	}
 
-	TableLayout::makeColumns(table, columns, COLUMN_LAST);
+	TableLayout::makeColumns(table, styleColumns, COLUMN_LAST);
 
 	TStringList groups(GROUP_LAST);
 	groups[GROUP_INTERFACE] = T_("Interface palette");
@@ -260,63 +271,119 @@ showGen(0)
 	add(T_("Chat mentions"), IDH_SETTINGS_STYLES_LINKS, GROUP_CHAT, SettingsManager::CHAT_MENTION_FONT,
 		SettingsManager::CHAT_MENTION_COLOR, SettingsManager::CHAT_MENTION_BG_COLOR);
 
-	reloadThemes();
+	// Showing the stored theme is not an edit, so nothing is applied, and the preview is drawn
+	// once, at the end.
+	loading = true;
+	building = true;
+	matches = UserMatchManager::getInstance()->getList();
+	updateUserMatches();
+
+	themePreset->addValue(T_("Custom / current settings"));
+	themePreset->setSelected(0);
 	update(globalData);
 	table->setSelected(table->find(globalData));
+	building = false;
 
 	handleSelectionChanged();
+	loading = false;
+
+	// Reading the theme files waits until the tab is on screen.
+	callAsync([this] { reloadThemes(); });
 
 	table->onSelectionChanged([this] { handleSelectionChanged(); });
 
 	table->setHelpId([this](unsigned& id) { handleTableHelpId(id); });
-
-	// User matching rows are owned by UserMatchPage, which may not exist yet with lazy settings pages.
-	callAsync([this] { static_cast<SettingsDialog*>(getRoot())->getPage<UserMatchPage>()->updateStyles(); });
 }
 
-ThemePage::~ThemePage() {
+ThemesTab::~ThemesTab() {
 }
 
-dwt::Point ThemePage::getPreferredSize() {
-	if(table && font) {
-		// FILL cells only report their explicit minimum, not their children's
-		// preferred sizes. Propagate these minima so the settings host can scroll
-		// the complete editor instead of clipping its controls below the preview.
-		auto fontGroup = font->getParent();
-		static_cast<Grid*>(fontGroup->getParent())->column(0).size = fontGroup->getPreferredSize().x;
-		auto content = static_cast<Grid*>(table->getParent());
-		long width = 0;
-		auto children = content->getChildren<dwt::Control>();
-		for(auto child = children.first; child != children.second; ++child) {
-			// These views fill the available width. RichEdit's preferred width
-			// measures its entire sample text and must not become the page minimum.
-			if(*child != table && *child != preview)
-				width = std::max(width, (*child)->getPreferredSize().x);
-		}
-		content->column(0).size = width;
-		grid->row(1).size = content->getParent()->getPreferredSize().y;
-		children = grid->getChildren<dwt::Control>();
-		for(auto child = children.first; child != children.second; ++child)
-			width = std::max(width, (*child)->getPreferredSize().x);
-		grid->column(0).size = width;
-	}
-	return PropPage::getPreferredSize();
-}
-
-void ThemePage::layout() {
-	PropPage::layout();
+void ThemesTab::layout() {
+	ExperimentalTab::layout();
 
 	table->setColumnWidth(COLUMN_TEXT, table->getWindowSize().x - 30);
 }
 
-void ThemePage::write() {
-	SettingsManager::getInstance()->set(SettingsManager::THEME_MODE, themeMode->getSelected());
-	table->forEach(&ThemePage::Data::write);
+void ThemesTab::refresh() {
+	// Edits made here come first.
+	if(applyPending) {
+		apply();
+	}
+
+	// Settings (user matching) or the toolbar's theme picker may have changed what is shown.
+	const auto current = UserMatchManager::getInstance()->getList();
+	bool sameMatches = current.size() == matches.size();
+	for(size_t i = 0; sameMatches && i < current.size(); ++i) {
+		const auto& a = current[i];
+		const auto& b = matches[i];
+		sameMatches = a.name == b.name && a.style.font == b.style.font &&
+			a.style.textColor == b.style.textColor && a.style.bgColor == b.style.bgColor &&
+			a.isSet(UserMatch::GENERATED) == b.isSet(UserMatch::GENERATED);
+	}
+	const auto shown = snapshot();
+	const auto stored = ThemeManager::capture();
+	if(sameMatches && shown.fonts == stored.fonts && shown.colors == stored.colors &&
+		themeMode->getSelected() == std::clamp(SETTING(THEME_MODE), 0, 2))
+	{
+		return;
+	}
+	reloadFromSettings();
 }
 
-void ThemePage::updateUserMatches(std::vector<UserMatch>& userMatches) {
+void ThemesTab::scheduleApply() {
+	applyPending = true;
+	setTimer([this] {
+		apply();
+		return false;
+	}, applyPause, TIMER_APPLY);
+}
+
+void ThemesTab::apply() {
+	applyPending = false;
+	setTimer(std::function<bool ()>(), 0, TIMER_APPLY);
+
+	const auto previousFont = SETTING(MAIN_FONT);
+	const auto previousUploadFont = SETTING(UPLOAD_FONT);
+	const auto previousDownloadFont = SETTING(DOWNLOAD_FONT);
+
+	SettingsManager::getInstance()->set(SettingsManager::THEME_MODE, themeMode->getSelected());
+	table->forEach(&ThemesTab::Data::write);
+	if(matchesChanged) {
+		matchesChanged = false;
+		auto list = matches;
+		UserMatchManager::getInstance()->setList(std::move(list));
+		UiFonts::updateUserMatchFonts();
+	}
+
+	if(UiServices::mainWindow) {
+		UiServices::mainWindow->themeChanged(previousFont, previousUploadFont, previousDownloadFont);
+	}
+	// Saved with the window's other changes.
+	live.notify(SettingsManager::THEME_MODE);
+}
+
+void ThemesTab::reloadFromSettings() {
+	loading = true;
+	matches.clear();
+	updateUserMatches();
+	matches = UserMatchManager::getInstance()->getList();
+	for(size_t i = 0; i < table->size(); ++i) {
+		if(auto data = dynamic_cast<SettingsData*>(table->getData(static_cast<int>(i)))) {
+			data->read();
+		}
+	}
+	updateUserMatches();
+	themeMode->setSelected(std::clamp(SETTING(THEME_MODE), 0, 2));
+	reloadThemes();
+	matchesChanged = false;
+	update(globalData);
+	handleSelectionChanged();
+	table->Control::redraw(true);
+	loading = false;
+}
+
+void ThemesTab::updateUserMatches() {
 	updatingMatches = true;
-	matches = &userMatches;
 	// remove previous user matching rows.
 	for(int i = 0, n = static_cast<int>(table->size()); i < n;) {
 		if(dynamic_cast<UserMatchData*>(table->getData(i))) {
@@ -328,7 +395,7 @@ void ThemePage::updateUserMatches(std::vector<UserMatch>& userMatches) {
 	}
 
 	// add current user matching rows.
-	for(auto& i: userMatches) {
+	for(auto& i: matches) {
 		if(showGen->getChecked() || !i.isSet(UserMatch::GENERATED)) {
 			table->insert(table->isGrouped() ? GROUP_USERS : -1, new UserMatchData(i));
 		}
@@ -337,7 +404,7 @@ void ThemePage::updateUserMatches(std::vector<UserMatch>& userMatches) {
 	handleSelectionChanged();
 }
 
-ThemePage::Data::Data(tstring&& text, const unsigned helpId) :
+ThemesTab::Data::Data(tstring&& text, const unsigned helpId) :
 Flags(),
 text(move(text)),
 helpId(helpId),
@@ -345,11 +412,11 @@ customFont(false), font(), defaultFont(), customTextColor(false), textColor(-1),
 {
 }
 
-const tstring& ThemePage::Data::getText(int) const {
+const tstring& ThemesTab::Data::getText(int) const {
 	return text;
 }
 
-int ThemePage::Data::getStyle(HFONT&, COLORREF& foreground, COLORREF& background, int) const {
+int ThemesTab::Data::getStyle(HFONT&, COLORREF& foreground, COLORREF& background, int) const {
 	const auto text = getTextColor();
 	const auto bg = getBgColor();
 	if(text >= 0) foreground = text;
@@ -369,63 +436,73 @@ int ThemePage::Data::getStyle(HFONT&, COLORREF& foreground, COLORREF& background
 	return CDRF_NEWFONT;
 }
 
-void ThemePage::Data::makeFont(Font& dest, const string& setting) {
+void ThemesTab::Data::makeFont(Font& dest, const string& setting) {
 	if(!setting.empty()) {
 		UiFonts::decodeFont(Text::toT(setting), dest.second);
 		dest.first.reset(new dwt::Font(dest.second));
 	}
 }
 
-ThemePage::SettingsData::SettingsData(tstring&& text, unsigned helpId, int fontSetting, int textColorSetting, int bgColorSetting) :
+ThemesTab::SettingsData::SettingsData(tstring&& text, unsigned helpId, int fontSetting, int textColorSetting, int bgColorSetting) :
 Data(move(text), helpId),
 fontSetting(fontSetting),
 textColorSetting(textColorSetting),
 bgColorSetting(bgColorSetting)
 {
+	if(fontSetting != -1) setFlag(FONT_CHANGEABLE);
+	if(textColorSetting != -1) setFlag(TEXT_COLOR_CHANGEABLE);
+	if(bgColorSetting != -1) setFlag(BG_COLOR_CHANGEABLE);
+	read();
+}
+
+void ThemesTab::SettingsData::read() {
+	auto settings = SettingsManager::getInstance();
+	font = Font();
+	defaultFont = Font();
 	if(fontSetting != -1) {
-		setFlag(FONT_CHANGEABLE);
-		customFont = !SettingsManager::getInstance()->isDefault(static_cast<SettingsManager::StrSetting>(fontSetting));
-		makeFont(font, SettingsManager::getInstance()->get(static_cast<SettingsManager::StrSetting>(fontSetting)));
-		effects = FontStyle::decode(SettingsManager::getInstance()->get(static_cast<SettingsManager::StrSetting>(fontSetting)));
-		makeFont(defaultFont, SettingsManager::getInstance()->getDefault(static_cast<SettingsManager::StrSetting>(fontSetting)));
+		const auto setting = static_cast<SettingsManager::StrSetting>(fontSetting);
+		customFont = !settings->isDefault(setting);
+		makeFont(font, settings->get(setting));
+		effects = FontStyle::decode(settings->get(setting));
+		makeFont(defaultFont, settings->getDefault(setting));
 	} else {
 		customFont = false;
 	}
 
 	if(textColorSetting != -1) {
-		setFlag(TEXT_COLOR_CHANGEABLE);
-		customTextColor = !SettingsManager::getInstance()->isDefault(static_cast<SettingsManager::IntSetting>(textColorSetting));
-		textColor = SettingsManager::getInstance()->get(static_cast<SettingsManager::IntSetting>(textColorSetting));
+		const auto setting = static_cast<SettingsManager::IntSetting>(textColorSetting);
+		customTextColor = !settings->isDefault(setting);
+		textColor = settings->get(setting);
 	} else {
 		customTextColor = false;
 	}
 
 	if(bgColorSetting != -1) {
-		setFlag(BG_COLOR_CHANGEABLE);
-		customBgColor = !SettingsManager::getInstance()->isDefault(static_cast<SettingsManager::IntSetting>(bgColorSetting));
-		bgColor = SettingsManager::getInstance()->get(static_cast<SettingsManager::IntSetting>(bgColorSetting));
+		const auto setting = static_cast<SettingsManager::IntSetting>(bgColorSetting);
+		customBgColor = !settings->isDefault(setting);
+		bgColor = settings->get(setting);
 	} else {
 		customBgColor = false;
 	}
 }
 
-const ThemePage::Data::Font& ThemePage::SettingsData::getFont() const {
+const ThemesTab::Data::Font& ThemesTab::SettingsData::getFont() const {
 	return customFont ? font : defaultFont;
 }
 
-int ThemePage::SettingsData::getTextColor() const {
+int ThemesTab::SettingsData::getTextColor() const {
 	return customTextColor ? textColor :
 		(textColorSetting != -1) ? SettingsManager::getInstance()->getDefault(static_cast<SettingsManager::IntSetting>(textColorSetting)) :
 		-1;
 }
 
-int ThemePage::SettingsData::getBgColor() const {
+int ThemesTab::SettingsData::getBgColor() const {
 	return customBgColor ? bgColor :
 		(bgColorSetting != -1) ? SettingsManager::getInstance()->getDefault(static_cast<SettingsManager::IntSetting>(bgColorSetting)) :
 		-1;
 }
 
-void ThemePage::SettingsData::write() {
+void ThemesTab::SettingsData::write() {
 	if(fontSetting != -1) {
 		if(customFont) {
 			SettingsManager::getInstance()->set(static_cast<SettingsManager::StrSetting>(fontSetting), encodedFont());
@@ -451,7 +528,7 @@ void ThemePage::SettingsData::write() {
 	}
 }
 
-ThemePage::UserMatchData::UserMatchData(UserMatch& matcher) :
+ThemesTab::UserMatchData::UserMatchData(UserMatch& matcher) :
 Data(Text::toT(matcher.name), IDH_SETTINGS_STYLES_USER_MATCH),
 matcher(matcher)
 {
@@ -469,37 +546,32 @@ matcher(matcher)
 	bgColor = matcher.style.bgColor;
 }
 
-const ThemePage::Data::Font& ThemePage::UserMatchData::getFont() const {
+const ThemesTab::Data::Font& ThemesTab::UserMatchData::getFont() const {
 	return customFont ? font : defaultFont;
 }
 
-int ThemePage::UserMatchData::getTextColor() const {
+int ThemesTab::UserMatchData::getTextColor() const {
 	return customTextColor ? textColor : -1;
 }
 
-int ThemePage::UserMatchData::getBgColor() const {
+int ThemesTab::UserMatchData::getBgColor() const {
 	return customBgColor ? bgColor : -1;
 }
 
-void ThemePage::UserMatchData::update() {
+void ThemesTab::UserMatchData::update() {
 	matcher.style.font = customFont ? encodedFont() : Util::emptyString;
 	matcher.style.textColor = customTextColor ? textColor : -1;
 	matcher.style.bgColor = customBgColor ? bgColor : -1;
 	matcher.unsetFlag(UserMatch::GENERATED);
 }
 
-void ThemePage::handleSelectionChanged() {
+void ThemesTab::handleSelectionChanged() {
 	if(updatingMatches) return;
 	auto data = table->getSelectedData();
-	bool enable = data;
-
-	if(data) {
-		updatePreview(data);
-	}
-	if(!data) updatePreview(nullptr);
+	updatePreview(data);
 	preview->getParent()->layout();
 
-	enable = data && data->customFont;
+	bool enable = data && data->customFont;
 	customFont->setChecked(enable);
 	customFont->setEnabled(data && data->isSet(Data::FONT_CHANGEABLE));
 	font->setEnabled(enable);
@@ -516,7 +588,7 @@ void ThemePage::handleSelectionChanged() {
 	bgColor->setEnabled(enable);
 }
 
-void ThemePage::handleTableHelpId(unsigned& id) {
+void ThemesTab::handleTableHelpId(unsigned& id) {
 	// same as PropPage::handleListHelpId
 	int item = isAnyKeyPressed() ? table->getSelected() :
 		table->hitTest(dwt::ScreenCoordinate(dwt::Point::fromLParam(::GetMessagePos()))).first;
@@ -524,7 +596,7 @@ void ThemePage::handleTableHelpId(unsigned& id) {
 		id = table->getData(item)->helpId;
 }
 
-void ThemePage::handleCustomFont() {
+void ThemesTab::handleCustomFont() {
 	auto data = table->getSelectedData();
 	data->customFont = customFont->getChecked();
 	if(data->customFont) {
@@ -534,7 +606,7 @@ void ThemePage::handleCustomFont() {
 	handleSelectionChanged();
 }
 
-void ThemePage::handleFont() {
+void ThemesTab::handleFont() {
 	auto data = table->getSelectedData();
 	initFont(data);
 	FontDialog::Options options;
@@ -553,7 +625,7 @@ void ThemePage::handleFont() {
 	}
 }
 
-void ThemePage::handleCustomTextColor() {
+void ThemesTab::handleCustomTextColor() {
 	auto data = table->getSelectedData();
 	data->customTextColor = customTextColor->getChecked();
 	if(data->customTextColor) {
@@ -564,7 +636,7 @@ void ThemePage::handleCustomTextColor() {
 	handleSelectionChanged();
 }
 
-void ThemePage::handleTextColor() {
+void ThemesTab::handleTextColor() {
 	auto data = table->getSelectedData();
 	auto color = colorDialog(getTextColor(data));
 	if(color >= 0) {
@@ -574,7 +646,7 @@ void ThemePage::handleTextColor() {
 	update(data);
 }
 
-void ThemePage::updateGlobalTextColor(Data* data) {
+void ThemesTab::updateGlobalTextColor(Data* data) {
 	if(data != globalData || !interfaceTextData) return;
 	// A global text edit includes chrome; the palette row remains available as
 	// an explicit override, and loading a preset preserves its authored colors.
@@ -583,7 +655,7 @@ void ThemePage::updateGlobalTextColor(Data* data) {
 	table->update(interfaceTextData);
 }
 
-void ThemePage::handleCustomBgColor() {
+void ThemesTab::handleCustomBgColor() {
 	auto data = table->getSelectedData();
 	data->customBgColor = customBgColor->getChecked();
 	if(data->customBgColor) {
@@ -593,7 +665,7 @@ void ThemePage::handleCustomBgColor() {
 	handleSelectionChanged();
 }
 
-void ThemePage::handleBgColor() {
+void ThemesTab::handleBgColor() {
 	auto data = table->getSelectedData();
 	auto color = colorDialog(getBgColor(data));
 	if(color >= 0) {
@@ -602,7 +674,7 @@ void ThemePage::handleBgColor() {
 	update(data);
 }
 
-int ThemePage::colorDialog(COLORREF color) {
+int ThemesTab::colorDialog(COLORREF color) {
 	ColorDialog::ColorParams colorParams(color);
 	if(ColorDialog(this).open(colorParams)) {
 		return colorParams.getColor();
@@ -610,7 +682,7 @@ int ThemePage::colorDialog(COLORREF color) {
 	return -1;
 }
 
-void ThemePage::initFont(Data* const data) const {
+void ThemesTab::initFont(Data* const data) const {
 	if(!data->font.first) {
 		// initialize the LOGFONT structure.
 		data->font.second = data->defaultFont.first ? data->defaultFont.second : globalData->getFont().second;
@@ -618,17 +690,17 @@ void ThemePage::initFont(Data* const data) const {
 	}
 }
 
-COLORREF ThemePage::getTextColor(const Data* const data) const {
+COLORREF ThemesTab::getTextColor(const Data* const data) const {
 	auto color = data->getTextColor();
 	return (color >= 0) ? color : globalData->getTextColor();
 }
 
-COLORREF ThemePage::getBgColor(const Data* const data) const {
+COLORREF ThemesTab::getBgColor(const Data* const data) const {
 	auto color = data->getBgColor();
 	return (color >= 0) ? color : globalData->getBgColor();
 }
 
-void ThemePage::update(Data* const data) {
+void ThemesTab::update(Data* const data) {
 	data->update();
 	if(!loading) themePreset->setSelected(static_cast<int>(presets.size()));
 
@@ -644,22 +716,25 @@ void ThemePage::update(Data* const data) {
 	preview->getParent()->layout();
 
 	if(dynamic_cast<UserMatchData* const>(data)) {
-		static_cast<SettingsDialog*>(getRoot())->getPage<UserMatchPage>()->setDirty();
+		matchesChanged = true;
+	}
+	if(!loading) {
+		scheduleApply();
 	}
 }
 
-string ThemePage::Data::encodedFont() const {
+string ThemesTab::Data::encodedFont() const {
 	return effects.encode(Text::fromT(UiFonts::encodeFont(font.second)));
 }
 
-void ThemePage::SettingsData::capture(ThemeManager::Theme& theme) const {
+void ThemesTab::SettingsData::capture(ThemeManager::Theme& theme) const {
 	if(fontSetting >= 0) theme.fonts[fontSetting] = customFont ? encodedFont() :
 		SettingsManager::getInstance()->getDefault(static_cast<SettingsManager::StrSetting>(fontSetting));
 	if(textColorSetting >= 0) theme.colors[textColorSetting] = getTextColor();
 	if(bgColorSetting >= 0) theme.colors[bgColorSetting] = getBgColor();
 }
 
-void ThemePage::SettingsData::load(const ThemeManager::Theme& theme) {
+void ThemesTab::SettingsData::load(const ThemeManager::Theme& theme) {
 	if(fontSetting >= 0) {
 		const auto& value = theme.fonts.at(fontSetting);
 		customFont = !value.empty();
@@ -671,7 +746,7 @@ void ThemePage::SettingsData::load(const ThemeManager::Theme& theme) {
 	if(bgColorSetting >= 0) { customBgColor = true; bgColor = theme.colors.at(bgColorSetting); }
 }
 
-void ThemePage::UserMatchData::load(const ThemeManager::Theme&) {
+void ThemesTab::UserMatchData::load(const ThemeManager::Theme&) {
 	// applyUserStyles already updated every definition, including hidden rows.
 	customFont = !matcher.style.font.empty();
 	font.first.reset();
@@ -683,9 +758,9 @@ void ThemePage::UserMatchData::load(const ThemeManager::Theme&) {
 	customBgColor = bgColor >= 0;
 }
 
-ThemeManager::Theme ThemePage::snapshot() const {
+ThemeManager::Theme ThemesTab::snapshot() const {
 	auto result = ThemeManager::capture();
-	if(matches) result.captureUserStyles(*matches);
+	result.captureUserStyles(matches);
 	for(size_t i = 0; i < table->size(); ++i) table->getData(static_cast<int>(i))->capture(result);
 	result.palette = { static_cast<COLORREF>(result.colors.at(SettingsManager::THEME_BACKGROUND_COLOR)),
 		static_cast<COLORREF>(result.colors.at(SettingsManager::THEME_SURFACE_COLOR)),
@@ -697,34 +772,42 @@ ThemeManager::Theme ThemePage::snapshot() const {
 	return result;
 }
 
-void ThemePage::reloadThemes() {
+void ThemesTab::reloadThemes() {
+	const auto wasLoading = loading;
 	loading = true;
 	presets = ThemeManager::getThemes();
 	themePreset->clear();
-	for(const auto& theme : presets) themePreset->addValue(theme.name);
+	int selected = static_cast<int>(presets.size());
+	for(size_t i = 0; i < presets.size(); ++i) {
+		themePreset->addValue(presets[i].name);
+		if(selected == static_cast<int>(presets.size()) && ThemeManager::isCurrent(presets[i])) {
+			selected = static_cast<int>(i);
+		}
+	}
 	themePreset->addValue(T_("Custom / current settings"));
-	themePreset->setSelected(static_cast<int>(presets.size()));
-	loading = false;
+	themePreset->setSelected(selected);
+	loading = wasLoading;
 }
 
-void ThemePage::applyTheme(const ThemeManager::Theme& theme) {
-	auto definitions = static_cast<SettingsDialog*>(getRoot())->getPage<UserMatchPage>();
-	definitions->updateStyles();
+void ThemesTab::applyTheme(const ThemeManager::Theme& theme) {
 	loading = true;
-	if(matches) theme.applyUserStyles(*matches);
+	theme.applyUserStyles(matches);
+	matchesChanged = true;
 	for(size_t i = 0; i < table->size(); ++i) table->getData(static_cast<int>(i))->load(theme);
-	definitions->setDirty();
+	// A named theme uses the dark palette renderer, as the toolbar's theme picker does.
+	themeMode->setSelected(SettingsManager::THEME_DARK);
 	update(globalData);
 	handleSelectionChanged();
 	table->Control::redraw(true);
 	loading = false;
+	scheduleApply();
 }
 
-void ThemePage::importTheme() {
+void ThemesTab::importTheme() {
 	tstring path;
 	if(!dwt::LoadDialog(this).addFilter(T_("DC++ themes"), _T("*.xml")).setInitialDirectory(Text::toT(ThemeManager::getDirectory())).open(path)) return;
 	try {
-		// Import into the draft. Installing or overwriting a file is an explicit Save action.
+		// Applied like any other edit; installing the file is an explicit Save.
 		const auto theme = ThemeManager::load(Text::fromT(path));
 		applyTheme(theme);
 		themePreset->setSelected(static_cast<int>(presets.size()));
@@ -733,7 +816,7 @@ void ThemePage::importTheme() {
 	}
 }
 
-void ThemePage::saveTheme() {
+void ThemesTab::saveTheme() {
 	tstring path = _T("Custom theme.xml");
 	File::ensureDirectory(ThemeManager::getDirectory());
 	if(!dwt::SaveDialog(this).addFilter(T_("DC++ themes"), _T("*.xml")).setDefaultExtension(_T("xml"))
@@ -741,12 +824,13 @@ void ThemePage::saveTheme() {
 	try {
 		ThemeManager::saveTheme(Text::fromT(path), snapshot());
 		reloadThemes();
+		if(UiServices::mainWindow) UiServices::mainWindow->reloadThemes();
 	} catch(const Exception& e) {
 		dwt::MessageBox(this).show(Text::toT(e.getError()), T_("Unable to save theme"), dwt::MessageBox::BOX_OK, dwt::MessageBox::BOX_ICONSTOP);
 	}
 }
 
-void ThemePage::handleEffects() {
+void ThemesTab::handleEffects() {
 	auto data = table->getSelectedData();
 	if(!data || !data->customFont) return;
 	initFont(data);
@@ -758,8 +842,8 @@ void ThemePage::handleEffects() {
 	update(data);
 }
 
-void ThemePage::updatePreview(Data* const data) {
-	if(!globalData) return;
+void ThemesTab::updatePreview(Data* const data) {
+	if(!globalData || building) return;
 	const auto theme = snapshot();
 	preview->setText(L"");
 	preview->clearMessageMetadata();
@@ -789,4 +873,3 @@ void ThemePage::updatePreview(Data* const data) {
 	preview->sendMessage(WM_VSCROLL, SB_TOP);
 	preview->redraw(true);
 }
-

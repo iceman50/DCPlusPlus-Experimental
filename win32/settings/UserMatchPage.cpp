@@ -35,7 +35,6 @@
 
 #include <win32/components/HoldRedraw.h>
 #include <win32/settings/base/SettingsDialog.h>
-#include <win32/settings/ThemePage.h>
 #include <win32/settings/UserMatchDlg.h>
 
 using dwt::Grid;
@@ -101,10 +100,11 @@ dirty(false)
 		remove->onClicked([this] { handleRemoveClicked(); });
 
 		button = cur->addChild(Grid::Seed(1, 1))->addChild(
-			Button::Seed(T_("Edit user-match appearance in Themes")));
+			Button::Seed(T_("Edit user-match appearance in the Experimental window")));
 		button->setHelpId(IDH_SETTINGS_USER_MATCH_STYLES);
 		button->setImage(IconManager::buttonIcon(IDI_STYLES));
-		button->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->activatePage<ThemePage>(); });
+		// Its Themes tab (the first) edits the styles; Settings closes first, keeping changes as OK does.
+		button->onClicked([this] { static_cast<SettingsDialog*>(getRoot())->closeAndOpenExperimental(0); });
 	}
 
 	TableLayout::makeColumns(table, columns, 1);
@@ -120,9 +120,6 @@ dirty(false)
 	table->onKeyDown([this](int c) { return handleKeyDown(c); });
 	table->onSelectionChanged([this] { handleSelectionChanged(); });
 	table->setTooltips([this](int i) { return handleTooltip(i); });
-
-	// async to avoid problems if one page gets init'd before the other.
-	callAsync([this] { updateStyles(); });
 }
 
 UserMatchPage::~UserMatchPage() {
@@ -143,10 +140,6 @@ void UserMatchPage::write() {
 
 void UserMatchPage::setDirty() {
 	dirty = true;
-}
-
-void UserMatchPage::updateStyles() {
-	static_cast<SettingsDialog*>(getRoot())->getPage<ThemePage>()->updateUserMatches(list);
 }
 
 void UserMatchPage::handleDoubleClick() {
@@ -243,7 +236,6 @@ void UserMatchPage::handleAddClicked() {
 		addEntry(dlg.getResult());
 
 		setDirty();
-		updateStyles();
 	}
 }
 
@@ -264,7 +256,6 @@ void UserMatchPage::handleEditClicked() {
 		addEntry(dlg.getResult(), sel);
 
 		setDirty();
-		updateStyles();
 	}
 }
 
@@ -282,7 +273,6 @@ void UserMatchPage::handleMoveUpClicked() {
 	}
 
 	setDirty();
-	updateStyles();
 }
 
 void UserMatchPage::handleMoveDownClicked() {
@@ -300,7 +290,6 @@ void UserMatchPage::handleMoveDownClicked() {
 	}
 
 	setDirty();
-	updateStyles();
 }
 
 void UserMatchPage::handleRemoveClicked() {
@@ -324,7 +313,6 @@ void UserMatchPage::handleRemoveClicked() {
 	}
 
 	setDirty();
-	updateStyles();
 }
 
 void UserMatchPage::addEntry(const UserMatch& matcher, int index) {

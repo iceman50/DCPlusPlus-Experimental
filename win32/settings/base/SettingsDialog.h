@@ -63,7 +63,21 @@ public:
 
 	static const int pluginPagePos;
 
+	/** Open on the page of this type instead of the last one shown. Call before run(). */
+	void setInitialPage(const std::type_info& type) { initialPage = std::type_index(type); }
+
+	/** Close as OK does, asking for the Experimental window to open afterwards on a tab
+	 * (an ExperimentalFrame::Page). */
+	void closeAndOpenExperimental(int page = 0);
+	/** Whether closeAndOpenExperimental closed the dialog. */
+	bool experimentalWindowRequested() const { return openExperimental; }
+	int experimentalPage() const { return experimentalTab; }
+
 private:
+	bool openExperimental = false;
+	int experimentalTab = 0;
+	std::type_index initialPage = std::type_index(typeid(void));
+
 	friend class PropPage;
 
 	struct PageInfo {

@@ -44,7 +44,6 @@ AdvancedPage::ListItem AdvancedPage::listItems[] = {
 	{ SettingsManager::HUB_USER_COMMANDS, N_("Accept custom user commands from hub"), IDH_SETTINGS_ADVANCED_HUB_USER_COMMANDS },
 	{ SettingsManager::SEND_UNKNOWN_COMMANDS, N_("Send unknown /commands to the hub"), IDH_SETTINGS_ADVANCED_SEND_UNKNOWN_COMMANDS },
 	{ SettingsManager::ADD_FINISHED_INSTANTLY, N_("Add finished files to share instantly (if shared)"), IDH_SETTINGS_ADVANCED_ADD_FINISHED_INSTANTLY },
-	{ SettingsManager::LOG_HASHED_FILES, N_("Report each hashed file in the system log"), IDH_SETTINGS_ADVANCED_LOG_HASHED_FILES },
 	{ SettingsManager::USE_CTRL_FOR_LINE_HISTORY, N_("Use CTRL for line history"), IDH_SETTINGS_ADVANCED_USE_CTRL_FOR_LINE_HISTORY },
 	{ SettingsManager::AUTO_KICK_NO_FAVS, N_("Don't automatically disconnect favorite users who leave the hub"), IDH_SETTINGS_ADVANCED_AUTO_KICK_NO_FAVS },
 	{ SettingsManager::OWNER_DRAWN_MENUS, N_("Use extended menus with icons and titles"), IDH_SETTINGS_ADVANCED_OWNER_DRAWN_MENUS },

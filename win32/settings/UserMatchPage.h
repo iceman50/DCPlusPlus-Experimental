@@ -33,7 +33,6 @@ public:
 	virtual void write();
 
 	void setDirty();
-	void updateStyles();
 
 private:
 	TablePtr table;

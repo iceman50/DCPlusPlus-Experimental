@@ -200,8 +200,7 @@ vector<IconManager::Package> discoverPackages() {
 	return packages;
 }
 
-string resolvePack(bool darkMode) {
-	const auto configured = SETTING(ICON_PACK);
+string resolvePack(const string& configured, bool darkMode) {
 	if(configured == IconManager::EMBEDDED_PACK) return string();
 	if(!configured.empty() && File::getSize(configured) > 0) return configured;
 	const auto wanted = configured.empty() ? (darkMode ? DARK_PACK_FILE : "") : Util::getFileName(configured);
@@ -215,7 +214,7 @@ string resolvePack(bool darkMode) {
 void resolveActivePack(State& current) {
 	if(current.packResolved) return;
 	current.packResolved = true;
-	current.activePack = resolvePack(current.darkMode);
+	current.activePack = resolvePack(SETTING(ICON_PACK), current.darkMode);
 	current.entries.clear();
 	if(current.activePack.empty()) return;
 	try {
@@ -323,6 +322,107 @@ const char* IconManager::getFileName(unsigned resourceId) noexcept {
 
 IconManager::Package IconManager::inspectPackage(const string& path) {
 	return readManifest(path, nullptr);
+}
+
+vector<unsigned> IconManager::getIconIds() {
+	vector<unsigned> ids;
+	ids.reserve(std::size(ICONS));
+	for(const auto& icon: ICONS) {
+		ids.push_back(icon.id);
+	}
+	return ids;
+}
+
+string IconManager::resolvePackage(const string& setting) {
+	bool darkMode = false;
+	{
+		auto& current = state();
+		std::lock_guard<std::mutex> lock(current.mutex);
+		darkMode = current.darkMode;
+	}
+	// Outside the lock: finding the automatic package lists the package folders.
+	return resolvePack(setting, darkMode);
+}
+
+namespace {
+
+/** An icon from the bytes of an .ico file: the image closest to `size` (the smallest larger one,
+ * or else the largest), with the most colors. Null when the file isn't a valid icon. */
+dwt::IconPtr iconFromIco(const string& data, long size) {
+	auto byte = [&data](size_t i) { return static_cast<uint8_t>(data[i]); };
+	auto word = [&](size_t i) { return static_cast<uint32_t>(byte(i) | byte(i + 1) << 8); };
+	auto dword = [&](size_t i) { return word(i) | word(i + 2) << 16; };
+	if(data.size() < 6 || word(0) != 0 || word(2) != 1) {
+		return dwt::IconPtr();
+	}
+	const auto count = word(4);
+	if(data.size() < 6 + 16 * static_cast<size_t>(count)) {
+		return dwt::IconPtr();
+	}
+
+	int best = -1;
+	long bestSize = 0;
+	uint32_t bestDepth = 0;
+	for(uint32_t i = 0; i < count; ++i) {
+		const size_t entry = 6 + 16 * i;
+		const long width = byte(entry) ? byte(entry) : 256;
+		const auto depth = word(entry + 6);
+		const auto bytes = dword(entry + 8);
+		const auto offset = dword(entry + 12);
+		if(!bytes || offset > data.size() || bytes > data.size() - offset) continue;
+		// Closer is better: an exact size, then the smallest larger one, then the largest smaller one.
+		const bool better = best < 0 ||
+			(width >= size ? (bestSize < size || width < bestSize || (width == bestSize && depth > bestDepth)) :
+				(bestSize < size && (width > bestSize || (width == bestSize && depth > bestDepth))));
+		if(better) {
+			best = static_cast<int>(i);
+			bestSize = width;
+			bestDepth = depth;
+		}
+	}
+	if(best < 0) {
+		return dwt::IconPtr();
+	}
+	const size_t entry = 6 + 16 * static_cast<size_t>(best);
+	auto image = reinterpret_cast<PBYTE>(const_cast<char*>(data.data())) + dword(entry + 12);
+	const auto icon = ::CreateIconFromResourceEx(image, dword(entry + 8), TRUE, 0x00030000,
+		static_cast<int>(size), static_cast<int>(size), LR_DEFAULTCOLOR);
+	return icon ? dwt::IconPtr(new dwt::Icon(icon, true)) : dwt::IconPtr();
+}
+
+}
+
+IconManager::Preview::Preview(const string& package) {
+	if(package.empty() || package == EMBEDDED_PACK) {
+		return;
+	}
+	try {
+		readManifest(package, &entries);
+		archive = std::make_unique<Archive>(package);
+		path = package;
+	} catch(const Exception&) {
+		entries.clear();
+		archive.reset();
+	}
+}
+
+IconManager::Preview::~Preview() {
+}
+
+dwt::IconPtr IconManager::Preview::load(unsigned resourceId, long size) {
+	const auto fileName = getFileName(resourceId);
+	if(archive && fileName) {
+		const auto entry = entries.find(Text::toLower(fileName));
+		if(entry != entries.end()) {
+			try {
+				if(auto icon = iconFromIco(archive->readFile(entry->second, MAX_ICON_FILE_SIZE), size)) {
+					return icon;
+				}
+			} catch(const Exception&) {
+			}
+		}
+	}
+	return new dwt::Icon(resourceId, dwt::Point(size, size));
 }
 
 vector<IconManager::Package> IconManager::getPackages() {

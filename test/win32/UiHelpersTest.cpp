@@ -10,7 +10,6 @@
 #include <win32/util/LinkActions.h>
 #include <win32/dialog/ParamDlg.h>
 #include <win32/settings/BandwidthLimitPage.h>
-#include <win32/settings/ExperimentalPage.h>
 #include <win32/settings/ExpertsPage.h>
 #include <dcpp/user/CID.h>
 #include <atomic>
@@ -111,227 +110,20 @@ void manualLimitControls() {
 	DestroyWindow(window->handle());
 }
 
+// The dialog border option itself is tested with the Experimental window (ExperimentalFrameTest).
 void dialogBorderPreference() {
 	auto& appearance = dwt::Application::instance().getAppearance();
 	auto settings = SettingsManager::getInstance();
 	appearance.configure(dwt::Appearance::Mode::Dark, dwt::Appearance::defaultPalette());
 	check(settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Dialog borders were not enabled by default");
-	LogManager::newInstance();
-	HashManager::newInstance();
-	SearchManager::newInstance();
-	UploadManager::newInstance();
-	QueueManager::newInstance();
-	ShareManager::newInstance();
-	auto window = new dwt::Window();
-	auto seed = dwt::Window::Seed();
-	seed.style &= ~WS_VISIBLE;
-	window->create(seed);
-	{
-		ParamDlg dialog(window, L"Dialog border preview");
-		dialog.addTextBox(L"Content", L"Preview");
-		dialog.create(dwt::ModalDialog::Seed(dwt::Point(365, 0)));
-		for(bool save: { false, true }) {
-			auto page = new ExperimentalPage(window);
-			page->resize(dwt::Rectangle(0, 0, 640, 600));
-			page->layout();
-			std::vector<HWND> children;
-			EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
-			dwt::CheckBox* option = nullptr;
-			for(auto child: children) {
-				auto box = dwt::hwnd_cast<dwt::CheckBox*>(child);
-				if(box && box->getText() == T_("Show borders around themed dialogs")) option = box;
-			}
-			check(option && option->getChecked(), "Experimental settings did not expose the saved border preference");
-			// The option lives on the Interface tab; select it as a user would before clicking.
-			for(HWND child = option->handle(); child && child != page->handle(); child = GetParent(child)) {
-				auto tabs = dwt::hwnd_cast<dwt::TabView*>(GetParent(child));
-				if(tabs) {
-					tabs->setActive(dwt::hwnd_cast<dwt::Container*>(child));
-					break;
-				}
-			}
-			option->sendMessage(BM_CLICK);
-			check(!appearance.getDialogBorders() && dialog.getDialogBorderWidth() == 0, "Border checkbox did not update an open dialog");
-			check(settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Border preview prematurely saved the setting");
-			if(save) page->write();
-			DestroyWindow(page->handle());
-			check(appearance.getDialogBorders() == !save && settings->get(SettingsManager::THEMED_DIALOG_BORDERS) == !save,
-				"Closing Experimental settings did not respect OK/Cancel");
-		}
-		UserMatchManager::newInstance();
-		auto theme = ThemeManager::capture();
-		ThemeManager::apply(theme, false);
-		check(!settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Applying a theme changed the border preference");
-		UserMatchManager::deleteInstance();
-		DestroyWindow(dialog.handle());
-	}
-	DestroyWindow(window->handle());
-	ShareManager::deleteInstance();
-	QueueManager::deleteInstance();
-	UploadManager::deleteInstance();
-	SearchManager::deleteInstance();
-	HashManager::getInstance()->shutdown();
-	HashManager::deleteInstance();
-	LogManager::deleteInstance();
+	settings->set(SettingsManager::THEMED_DIALOG_BORDERS, false);
+	UserMatchManager::newInstance();
+	auto theme = ThemeManager::capture();
+	ThemeManager::apply(theme, false);
+	check(!settings->get(SettingsManager::THEMED_DIALOG_BORDERS), "Applying a theme changed the border preference");
+	UserMatchManager::deleteInstance();
 	settings->set(SettingsManager::THEMED_DIALOG_BORDERS, true);
 	appearance.setDialogBorders(true);
-}
-
-void experimentalInterfaceScrolls() {
-	LogManager::newInstance();
-	HashManager::newInstance();
-	SearchManager::newInstance();
-	UploadManager::newInstance();
-	QueueManager::newInstance();
-	ShareManager::newInstance();
-	auto window = new dwt::Window();
-	auto seed = dwt::Window::Seed();
-	seed.style &= ~WS_VISIBLE;
-	window->create(seed);
-	{
-		auto page = new ExperimentalPage(window);
-		page->resize(dwt::Rectangle(0, 0, 640, 300));
-		page->layout();
-
-		std::vector<HWND> children;
-		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
-		dwt::CheckBox* first = nullptr;
-		HWND last = nullptr;
-		for(auto child: children) {
-			auto box = dwt::hwnd_cast<dwt::CheckBox*>(child);
-			if(box && box->getText() == T_("Show borders around themed dialogs")) first = box;
-			auto button = dwt::hwnd_cast<dwt::Button*>(child);
-			if(button && button->getText() == T_("Edit themes, fonts and chat colors...")) last = child;
-		}
-		check(first && last, "Interface tab controls were not found");
-
-		dwt::ScrolledContainer* scroller = nullptr;
-		for(HWND child = first->handle(); child && child != page->handle(); child = GetParent(child)) {
-			if(!scroller) scroller = dwt::hwnd_cast<dwt::ScrolledContainer*>(child);
-			if(auto tabs = dwt::hwnd_cast<dwt::TabView*>(GetParent(child))) {
-				tabs->setActive(dwt::hwnd_cast<dwt::Container*>(child));
-				break;
-			}
-		}
-		check(scroller != nullptr, "Interface tab has no scroll container");
-
-		SCROLLINFO info = { sizeof(SCROLLINFO), SIF_ALL };
-		GetScrollInfo(scroller->handle(), SB_VERT, &info);
-		check(info.nMax - info.nMin + 1 > static_cast<int>(info.nPage) && info.nPos == 0,
-			"Interface tab does not scroll in a small settings window");
-
-		// Wheel input over a control inside the tab is forwarded to the scroller.
-		first->sendMessage(WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), 0);
-		GetScrollInfo(scroller->handle(), SB_VERT, &info);
-		check(info.nPos > 0, "Mouse wheel did not scroll the Interface tab");
-
-		for(int i = 0; i < 100; ++i) first->sendMessage(WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), 0);
-		RECT visible, button;
-		GetWindowRect(scroller->handle(), &visible);
-		GetWindowRect(last, &button);
-		check(button.top >= visible.top && button.bottom <= visible.bottom,
-			"The last Interface option cannot be scrolled into view");
-
-		for(int i = 0; i < 100; ++i) first->sendMessage(WM_MOUSEWHEEL, MAKEWPARAM(0, WHEEL_DELTA), 0);
-		GetScrollInfo(scroller->handle(), SB_VERT, &info);
-		check(info.nPos == 0, "Mouse wheel did not scroll the Interface tab back to the top");
-
-		// The Interface tab scrolls on its own instead of making the whole page taller.
-		dwt::TabView* tabView = nullptr;
-		for(HWND child = first->handle(); child && !tabView; child = GetParent(child)) {
-			tabView = dwt::hwnd_cast<dwt::TabView*>(child);
-		}
-		check(tabView && tabView->getPreferredSize().y < scroller->getPreferredSize().y,
-			"The Interface tab still forces the settings page to its full height");
-		DestroyWindow(page->handle());
-	}
-	DestroyWindow(window->handle());
-	ShareManager::deleteInstance();
-	QueueManager::deleteInstance();
-	UploadManager::deleteInstance();
-	SearchManager::deleteInstance();
-	HashManager::getInstance()->shutdown();
-	HashManager::deleteInstance();
-	LogManager::deleteInstance();
-}
-
-void experimentalGroupsAreLaidOut() {
-	LogManager::newInstance();
-	HashManager::newInstance();
-	SearchManager::newInstance();
-	UploadManager::newInstance();
-	QueueManager::newInstance();
-	ShareManager::newInstance();
-	auto settings = SettingsManager::getInstance();
-	auto window = new dwt::Window();
-	auto seed = dwt::Window::Seed();
-	seed.style &= ~WS_VISIBLE;
-	window->create(seed);
-	{
-		auto page = new ExperimentalPage(window);
-		page->resize(dwt::Rectangle(0, 0, 900, 1400));
-		page->layout();
-
-		std::vector<HWND> children;
-		EnumChildWindows(page->handle(), collectLimitControls, reinterpret_cast<LPARAM>(&children));
-		dwt::TabView* tabs = nullptr;
-		dwt::ComboBox* encoding = nullptr;
-		for(auto child: children) {
-			if(!tabs) tabs = dwt::hwnd_cast<dwt::TabView*>(child);
-			auto combo = dwt::hwnd_cast<dwt::ComboBox*>(child);
-			if(combo && combo->getAccessibleName() == T_("Default encoding for NMDC hubs")) encoding = combo;
-		}
-		check(tabs != nullptr, "Experimental settings have no tabs");
-
-		// A Grid silently leaves children past its last row unplaced, which hides a whole group.
-		size_t groups = 0;
-		for(auto child: children) {
-			auto group = dwt::hwnd_cast<dwt::GroupBox*>(child);
-			if(!group) continue;
-			for(HWND parent = child; parent && parent != page->handle(); parent = GetParent(parent)) {
-				if(GetParent(parent) == tabs->handle()) {
-					tabs->setActive(dwt::hwnd_cast<dwt::Container*>(parent));
-					break;
-				}
-			}
-			// Each tab scrolls its own options; nothing else can scroll them in a small settings window.
-			bool scrolled = false;
-			for(HWND parent = GetParent(child); parent && parent != tabs->handle(); parent = GetParent(parent)) {
-				scrolled = scrolled || dwt::hwnd_cast<dwt::ScrolledContainer*>(parent) != nullptr;
-			}
-			if(!scrolled) {
-				throw std::runtime_error("Experimental settings group cannot scroll: " + Text::fromT(group->getText()));
-			}
-			const auto size = group->getWindowSize();
-			if(size.x <= 0 || size.y <= 0) {
-				throw std::runtime_error("Experimental settings group is not laid out: " + Text::fromT(group->getText()));
-			}
-			++groups;
-		}
-		check(groups >= 13, "Experimental settings groups were not found");
-
-		check(encoding && encoding->getSelected() == 0, "NMDC encoding does not default to the Windows code page");
-		int utf8 = -1;
-		for(int i = 0; i < static_cast<int>(encoding->size()); ++i) {
-			if(encoding->getValue(i).compare(0, 6, _T("65001 ")) == 0) utf8 = i;
-		}
-		check(utf8 > 0, "NMDC encoding list has no UTF-8 entry");
-		encoding->setSelected(utf8);
-		page->write();
-		check(Text::getCodePage(settings->get(SettingsManager::NMDC_ENCODING)) == CP_UTF8, "NMDC encoding was not saved");
-		encoding->setSelected(0);
-		page->write();
-		check(settings->get(SettingsManager::NMDC_ENCODING).empty(), "Windows default NMDC encoding was not saved as empty");
-		DestroyWindow(page->handle());
-	}
-	DestroyWindow(window->handle());
-	ShareManager::deleteInstance();
-	QueueManager::deleteInstance();
-	UploadManager::deleteInstance();
-	SearchManager::deleteInstance();
-	HashManager::getInstance()->shutdown();
-	HashManager::deleteInstance();
-	LogManager::deleteInstance();
 }
 
 /** Answer the next "Generate new private ID" warning from another thread, as a user would. */
@@ -501,8 +293,6 @@ int dwtMain(dwt::Application&) {
 		chatAndLinks();
 		manualLimitControls();
 		dialogBorderPreference();
-		experimentalInterfaceScrolls();
-		experimentalGroupsAreLaidOut();
 		privateIdCanBeRegenerated();
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(0, 0, 0))) == RGB(0, 0, 0), "Black color conversion changed");
 		check(ColorUtil::HLS2RGB(ColorUtil::RGB2HLS(RGB(255, 255, 255))) == RGB(255, 255, 255), "White color conversion changed");

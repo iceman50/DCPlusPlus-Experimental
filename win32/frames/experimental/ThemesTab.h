@@ -16,31 +16,34 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef DCPLUSPLUS_WIN32_THEME_PAGE_H
-#define DCPLUSPLUS_WIN32_THEME_PAGE_H
+#ifndef DCPLUSPLUS_WIN32_THEMES_TAB_H
+#define DCPLUSPLUS_WIN32_THEMES_TAB_H
+
+#include <vector>
 
 #include <dcpp/user/UserMatch.h>
 #include <dcpp/message/FontStyle.h>
 #include <win32/util/ThemeManager.h>
+#include <win32/frames/experimental/ExperimentalTabs.h>
 
-#include <win32/settings/base/PropPage.h>
-
-class ThemePage : public PropPage
+/** The theme: light or dark mode, the theme presets, and the fonts and colors of the interface,
+ * lists, chat and user matching definitions, with a live chat preview. Edits apply shortly after
+ * they are made, as a theme repaints the whole client. */
+class ThemesTab : public ExperimentalTab
 {
 public:
-	ThemePage(dwt::Widget* parent);
-	virtual ~ThemePage();
+	ThemesTab(TabViewPtr parent, LiveSettings& live);
+	virtual ~ThemesTab();
 
-	virtual void layout();
-	dwt::Point getPreferredSize() override;
-	virtual void write();
+	void layout() override;
+	void refresh() override;
 
-	void updateUserMatches(std::vector<UserMatch>& userMatches);
+	/** How long after the last edit the theme applies. */
+	static constexpr unsigned applyPause = 300;
 
 private:
 	enum {
 		COLUMN_TEXT,
-
 		COLUMN_LAST
 	};
 
@@ -50,9 +53,12 @@ private:
 		GROUP_TRANSFERS,
 		GROUP_CHAT,
 		GROUP_USERS,
-
 		GROUP_LAST
 	};
+
+	enum { TIMER_APPLY = 1 };
+
+	void build() override;
 
 	class Data : public Flags {
 	protected:
@@ -75,6 +81,7 @@ private:
 		virtual void write() { }
 		virtual void capture(ThemeManager::Theme&) const { }
 		virtual void load(const ThemeManager::Theme&) { }
+
 		string encodedFont() const;
 		FontStyle effects;
 
@@ -103,6 +110,8 @@ private:
 		int getTextColor() const;
 		int getBgColor() const;
 
+		/** Show the stored settings again. */
+		void read();
 		void write();
 		void capture(ThemeManager::Theme& theme) const override;
 		void load(const ThemeManager::Theme& theme) override;
@@ -141,14 +150,28 @@ private:
 	ComboBoxPtr themePreset;
 	std::vector<ThemeManager::Theme> presets;
 	bool loading = false;
+	/** Set while the controls are created, so the preview is drawn once. */
+	bool building = false;
 	bool updatingMatches = false;
-	std::vector<UserMatch>* matches = nullptr;
+	/** The user matching definitions whose styles are edited here; the rules are edited in Settings. */
+	std::vector<UserMatch> matches;
+	bool matchesChanged = false;
+	bool applyPending = false;
+
 	ThemeManager::Theme snapshot() const;
 	void applyTheme(const ThemeManager::Theme& theme);
 	void reloadThemes();
 	void importTheme();
 	void saveTheme();
 	void handleEffects();
+
+	/** Apply the edits after a pause, so a burst of them repaints the client once. */
+	void scheduleApply();
+	void apply();
+	/** Show the stored theme and user matching definitions again. */
+	void reloadFromSettings();
+	/** List the user matching definitions' rows again. */
+	void updateUserMatches();
 
 	CheckBoxPtr customFont;
 	ButtonPtr font;
@@ -174,11 +197,14 @@ private:
 	void handleBgColor();
 
 	int colorDialog(COLORREF color);
+
 	void initFont(Data* const data) const;
+
 	COLORREF getTextColor(const Data* const data) const;
 	COLORREF getBgColor(const Data* const data) const;
+
 	void update(Data* const data);
 	void updatePreview(Data* const data);
 };
 
-#endif
+#endif // !defined(DCPLUSPLUS_WIN32_THEMES_TAB_H)

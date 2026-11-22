@@ -81,6 +81,7 @@
 #include <dwt/widgets/ToolBar.h>
 
 #include <win32/frames/settings/ACFrame.h>
+#include <win32/frames/experimental/ExperimentalFrame.h>
 #include <win32/dialog/AboutDlg.h>
 #include <win32/frames/adl_search/ADLSearchFrame.h>
 #include <win32/frames/bbs/BBSFrame.h>
@@ -430,6 +431,8 @@ void MainWindow::initMenu() {
 			[this] { SystemFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_LOGS));
 		viewIndexes[StatsFrame::id] = viewMenu->appendItem(T_("Network Statistics"),
 			[this] { StatsFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_NET_STATS));
+		viewIndexes[ExperimentalFrame::id] = viewMenu->appendItem(T_("E&xperimental"),
+			[this] { ExperimentalFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_EXPERT));
 #ifdef DEBUG
 		viewIndexes[ACFrame::id] = viewMenu->appendItem(T_("About:config"),
 			[this] { ACFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_DCPP));
@@ -654,6 +657,7 @@ void MainWindow::applyTheme(const ThemeManager::Theme& theme) {
 	ThemeManager::apply(theme);
 	refreshAppearance(previousFont, previousUploadFont, previousDownloadFont);
 	SettingsManager::getInstance()->save();
+	ExperimentalFrame::settingsChanged();
 }
 
 void MainWindow::initStatusBar() {
@@ -1450,6 +1454,11 @@ MainWindow::~MainWindow() {
 	dwt::Application::instance().removeKeyboardFilter(keyboardFilterIter);
 }
 
+void MainWindow::openSettings(const std::type_info& page) {
+	settingsPage = &page;
+	handleSettings();
+}
+
 void MainWindow::handleSettings() {
 	// this may be called directly from the tray icon when the main window is still hidden
 	if(isIconic())
@@ -1488,7 +1497,12 @@ void MainWindow::handleSettings() {
 	auto prevSystemStartupReg = SETTING(REGISTER_SYSTEM_STARTUP);
 	auto prevSettingsSave = SETTING(SETTINGS_SAVE_INTERVAL);
 
-	if(SettingsDialog(this).run() == IDOK) {
+	SettingsDialog dialog(this);
+	if(settingsPage) {
+		dialog.setInitialPage(*settingsPage);
+		settingsPage = nullptr;
+	}
+	if(dialog.run() == IDOK) {
 		SettingsManager::getInstance()->save();
 
 		try {
@@ -1553,12 +1567,26 @@ void MainWindow::handleSettings() {
 			setSaveTimer();
 
 		refreshPluginMenu();
+		ExperimentalFrame::settingsChanged();
+	}
+	if(dialog.experimentalWindowRequested()) {
+		ExperimentalFrame::openPage(getTabView(), static_cast<ExperimentalFrame::Page>(dialog.experimentalPage()));
 	}
 	// Commit the live width preview on OK, or restore the saved width on Cancel.
 	// Style changes still take effect at startup; use the running strip's style.
 	const auto tabWidth = std::clamp(SETTING(TAB_WIDTH), 100, 1000);
 	tabs->setWidthConfig(tabs->hasStyle(TCS_OWNERDRAWFIXED) ? tabWidth : (tabWidth - 100) / 9);
 	reloadThemes();
+}
+
+void MainWindow::themeChanged(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont) {
+	refreshAppearance(previousFont, previousUploadFont, previousDownloadFont);
+	reloadThemes();
+}
+
+void MainWindow::geoSettingsChanged() {
+	geoUpdater.stop();
+	geoUpdater.startUpdate(true);
 }
 
 void MainWindow::refreshAppearance(const string& previousFont, const string& previousUploadFont, const string& previousDownloadFont) {
@@ -2480,6 +2508,7 @@ void MainWindow::openWindow(const string& id, const WindowParams& params) {
 	compare_id(StatsFrame);
 	compare_id(TextFrame);
 	compare_id(ACFrame);
+	compare_id(ExperimentalFrame);
 #undef compare_id
 }
 

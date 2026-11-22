@@ -7,43 +7,41 @@
  * (at your option) any later version.
  */
 
-#ifndef DCPLUSPLUS_WIN32_EMOTICONS_PAGE_H
-#define DCPLUSPLUS_WIN32_EMOTICONS_PAGE_H
+#ifndef DCPLUSPLUS_WIN32_EMOTICONS_TAB_H
+#define DCPLUSPLUS_WIN32_EMOTICONS_TAB_H
+
+#include <limits>
+#include <string>
+#include <vector>
 
 #include <dcpp/message/EmoticonManager.h>
 
-#include <win32/util/IconManager.h>
-#include <win32/settings/base/PropPage.h>
+#include <win32/frames/experimental/ExperimentalTabs.h>
 
-/** Appearance sub-page for selecting and editing .dcemo and .dcico packages. */
-class EmoticonsPage : public PropPage {
+/** Emoticons in chat: the package, with a preview of what it contains, its display size and the
+ * limits on extracting a package. */
+class EmoticonsTab : public ExperimentalTab {
 public:
-	explicit EmoticonsPage(dwt::Widget* parent);
-	void write() override;
+	EmoticonsTab(TabViewPtr parent, LiveSettings& live);
+	void refresh() override;
 
 private:
+	void build() override;
 	void updatePreview();
 	void reloadPackages(const std::string& selectedPath = std::string());
 	void selectPackage(const std::string& path);
 	void handlePackageSelection();
 	void editSelectedPackage();
 	std::string selectedPackagePath() const;
-	void updateIconPackageStatus();
-	void selectIconPackage(const std::string& path);
-	std::string selectedIconPackagePath() const;
+	/** Use the selected package, at once. */
+	void applyPackage();
 
-	ItemList items;
 	ComboBoxPtr packageBox;
 	std::vector<dcpp::EmoticonManager::Package> packages;
 	std::string retainedPackagePath;
 	bool changingPackageSelection;
-	ComboBoxPtr sizeBox;
-	ComboBoxPtr bitDepthBox;
 	RichTextBoxPtr preview;
 	LabelPtr previewStatus;
-	ComboBoxPtr iconPackageBox;
-	std::vector<IconManager::Package> iconPackages;
-	LabelPtr iconPackageStatus;
 };
 
-#endif
+#endif // !defined(DCPLUSPLUS_WIN32_EMOTICONS_TAB_H)
