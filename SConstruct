@@ -396,10 +396,27 @@ pot_args = [
     "--boost",
     "-s",
     "--output=$TARGET",
-    '${list(filter(lambda _: not str(_).endswith((".o", ".obj")), SOURCES))}'
 ]
+
+
+def build_pot(target, source, env):
+    # The sources go in a list file: on Windows they no longer fit on one command line.
+    import subprocess
+    import tempfile
+
+    names = [str(s) for s in source if not str(s).endswith((".o", ".obj"))]
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as listing:
+        listing.write("\n".join(names) + "\n")
+    try:
+        args = [env.subst(arg, target=target, source=source) for arg in pot_args]
+        args[0] = env.WhereIs(args[0]) or args[0]
+        return subprocess.call(args + ["--files-from=" + listing.name], env=env["ENV"])
+    finally:
+        os.remove(listing.name)
+
+
 pot_bld = Builder(
-    action=Action([pot_args], "Extracting messages to $TARGET from $SOURCES")
+    action=Action(build_pot, "Extracting messages to $TARGET")
 )
 env.Append(BUILDERS={"PotBuild": pot_bld})
 
