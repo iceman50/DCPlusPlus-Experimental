@@ -77,9 +77,12 @@ public:
 	void setText(const tstring& text_);
 	void setText(Widget* widget, const tstring& text);
 	void addTool(Widget* widget, LPTSTR text = LPSTR_TEXTCALLBACK);
+	bool addTool(Widget* widget, LPTSTR text, UINT flags);
+	void removeTool(Widget* widget);
 	void setTool(Widget* widget, F callback);
 
 	void setMaxTipWidth(int width);
+	int getMaxTipWidth() const;
 	/** get a delay value. see the TTM_GETDELAYTIME doc for possible params. */
 	int getDelay(int param);
 	/** set a delay value. see the TTM_GETDELAYTIME doc for possible params. use -1 for default. */
@@ -93,7 +96,14 @@ public:
 	void setMargin(const Rectangle& margin);
 	Rectangle getMargin() const;
 	void setTipBackgroundColor(COLORREF color);
+	COLORREF getTipBackgroundColor() const;
 	void setTipTextColor(COLORREF color);
+	COLORREF getTipTextColor() const;
+	int getToolCount() const;
+	Point getBubbleSize(Widget* widget) const;
+	bool adjustRectangle(Rectangle& rectangle, bool textToWindow) const;
+	void trackPosition(const ScreenCoordinate& position);
+	void trackActivate(Widget* widget, bool active = true);
 	void setWindowTheme(const tstring& theme);
 	void onLinkClicked(std::function<void ()> f);
 
@@ -138,6 +148,10 @@ inline ToolTip::ToolTip(Widget *parent)
 
 inline void ToolTip::setMaxTipWidth(int width) {
 	sendMessage(TTM_SETMAXTIPWIDTH, 0, static_cast<LPARAM>(width));
+}
+
+inline int ToolTip::getMaxTipWidth() const {
+	return static_cast<int>(sendMessage(TTM_GETMAXTIPWIDTH));
 }
 
 }

@@ -140,6 +140,26 @@ public:
 	  * toolbar buttons in "disabled" state.
 	  */
 	void setDisabledImageList( ImageListPtr disabledImageList );
+	void setPressedImageList(ImageListPtr pressedImageList);
+
+	Point getPadding() const;
+	Point setPadding(const Point& padding);
+	Point getButtonSize() const;
+	bool setButtonSize(const Point& size);
+	bool setBitmapSize(const Point& size);
+	Point getMaximumSize() const;
+	Point getIdealSize(bool height = false) const;
+	Rectangle getItemRect(unsigned index) const;
+
+	int getHotItem() const;
+	int setHotItem(int index);
+	bool getAnchorHighlight() const;
+	bool setAnchorHighlight(bool enabled);
+	bool moveButton(unsigned from, unsigned to);
+	int getTextRows() const;
+	bool setMaximumTextRows(int rows);
+	DWORD getExtendedStyle() const;
+	DWORD setExtendedStyle(DWORD style);
 	/// Shows (or hides) the button in the toolbar with the given id
 	/** id is the identification of which button you want to show.
 	  */
@@ -222,6 +242,7 @@ private:
 	ImageListPtr itsNormalImageList;
 	ImageListPtr itsHotImageList;
 	ImageListPtr itsDisabledImageList;
+	ImageListPtr itsPressedImageList;
 
 	struct Button {
 		TBBUTTON button;
@@ -297,19 +318,28 @@ void ToolBar::addBitmap( HBITMAP hBit, unsigned int noButtonsInBitmap )
 inline void ToolBar::setNormalImageList( ImageListPtr normalImageList )
 {
 	itsNormalImageList = normalImageList;
-	sendMessage(TB_SETIMAGELIST, 0, reinterpret_cast< LPARAM >( itsNormalImageList->getImageList() ) );
+	sendMessage(TB_SETIMAGELIST, 0, reinterpret_cast< LPARAM >(
+		itsNormalImageList ? itsNormalImageList->getImageList() : nullptr ) );
 }
 
 inline void ToolBar::setHotImageList( ImageListPtr hotImageList )
 {
 	itsHotImageList = hotImageList;
-	sendMessage(TB_SETHOTIMAGELIST, 0, reinterpret_cast< LPARAM >( itsHotImageList->getImageList() ) );
+	sendMessage(TB_SETHOTIMAGELIST, 0, reinterpret_cast< LPARAM >(
+		itsHotImageList ? itsHotImageList->getImageList() : nullptr ) );
 }
 
 inline void ToolBar::setDisabledImageList( ImageListPtr disabledImageList )
 {
 	itsDisabledImageList = disabledImageList;
-	sendMessage(TB_SETDISABLEDIMAGELIST, 0, reinterpret_cast< LPARAM >( itsDisabledImageList->getImageList() ) );
+	sendMessage(TB_SETDISABLEDIMAGELIST, 0, reinterpret_cast< LPARAM >(
+		itsDisabledImageList ? itsDisabledImageList->getImageList() : nullptr ) );
+}
+
+inline void ToolBar::setPressedImageList(ImageListPtr pressedImageList) {
+	itsPressedImageList = pressedImageList;
+	sendMessage(TB_SETPRESSEDIMAGELIST, 0, reinterpret_cast<LPARAM>(
+		itsPressedImageList ? itsPressedImageList->getImageList() : nullptr));
 }
 
 inline void ToolBar::setButtonVisible( unsigned int id, bool show )

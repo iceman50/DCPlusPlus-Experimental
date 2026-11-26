@@ -31,6 +31,7 @@
 */
 
 #include <dwt/Dispatcher.h>
+#include <dwt/Application.h>
 #include <dwt/util/check.h>
 #include <dwt/Widget.h>
 #include <dwt/DWTException.h>
@@ -46,8 +47,8 @@
 #ifdef DWT_SHARED
 namespace {
 
-//Create a UUID v4 to generate unique class names in order to remove boost
-tstring createUuidV4() {
+// Create a UUID v4 to keep shared-library window classes unique.
+dwt::tstring createUuidV4() {
 	std::array<uint8_t, 16> bytes { };
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -63,7 +64,7 @@ tstring createUuidV4() {
 	bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3F) | 0x80);
 
 	const TCHAR hex[] = _T("0123456789abcdef");
-	tstring uuid;
+	dwt::tstring uuid;
 	uuid.reserve(36);
 
 	for(size_t i = 0; i < bytes.size(); ++i) {
@@ -82,60 +83,113 @@ tstring createUuidV4() {
 
 namespace dwt {
 
+namespace {
+
+void reportWindowProcedureException(const char* context) noexcept {
+	::OutputDebugStringA("DWT: exception contained at Win32 callback boundary (");
+	::OutputDebugStringA(context);
+	::OutputDebugStringA(")\r\n");
+	try {
+		throw;
+	} catch(const std::exception& error) {
+		::OutputDebugStringA(error.what());
+		::OutputDebugStringA("\r\n");
+	} catch(...) {
+		::OutputDebugStringA("Unknown C++ exception\r\n");
+	}
+}
+
+LRESULT safeDefaultProcessing(const MSG& msg) noexcept {
+	try {
+		if(::IsWindow(msg.hwnd)) {
+			if(auto widget = hwnd_cast<Widget*>(msg.hwnd)) {
+				return widget->getDispatcher().chain(msg);
+			}
+		}
+	} catch(...) {
+		reportWindowProcedureException("default processing");
+	}
+	return ::DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+}
+
+}
+
 LRESULT CALLBACK WindowProc::initProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	MSG msg { hwnd, uMsg, wParam, lParam };
 
-	Widget* w = getInitWidget(msg);
-	if(w) {
-		w->setHandle(hwnd);
+	try {
+		Widget* w = getInitWidget(msg);
+		if(w) {
+			w->setHandle(hwnd);
 
-		return wndProc(hwnd, uMsg, wParam, lParam);
+			return wndProc(hwnd, uMsg, wParam, lParam);
+		}
+
+		return returnUnknown(msg);
+	} catch(...) {
+		reportWindowProcedureException("window initialization");
+		return uMsg == WM_NCCREATE ? FALSE : returnUnknown(msg);
 	}
-
-	return returnUnknown(msg);
 }
 
 LRESULT CALLBACK WindowProc::wndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	MSG msg { hwnd, uMsg, wParam, lParam };
 
-	// We dispatch certain messages back to the child widget, so that their
-	// potential callbacks will die along with the child when the time comes
-	HWND handler = getHandler(msg);
+	try {
+		// We dispatch certain messages back to the child widget, so that their
+		// potential callbacks will die along with the child when the time comes
+		HWND handler = getHandler(msg);
 
-	// Try to get the this pointer
-	Widget* w = hwnd_cast<Widget*>(handler);
+		// Try to get the this pointer
+		Widget* w = hwnd_cast<Widget*>(handler);
 
-	if(w) {
-		if(uMsg == WM_NCDESTROY) {
-			Dispatcher& dispatcher = w->getDispatcher();
-			LRESULT ret = dispatcher.chain(msg);
-			w->kill();
-			return ret;
+		if(w) {
+			if(uMsg == WM_NCDESTROY) {
+				LRESULT ret = 0;
+				bool chained = false;
+				try {
+					ret = w->getDispatcher().chain(msg);
+					chained = true;
+				} catch(...) {
+					reportWindowProcedureException("WM_NCDESTROY default processing");
+				}
+				try {
+					w->kill();
+				} catch(...) {
+					reportWindowProcedureException("WM_NCDESTROY widget cleanup");
+				}
+				return chained ? ret :
+					::DefWindowProc(hwnd, uMsg, wParam, lParam);
+			}
+
+			LRESULT res = 0;
+			if(w->handleMessage(msg, res)) {
+				return res;
+			}
 		}
 
-		LRESULT res = 0;
-		if(w->handleMessage(msg, res)) {
-			return res;
+		if(handler != hwnd) {
+			w = hwnd_cast<Widget*>(hwnd);
 		}
+
+		// If this fails there's something wrong
+		dwtassert(w, "Expected to get a pointer to a widget - something's wrong");
+
+		if(!w) {
+			return returnUnknown(msg);
+		}
+
+		return w->getDispatcher().chain(msg);
+	} catch(...) {
+		reportWindowProcedureException("window message dispatch");
+		return safeDefaultProcessing(msg);
 	}
-
-	if(handler != hwnd) {
-		w = hwnd_cast<Widget*>(hwnd);
-	}
-
-	// If this fails there's something wrong
-	dwtassert(w, "Expected to get a pointer to a widget - something's wrong");
-
-	if(!w) {
-		return returnUnknown(msg);
-	}
-
-	return w->getDispatcher().chain(msg);
 }
 
 Widget* WindowProc::getInitWidget(const MSG& msg) {
 	if(msg.message == WM_NCCREATE) {
-		return reinterpret_cast<Widget*>(reinterpret_cast<CREATESTRUCT*>(msg.lParam)->lpCreateParams);
+		auto create = reinterpret_cast<CREATESTRUCT*>(msg.lParam);
+		return create ? reinterpret_cast<Widget*>(create->lpCreateParams) : nullptr;
 	}
 	return 0;
 }
@@ -164,7 +218,7 @@ HWND WindowProc::getHandler(const MSG& msg) {
 	case WM_NOTIFY :
 		{
 			NMHDR* nmhdr = reinterpret_cast<NMHDR*>(msg.lParam);
-			handler = nmhdr->hwndFrom;
+			handler = nmhdr ? nmhdr->hwndFrom : msg.hwnd;
 			break;
 		}
 
@@ -204,7 +258,7 @@ Dispatcher::Dispatcher(LPCTSTR name) {
 
 Dispatcher::~Dispatcher() {
 	if(getClassName()) {
-		::UnregisterClass(getClassName(), ::GetModuleHandle(NULL));
+		::UnregisterClass(getClassName(), Application::getModuleHandle());
 	}
 }
 
@@ -233,7 +287,7 @@ WNDCLASSEX Dispatcher::makeWndClass(LPCTSTR name) {
 void Dispatcher::fillWndClass(WNDCLASSEX& cls, LPCTSTR name) {
 	cls.style = CS_DBLCLKS;
 	cls.lpfnWndProc = WindowProc::initProc;
-	cls.hInstance = ::GetModuleHandle(NULL);
+	cls.hInstance = Application::getModuleHandle();
 	cls.lpszMenuName = 0;
 	cls.lpszClassName = name;
 }
@@ -288,13 +342,19 @@ public:
 	static LRESULT CALLBACK initProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 		MSG msg { hwnd, uMsg, wParam, lParam };
 
-		Widget* w = getInitWidget(msg);
-		if(w) {
-			w->setHandle(hwnd);
-			return WindowProc::wndProc(hwnd, uMsg, wParam, lParam);
-		}
+		try {
+			Widget* w = getInitWidget(msg);
+			if(w) {
+				w->setHandle(hwnd);
+				return WindowProc::wndProc(hwnd, uMsg, wParam, lParam);
+			}
 
-		return ::DefMDIChildProc(hwnd, uMsg, wParam, lParam);
+			return ::DefMDIChildProc(hwnd, uMsg, wParam, lParam);
+		} catch(...) {
+			reportWindowProcedureException("MDI child initialization");
+			return uMsg == WM_NCCREATE ? FALSE :
+				::DefMDIChildProc(hwnd, uMsg, wParam, lParam);
+		}
 	}
 
 private:
@@ -391,7 +451,7 @@ LRESULT ChainingDispatcher::chain(const MSG& msg) {
 std::unique_ptr<Dispatcher> ChainingDispatcher::superClass(LPCTSTR original, LPCTSTR newName) {
 	WNDCLASSEX orgClass = { sizeof(WNDCLASSEX) };
 
-	if(!::GetClassInfoEx(::GetModuleHandle(NULL), original, &orgClass)) {
+	if(!::GetClassInfoEx(Application::getModuleHandle(), original, &orgClass)) {
 		throw Win32Exception("Unable to find information for class");
 	}
 

@@ -85,6 +85,24 @@ struct Rectangle {
 
 	long height() const { return size.y; }
 
+	/** Return true when the rectangle has no area. */
+	bool empty() const;
+
+	/** Return a rectangle whose left/top edges do not exceed its right/bottom edges. */
+	Rectangle normalized() const;
+
+	/** Return a copy translated by the supplied offset. */
+	Rectangle offset(const Point& amount) const;
+
+	/** Return a copy expanded on every side by the supplied amounts. */
+	Rectangle inflate(long horizontal, long vertical) const;
+
+	/** Return the overlapping area, or an empty rectangle when there is none. */
+	Rectangle intersection(const Rectangle& other) const;
+
+	/** Return the smallest rectangle containing both rectangles. */
+	Rectangle united(const Rectangle& other) const;
+
 	/** Check whether the point is inside the rectangle. */
 	bool contains(const Point& pt) const;
 

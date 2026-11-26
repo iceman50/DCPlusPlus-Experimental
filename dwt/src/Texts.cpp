@@ -51,7 +51,9 @@ decltype(Texts::get) Texts::get = [](Text text) -> tstring {
 	}
 
 	dwtDebugFail("unknown dwt text");
+#ifndef _DEBUG
 	return tstring();
+#endif
 };
 
 }

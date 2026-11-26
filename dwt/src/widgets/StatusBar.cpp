@@ -130,6 +130,18 @@ void StatusBar::setText(unsigned part, const tstring& text, bool alwaysResize) {
 	sendMessage(SB_SETTEXT, static_cast<WPARAM>(part), reinterpret_cast<LPARAM>(text.c_str()));
 }
 
+tstring StatusBar::getText(unsigned part) const {
+	dwtassert(part < parts.size(), "Invalid part number");
+	const auto result = static_cast<DWORD>(sendMessage(SB_GETTEXTLENGTH, part));
+	const auto length = static_cast<size_t>(LOWORD(result));
+	if(!length) {
+		return tstring();
+	}
+	std::vector<TCHAR> buffer(length + 1, _T('\0'));
+	sendMessage(SB_GETTEXT, part, reinterpret_cast<LPARAM>(buffer.data()));
+	return tstring(buffer.data(), length);
+}
+
 void StatusBar::setIcon(unsigned part, const IconPtr& icon, bool alwaysResize) {
 	dwtassert(part < parts.size(), "Invalid part number");
 	Part& info = getPart(part);
@@ -137,6 +149,47 @@ void StatusBar::setIcon(unsigned part, const IconPtr& icon, bool alwaysResize) {
 	if(part != fill)
 		info.updateSize(this, alwaysResize);
 	sendMessage(SB_SETICON, part, icon ? reinterpret_cast<LPARAM>(icon->handle()) : 0);
+}
+
+HICON StatusBar::getIcon(unsigned part) const {
+	dwtassert(part < parts.size(), "Invalid part number");
+	return reinterpret_cast<HICON>(sendMessage(SB_GETICON, part));
+}
+
+Rectangle StatusBar::getPartRect(unsigned part) const {
+	dwtassert(part < parts.size(), "Invalid part number");
+	RECT rectangle = { 0 };
+	return sendMessage(SB_GETRECT, part, reinterpret_cast<LPARAM>(&rectangle)) ?
+		Rectangle(rectangle) : Rectangle();
+}
+
+unsigned StatusBar::size() const {
+	return static_cast<unsigned>(parts.size());
+}
+
+void StatusBar::setSimple(bool simple) {
+	sendMessage(SB_SIMPLE, simple ? TRUE : FALSE);
+}
+
+bool StatusBar::isSimple() const {
+	return sendMessage(SB_ISSIMPLE) != FALSE;
+}
+
+void StatusBar::setSimpleText(const tstring& text, unsigned style) {
+	sendMessage(SB_SETTEXT, SB_SIMPLEID | style,
+		reinterpret_cast<LPARAM>(text.c_str()));
+}
+
+void StatusBar::setMinimumHeight(int height) {
+	sendMessage(SB_SETMINHEIGHT, height);
+}
+
+bool StatusBar::getUnicodeFormat() const {
+	return sendMessage(SB_GETUNICODEFORMAT) != FALSE;
+}
+
+bool StatusBar::setUnicodeFormat(bool unicode) {
+	return sendMessage(SB_SETUNICODEFORMAT, unicode ? TRUE : FALSE) != FALSE;
 }
 
 void StatusBar::setToolTip(unsigned part, const tstring& text) {

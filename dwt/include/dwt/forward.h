@@ -112,6 +112,7 @@ class Label;
 typedef Label* LabelPtr;
 
 class Link;
+class ListBox;
 typedef Link* LinkPtr;
 
 class LoadDialog;

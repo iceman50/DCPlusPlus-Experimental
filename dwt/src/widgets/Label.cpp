@@ -67,8 +67,8 @@ Point Label::getPreferredSize() {
 	/// @todo there are other types of borders that should be accounted for
 
 	if(hasExStyle(WS_EX_CLIENTEDGE)) {
-		ret.x += GetSystemMetrics(SM_CXEDGE) * 2;
-		ret.y += GetSystemMetrics(SM_CYEDGE) * 2;
+		ret.x += getSystemMetric(SM_CXEDGE) * 2;
+		ret.y += getSystemMetric(SM_CYEDGE) * 2;
 	}
 
 	return ret;

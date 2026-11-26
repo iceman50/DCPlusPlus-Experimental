@@ -37,4 +37,12 @@ Pen::Pen(HPEN h, bool own) : ResourceType(h, own) { }
 
 Pen::Pen(COLORREF color, PenStyle style, int width) : Pen(::CreatePen(style, width, color), true) { }
 
+Pen::Pen(const LOGPEN& pen) : Pen(::CreatePenIndirect(&pen), true) { }
+
+LOGPEN Pen::getLogPen() const {
+	LOGPEN pen = { };
+	::GetObject(handle(), sizeof(pen), &pen);
+	return pen;
+}
+
 }

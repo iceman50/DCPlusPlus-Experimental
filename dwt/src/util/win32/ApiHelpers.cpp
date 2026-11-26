@@ -31,6 +31,9 @@
 
 #include <dwt/util/win32/ApiHelpers.h>
 
+#include <algorithm>
+#include <limits>
+
 namespace dwt { namespace util { namespace win32 {
 
 size_t getWindowTextLength(HWND hWnd) {
@@ -41,8 +44,15 @@ tstring getWindowText(HWND hWnd) {
 	size_t textLength = getWindowTextLength(hWnd);
 	if (textLength == 0)
 		return tstring();
+	if(textLength >= static_cast<size_t>((std::numeric_limits<int>::max)())) {
+		return tstring();
+	}
 	tstring retVal(textLength + 1, 0);
-	retVal.resize(::SendMessage(hWnd, WM_GETTEXT, static_cast<WPARAM>(textLength + 1), reinterpret_cast<LPARAM>(&retVal[0])));
+	const auto copied = ::SendMessage(hWnd, WM_GETTEXT,
+		static_cast<WPARAM>(textLength + 1),
+		reinterpret_cast<LPARAM>(retVal.data()));
+	retVal.resize(std::min<size_t>(
+		copied > 0 ? static_cast<size_t>(copied) : 0, textLength));
 	return retVal;
 }
 

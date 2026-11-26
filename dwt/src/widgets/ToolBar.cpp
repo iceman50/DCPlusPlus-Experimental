@@ -53,6 +53,7 @@ BaseType(parent, ChainingDispatcher::superClass<ToolBar>()),
 itsNormalImageList(0),
 itsHotImageList(0),
 itsDisabledImageList(0),
+itsPressedImageList(0),
 customizing(false),
 customized(nullptr),
 customizeHelp(nullptr)
@@ -104,17 +105,102 @@ void ToolBar::create(const Seed& cs) {
 			setDisabledImageList(itsDisabledImageList->resized(
 				event.scale(itsDisabledImageList->getImageSize())));
 		}
+		if(itsPressedImageList) {
+			setPressedImageList(itsPressedImageList->resized(
+				event.scale(itsPressedImageList->getImageSize())));
+		}
 		refresh();
 	});
 }
 
 Point ToolBar::getPreferredSize() {
+	if(!size()) {
+		return Point();
+	}
 	// get the rect of the last item
 	RECT rect = {};
 	const auto count = size();
 	if(!count || !sendMessage(TB_GETITEMRECT, count - 1, reinterpret_cast<LPARAM>(&rect)))
 		return Point();
 	return Point(rect.right, rect.bottom - rect.top);
+}
+
+Point ToolBar::getPadding() const {
+	const auto result = static_cast<DWORD>(sendMessage(TB_GETPADDING));
+	return Point(LOWORD(result), HIWORD(result));
+}
+
+Point ToolBar::setPadding(const Point& padding) {
+	const auto result = static_cast<DWORD>(sendMessage(TB_SETPADDING, 0,
+		MAKELPARAM(padding.x, padding.y)));
+	return Point(LOWORD(result), HIWORD(result));
+}
+
+Point ToolBar::getButtonSize() const {
+	const auto result = static_cast<DWORD>(sendMessage(TB_GETBUTTONSIZE));
+	return Point(LOWORD(result), HIWORD(result));
+}
+
+bool ToolBar::setButtonSize(const Point& size) {
+	return sendMessage(TB_SETBUTTONSIZE, 0, MAKELPARAM(size.x, size.y)) != FALSE;
+}
+
+bool ToolBar::setBitmapSize(const Point& size) {
+	return sendMessage(TB_SETBITMAPSIZE, 0, MAKELPARAM(size.x, size.y)) != FALSE;
+}
+
+Point ToolBar::getMaximumSize() const {
+	SIZE size = { 0 };
+	return sendMessage(TB_GETMAXSIZE, 0, reinterpret_cast<LPARAM>(&size)) ?
+		Point(size.cx, size.cy) : Point();
+}
+
+Point ToolBar::getIdealSize(bool height) const {
+	SIZE size = { 0 };
+	return sendMessage(TB_GETIDEALSIZE, height ? TRUE : FALSE,
+		reinterpret_cast<LPARAM>(&size)) ? Point(size.cx, size.cy) : Point();
+}
+
+Rectangle ToolBar::getItemRect(unsigned index) const {
+	RECT rectangle = { 0 };
+	return sendMessage(TB_GETITEMRECT, index, reinterpret_cast<LPARAM>(&rectangle)) ?
+		Rectangle(rectangle) : Rectangle();
+}
+
+int ToolBar::getHotItem() const {
+	return static_cast<int>(sendMessage(TB_GETHOTITEM));
+}
+
+int ToolBar::setHotItem(int index) {
+	return static_cast<int>(sendMessage(TB_SETHOTITEM, index));
+}
+
+bool ToolBar::getAnchorHighlight() const {
+	return sendMessage(TB_GETANCHORHIGHLIGHT) != FALSE;
+}
+
+bool ToolBar::setAnchorHighlight(bool enabled) {
+	return sendMessage(TB_SETANCHORHIGHLIGHT, enabled ? TRUE : FALSE) != FALSE;
+}
+
+bool ToolBar::moveButton(unsigned from, unsigned to) {
+	return sendMessage(TB_MOVEBUTTON, from, to) != FALSE;
+}
+
+int ToolBar::getTextRows() const {
+	return static_cast<int>(sendMessage(TB_GETTEXTROWS));
+}
+
+bool ToolBar::setMaximumTextRows(int rows) {
+	return sendMessage(TB_SETMAXTEXTROWS, rows) != FALSE;
+}
+
+DWORD ToolBar::getExtendedStyle() const {
+	return static_cast<DWORD>(sendMessage(TB_GETEXTENDEDSTYLE));
+}
+
+DWORD ToolBar::setExtendedStyle(DWORD style) {
+	return static_cast<DWORD>(sendMessage(TB_SETEXTENDEDSTYLE, 0, style));
 }
 
 void ToolBar::addButton(const std::string& id, const IconPtr& icon, const IconPtr& hotIcon, const tstring& text, bool showText,

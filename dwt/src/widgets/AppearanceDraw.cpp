@@ -41,7 +41,6 @@
 #include <dwt/widgets/ComboBox.h>
 #include <dwt/widgets/GroupBox.h>
 #include <dwt/widgets/Header.h>
-#include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/StatusBar.h>
 #include <dwt/widgets/TextBox.h>
 #include <dwt/widgets/ToolBar.h>
@@ -946,15 +945,17 @@ void drawComboBox(ComboBox& combo, Canvas& canvas, const Appearance::Palette& co
 	}
 }
 
-void drawSpinner(Spinner& spinner, Canvas& canvas, const Appearance::Palette& configured)
+void drawSpinner(Control& owner, HWND spinner, Canvas& canvas, const Appearance::Palette& configured)
 {
-	const auto colors = effectivePalette(spinner, configured);
-	const Rectangle bounds(spinner.getClientSize());
+	const auto colors = effectivePalette(owner, configured);
+	RECT client{};
+	::GetClientRect(spinner, &client);
+	const Rectangle bounds(client);
 	if(bounds.width() <= 0 || bounds.height() <= 0) {
 		return;
 	}
 	const auto style = static_cast<DWORD>(::GetWindowLongPtr(
-		spinner.handle(), GWL_STYLE));
+		spinner, GWL_STYLE));
 	const bool horizontal = (style & UDS_HORZ) != 0;
 	Rectangle first = bounds;
 	Rectangle second = bounds;
@@ -967,11 +968,11 @@ void drawSpinner(Spinner& spinner, Canvas& canvas, const Appearance::Palette& co
 		second.pos.y = first.bottom();
 		second.size.y = bounds.bottom() - second.top();
 	}
-	const bool firstHot = cursorIn(spinner.handle(), first);
-	const bool secondHot = cursorIn(spinner.handle(), second);
-	const bool pressed = ::GetCapture() == spinner.handle() &&
+	const bool firstHot = cursorIn(spinner, first);
+	const bool secondHot = cursorIn(spinner, second);
+	const bool pressed = ::GetCapture() == spinner &&
 		(::GetKeyState(VK_LBUTTON) & 0x8000) != 0;
-	const bool enabled = spinner.getEnabled();
+	const bool enabled = owner.getEnabled() && ::IsWindowEnabled(spinner);
 	auto partColor = [&](bool hot) {
 		auto result = hot ? Appearance::blend(colors.surface, colors.accent,
 			pressed ? 48 : 24) : colors.surface;
@@ -1004,9 +1005,9 @@ void drawSpinner(Spinner& spinner, Canvas& canvas, const Appearance::Palette& co
 	}
 	const auto arrow = enabled ? colors.text : colors.disabledText;
 	drawArrow(canvas, first, !horizontal, true, arrow,
-		std::max(2, spinner.scale(3)));
+		std::max(2, owner.scale(3)));
 	drawArrow(canvas, second, !horizontal, false, arrow,
-		std::max(2, spinner.scale(3)));
+		std::max(2, owner.scale(3)));
 }
 
 bool canDrawStatusBar(const StatusBar& status) {

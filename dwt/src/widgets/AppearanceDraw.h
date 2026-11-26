@@ -41,7 +41,7 @@ class Button;
 class ComboBox;
 class GroupBox;
 class Header;
-class Spinner;
+class Control;
 class StatusBar;
 class ToolBar;
 
@@ -64,7 +64,7 @@ LRESULT drawToolBar(ToolBar& toolbar, NMTBCUSTOMDRAW& data, const Appearance::Pa
 
 void drawGroupBox(GroupBox& group, Canvas& canvas, const Appearance::Palette& palette);
 void drawComboBox(ComboBox& combo, Canvas& canvas, const Appearance::Palette& palette);
-void drawSpinner(Spinner& spinner, Canvas& canvas, const Appearance::Palette& palette);
+void drawSpinner(Control& owner, HWND spinner, Canvas& canvas, const Appearance::Palette& palette);
 void drawStatusBar(StatusBar& status, Canvas& canvas, const Appearance::Palette& palette);
 
 bool canDrawComboBox(const ComboBox& combo);

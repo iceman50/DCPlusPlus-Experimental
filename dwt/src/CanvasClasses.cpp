@@ -34,6 +34,8 @@
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Region.h>
 
+#include <iterator>
+
 namespace dwt {
 
 COLORREF Color::darken(COLORREF color, double factor) {
@@ -93,6 +95,57 @@ int Canvas::getDeviceCaps( int nIndex )
 	return( ::GetDeviceCaps( itsHdc, nIndex ) );
 }
 
+Canvas::State::State(Canvas& canvas_) :
+	canvas(&canvas_), savedState(::SaveDC(canvas_.handle()))
+{
+	if(!savedState) {
+		canvas = nullptr;
+		throw Win32Exception("Unable to save canvas state");
+	}
+}
+
+Canvas::State::State(State&& other) noexcept :
+	canvas(other.canvas), savedState(other.savedState)
+{
+	other.canvas = nullptr;
+	other.savedState = 0;
+}
+
+Canvas::State& Canvas::State::operator=(State&& other) noexcept {
+	if(this != &other) {
+		restore();
+		canvas = other.canvas;
+		savedState = other.savedState;
+		other.canvas = nullptr;
+		other.savedState = 0;
+	}
+	return *this;
+}
+
+Canvas::State::~State() {
+	restore();
+}
+
+void Canvas::State::restore() noexcept {
+	if(canvas && savedState) {
+		::RestoreDC(canvas->handle(), savedState);
+	}
+	canvas = nullptr;
+	savedState = 0;
+}
+
+Canvas::State Canvas::save() {
+	return State(*this);
+}
+
+Point Canvas::getCurrentPosition() const {
+	POINT point = { 0 };
+	if(!::GetCurrentPositionEx(handle(), &point)) {
+		throw Win32Exception("Unable to retrieve canvas position");
+	}
+	return Point(point);
+}
+
 void Canvas::moveTo( int x, int y )
 {
 	if ( !::MoveToEx( itsHdc, x, y, 0 ) ) {
@@ -141,15 +194,59 @@ void Canvas::line( const dwt::Rectangle & rect )
 
 void Canvas::polygon( const Point points[], unsigned count )
 {
-	if ( !::Polygon( itsHdc, reinterpret_cast< POINT * >( const_cast < Point * >( & points[0] ) ), count ) ) {
+	if(!points || count < 2) {
+		return;
+	}
+	if ( !::Polygon( itsHdc, reinterpret_cast< POINT * >( const_cast < Point * >(points) ), count ) ) {
 		dwtWin32DebugFail("Error in CanvasClasses polygon");
 	}
 }
 
 void Canvas::polygon( POINT points[], unsigned count )
 {
+	if(!points || count < 2) {
+		return;
+	}
 	if ( !::Polygon( itsHdc, points, count ) ) {
 		dwtWin32DebugFail("Error in CanvasClasses polygon" );
+	}
+}
+
+namespace {
+
+std::vector<POINT> toNativePoints(const std::vector<Point>& points) {
+	if(points.size() > static_cast<size_t>((std::numeric_limits<int>::max)())) {
+		throw DWTException("Too many canvas points");
+	}
+	std::vector<POINT> result;
+	result.reserve(points.size());
+	std::transform(points.begin(), points.end(), std::back_inserter(result),
+		[](const Point& point) { return point.toPOINT(); });
+	return result;
+}
+
+}
+
+void Canvas::polyline(const std::vector<Point>& points) {
+	if(points.size() < 2) {
+		return;
+	}
+	auto native = toNativePoints(points);
+	if(!::Polyline(handle(), native.data(), static_cast<int>(native.size()))) {
+		dwtWin32DebugFail("Error in CanvasClasses polyline");
+	}
+}
+
+void Canvas::polyBezier(const std::vector<Point>& points) {
+	if(points.size() < 4) {
+		return;
+	}
+	if((points.size() - 1) % 3 != 0) {
+		throw DWTException("Bezier point count must be one plus a multiple of three");
+	}
+	auto native = toNativePoints(points);
+	if(!::PolyBezier(handle(), native.data(), static_cast<DWORD>(native.size()))) {
+		dwtWin32DebugFail("Error in CanvasClasses polyBezier");
 	}
 }
 
@@ -175,6 +272,14 @@ void Canvas::rectangle( const dwt::Rectangle & rect )
 			   rect.bottom() );
 }
 
+void Canvas::roundRectangle(const dwt::Rectangle& rect, const Point& ellipseSize) {
+	if(!::RoundRect(handle(), rect.left(), rect.top(), rect.right(), rect.bottom(),
+		ellipseSize.x, ellipseSize.y))
+	{
+		dwtWin32DebugFail("Error in CanvasClasses roundRectangle");
+	}
+}
+
 void Canvas::ellipse( const dwt::Rectangle & rect )
 {
 	if ( ! ::Ellipse( itsHdc, rect.left(), rect.top(), rect.right(), rect.bottom() ) ) {
@@ -188,6 +293,9 @@ void Canvas::getTextMetrics(TEXTMETRIC& tm) {
 
 Point Canvas::getTextExtent(const tstring& str) {
 	SIZE sz = { 0 };
+	if(str.empty()) {
+		return Point(sz.cx, sz.cy);
+	}
 	::GetTextExtentPoint32(handle(), str.data(), static_cast<int>(str.size()), &sz);
 	return Point(sz.cx, sz.cy);
 }
@@ -217,6 +325,13 @@ void Canvas::fill(const Region& region, const Brush& brush) {
 	}
 }
 
+void Canvas::frame(const Rectangle& rect, const Brush& brush) {
+	auto native = rect.toRECT();
+	if(!::FrameRect(handle(), &native, brush.handle())) {
+		dwtWin32DebugFail("Error in CanvasClasses frame");
+	}
+}
+
 COLORREF Canvas::setPixel( int x, int y, COLORREF pixcolor )
 {
 	return ::SetPixel( itsHdc, x, y, pixcolor );
@@ -242,6 +357,70 @@ void Canvas::invert(const Region& region) {
 	::InvertRgn(handle(), region.handle());
 }
 
+void Canvas::invert(const Rectangle& rectangle) {
+	auto rect = rectangle.toRECT();
+	if(!::InvertRect(handle(), &rect)) {
+		dwtWin32DebugFail("Error in CanvasClasses invert rectangle");
+	}
+}
+
+int Canvas::selectClip(const Region* region) {
+	const auto result = ::SelectClipRgn(handle(), region ? region->handle() : nullptr);
+	if(result == ERROR) {
+		throw Win32Exception("Unable to select canvas clipping region");
+	}
+	return result;
+}
+
+int Canvas::intersectClip(const Rectangle& rectangle) {
+	const auto rect = rectangle.normalized();
+	const auto result = ::IntersectClipRect(handle(), rect.left(), rect.top(),
+		rect.right(), rect.bottom());
+	if(result == ERROR) {
+		throw Win32Exception("Unable to intersect canvas clipping region");
+	}
+	return result;
+}
+
+int Canvas::excludeClip(const Rectangle& rectangle) {
+	const auto rect = rectangle.normalized();
+	const auto result = ::ExcludeClipRect(handle(), rect.left(), rect.top(),
+		rect.right(), rect.bottom());
+	if(result == ERROR) {
+		throw Win32Exception("Unable to exclude canvas clipping region");
+	}
+	return result;
+}
+
+Rectangle Canvas::getClipBounds(int* complexity) const {
+	RECT rect = { 0 };
+	const auto result = ::GetClipBox(handle(), &rect);
+	if(result == ERROR) {
+		throw Win32Exception("Unable to retrieve canvas clipping bounds");
+	}
+	if(complexity) {
+		*complexity = result;
+	}
+	return Rectangle(rect);
+}
+
+bool Canvas::bitBlt(const Rectangle& destination, const Canvas& source,
+	const Point& sourcePosition, DWORD operation)
+{
+	return ::BitBlt(handle(), destination.x(), destination.y(),
+		destination.width(), destination.height(), source.handle(),
+		sourcePosition.x, sourcePosition.y, operation) != FALSE;
+}
+
+bool Canvas::stretchBlt(const Rectangle& destination, const Canvas& source,
+	const Rectangle& sourceRectangle, DWORD operation)
+{
+	return ::StretchBlt(handle(), destination.x(), destination.y(),
+		destination.width(), destination.height(), source.handle(),
+		sourceRectangle.x(), sourceRectangle.y(), sourceRectangle.width(),
+		sourceRectangle.height(), operation) != FALSE;
+}
+
 void Canvas::drawIcon(const IconPtr& icon, const Rectangle& rectangle) {
 	if(!::DrawIconEx(itsHdc, rectangle.left(), rectangle.top(), icon->handle(), rectangle.width(), rectangle.height(), 0, 0, DI_NORMAL))
 		dwtWin32DebugFail("DrawIconEx failed in Canvas::drawIcon");
@@ -250,7 +429,7 @@ void Canvas::drawIcon(const IconPtr& icon, const Rectangle& rectangle) {
 int Canvas::drawText(const tstring& text, Rectangle& rect, unsigned format) {
 	RECT rc = rect;
 	int retVal = ::DrawText( itsHdc, text.c_str(), ( int ) text.length(), & rc, format );
-	if ( 0 == retVal )
+	if ( 0 == retVal && !text.empty() )
 	{
 		dwtWin32DebugFail("Error while trying to draw text to canvas");
 	}
@@ -261,6 +440,9 @@ int Canvas::drawText(const tstring& text, Rectangle& rect, unsigned format) {
 
 void Canvas::extTextOut( const tstring & text, unsigned x, unsigned y )
 {
+	if(text.empty()) {
+		return;
+	}
 	if ( 0 == ::ExtTextOut( itsHdc, x, y, 0, NULL, text.c_str(), ( unsigned ) text.length(), 0 ) ) {
 		dwtWin32DebugFail("Error while trying to do TextOut operation");
 	}
@@ -279,11 +461,22 @@ COLORREF Canvas::setBkColor( COLORREF crColor )
 Canvas::BkMode::BkMode(Canvas& canvas_, int mode) :
 canvas(&canvas_), prevMode(::SetBkMode(canvas->handle(), mode))
 {
+	if(prevMode == 0) {
+		canvas = nullptr;
+		throw Win32Exception("Unable to set canvas background mode");
+	}
 }
 
 Canvas::BkMode::~BkMode() {
-	if(canvas && prevMode)
+	restore();
+}
+
+void Canvas::BkMode::restore() noexcept {
+	if(canvas && prevMode) {
 		::SetBkMode(canvas->handle(), prevMode);
+	}
+	canvas = nullptr;
+	prevMode = 0;
 }
 
 Canvas::BkMode Canvas::setBkMode(bool transparent) {
@@ -308,8 +501,11 @@ itsHandle(hWnd)
 
 BoundCanvas::BoundCanvas(Widget* widget) :
 Canvas(),
-itsHandle(widget->handle())
+itsHandle(widget ? widget->handle() : nullptr)
 {
+	if(!itsHandle) {
+		throw DWTException("Cannot create a canvas for an invalid widget");
+	}
 }
 
 PaintCanvas::~PaintCanvas()
@@ -325,6 +521,9 @@ Rectangle PaintCanvas::getPaintRect()
 void PaintCanvas::initialize()
 {
 	itsHdc = ::BeginPaint( itsHandle, & itsPaint );
+	if(!itsHdc) {
+		throw Win32Exception("Unable to begin painting");
+	}
 }
 
 FreeCanvas::FreeCanvas(HDC hdc) :
@@ -336,10 +535,15 @@ Canvas()
 CompatibleCanvas::CompatibleCanvas(HDC hdc) :
 FreeCanvas(::CreateCompatibleDC(hdc))
 {
+	if(!itsHdc) {
+		throw Win32Exception("Unable to create a compatible canvas");
+	}
 }
 
 CompatibleCanvas::~CompatibleCanvas() {
-	::DeleteDC(itsHdc);
+	if(itsHdc) {
+		::DeleteDC(itsHdc);
+	}
 }
 
 }

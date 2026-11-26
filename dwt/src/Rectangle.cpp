@@ -33,6 +33,8 @@
 
 #include <dwt/Widget.h>
 
+#include <algorithm>
+
 namespace dwt {
 
 Rectangle::Rectangle( long x, long y, long width, long height )
@@ -49,8 +51,50 @@ Rectangle::operator ::RECT() const {
 	return toRECT();
 }
 
-bool Rectangle::contains(const Point& pt) const {
+bool Rectangle::empty() const {
 	auto rect = toRECT();
+	return ::IsRectEmpty(&rect) != FALSE;
+}
+
+Rectangle Rectangle::normalized() const {
+	const auto leftEdge = (std::min)(left(), right());
+	const auto topEdge = (std::min)(top(), bottom());
+	const auto rightEdge = (std::max)(left(), right());
+	const auto bottomEdge = (std::max)(top(), bottom());
+	return Rectangle(leftEdge, topEdge,
+		rightEdge - leftEdge, bottomEdge - topEdge);
+}
+
+Rectangle Rectangle::offset(const Point& amount) const {
+	Rectangle result(*this);
+	result.pos += amount;
+	return result;
+}
+
+Rectangle Rectangle::inflate(long horizontal, long vertical) const {
+	auto rect = normalized().toRECT();
+	::InflateRect(&rect, horizontal, vertical);
+	return Rectangle(rect);
+}
+
+Rectangle Rectangle::intersection(const Rectangle& other) const {
+	auto first = normalized().toRECT();
+	auto second = other.normalized().toRECT();
+	RECT result = { 0 };
+	return ::IntersectRect(&result, &first, &second) ?
+		Rectangle(result) : Rectangle();
+}
+
+Rectangle Rectangle::united(const Rectangle& other) const {
+	auto first = normalized().toRECT();
+	auto second = other.normalized().toRECT();
+	RECT result = { 0 };
+	return ::UnionRect(&result, &first, &second) ?
+		Rectangle(result) : Rectangle();
+}
+
+bool Rectangle::contains(const Point& pt) const {
+	auto rect = normalized().toRECT();
 	return ::PtInRect(&rect, pt);
 }
 

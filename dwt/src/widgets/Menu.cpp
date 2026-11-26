@@ -751,9 +751,15 @@ bool Menu::handlePainting(DRAWITEMSTRUCT& drawInfo, ItemDataWrapper& wrapper) {
 		// not a seperator, then draw item text and icon
 
 		// get item text
-		const int length = info.cch + 1;
-		std::vector< TCHAR > buffer( length );
-		int count = ::GetMenuString(handle(), wrapper.index, &buffer[0], length, MF_BYPOSITION);
+		// Bound native menu text before converting the unsigned Win32 length to
+		// the signed GetMenuString capacity.
+		constexpr UINT maxMenuText = 32767;
+		const int length = static_cast<int>(
+			std::min(info.cch, maxMenuText - 1) + 1);
+		std::vector<TCHAR> buffer(static_cast<size_t>(length), _T('\0'));
+		int count = ::GetMenuString(
+			handle(), wrapper.index, buffer.data(), length, MF_BYPOSITION);
+		count = std::max(0, std::min(count, length - 1));
 		tstring itemText( buffer.begin(), buffer.begin() + count );
 
 		if(!itemText.empty()) {

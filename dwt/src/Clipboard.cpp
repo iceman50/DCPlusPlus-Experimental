@@ -35,45 +35,73 @@
 #include <dwt/util/check.h>
 #include <dwt/widgets/Control.h>
 
+#include <cstring>
+#include <limits>
+
 namespace dwt { namespace Clipboard {
 
 void setData(const tstring& str, Control* w) {
 	dwtassert(w, "Clipboard::setData: invalid widget");
-	if(!w) return;
+	if(!w || !::IsWindow(w->handle())) {
+		return;
+	}
 
-	if(!::OpenClipboard(w->handle())) {
+	const auto maxCharacters =
+		(std::numeric_limits<SIZE_T>::max)() / sizeof(TCHAR);
+	if(str.size() >= maxCharacters) {
+		dwtWin32DebugFail("Clipboard::setData: text is too large");
+		return;
+	}
+
+	const SIZE_T bytes = (str.size() + 1) * sizeof(TCHAR);
+	struct ClipboardWrite {
+		HGLOBAL data;
+		bool opened = false;
+		~ClipboardWrite() {
+			if(opened) ::CloseClipboard();
+			if(data) ::GlobalFree(data);
+		}
+	} write { ::GlobalAlloc(GMEM_MOVEABLE, bytes) };
+	if(!write.data) {
+		dwtWin32DebugFail("Clipboard::setData: GlobalAlloc failed");
+		return;
+	}
+
+	auto buf = reinterpret_cast<TCHAR*>(::GlobalLock(write.data));
+	if(!buf) {
+		dwtWin32DebugFail("Clipboard::setData: GlobalLock failed");
+		return;
+	}
+	std::memcpy(buf, str.c_str(), bytes);
+	::GlobalUnlock(write.data);
+
+	for(unsigned attempt = 0; attempt < 5 && !write.opened; ++attempt) {
+		write.opened = ::OpenClipboard(w->handle()) != FALSE;
+		if(!write.opened && attempt + 1 < 5) {
+			::Sleep(1);
+		}
+	}
+	if(!write.opened) {
 		dwtWin32DebugFail("Clipboard::setData: OpenClipboard failed");
 		return;
 	}
 
 	if(!::EmptyClipboard()) {
-		::CloseClipboard();
+		dwtWin32DebugFail("Clipboard::setData: EmptyClipboard failed");
 		return;
 	}
-
-	auto handle = ::GlobalAlloc(GMEM_MOVEABLE, (str.size() + 1) * sizeof(TCHAR));
-	if(!handle) {
-		::CloseClipboard();
-		return;
-	}
-
-	auto buf = reinterpret_cast<TCHAR*>(::GlobalLock(handle));
-	if(!buf) {
-		::GlobalFree(handle);
-		::CloseClipboard();
-		return;
-	}
-	_tcscpy_s(buf, str.size() + 1, str.c_str());
-	::GlobalUnlock(handle);
 
 #ifdef _UNICODE
-	const auto transferred = ::SetClipboardData(CF_UNICODETEXT, handle);
+	const auto format = CF_UNICODETEXT;
 #else
-	const auto transferred = ::SetClipboardData(CF_TEXT, handle);
+	const auto format = CF_TEXT;
 #endif
-	if(!transferred) ::GlobalFree(handle);
 
-	::CloseClipboard();
+	if(!::SetClipboardData(format, write.data)) {
+		dwtWin32DebugFail("Clipboard::setData: SetClipboardData failed");
+		return;
+	}
+	write.data = nullptr; // The clipboard now owns the allocation.
 }
 
 } }

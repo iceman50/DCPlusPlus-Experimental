@@ -43,30 +43,9 @@
 #include <dwt/widgets/Control.h>
 #include <algorithm>
 #include <assert.h>
+#include <vector>
 
 namespace dwt {
-
-namespace {
-
-tstring moduleFileName() {
-	tstring value(MAX_PATH, _T('\0'));
-	while(true) {
-		const auto length = ::GetModuleFileName(nullptr, &value[0], static_cast<DWORD>(value.size()));
-		if(!length) {
-			return tstring();
-		}
-		if(length < value.size()) {
-			value.resize(length);
-			return value;
-		}
-		if(value.size() >= 32768) {
-			return tstring();
-		}
-		value.resize(std::min<size_t>(value.size() * 2, 32768), _T('\0'));
-	}
-}
-
-}
 
 Application* Application::itsInstance = 0;
 HANDLE Application::itsMutex = 0;
@@ -77,14 +56,13 @@ HANDLE Application::itsMutex = 0;
  Typically only called by WinMain or DllMain.
  */
 void Application::init() {
+#ifndef DWT_SHARED
 	util::win32::enablePerMonitorDpiAwareness();
-	itsInstance = new Application();
-
-	BOOL enable;
-	if(::SystemParametersInfo(SPI_GETUIEFFECTS, 0, &enable, 0) && !enable) {
-		enable = TRUE;
-		::SystemParametersInfo(SPI_SETUIEFFECTS, 0, &enable, 0);
+#endif
+	if(itsInstance) {
+		return;
 	}
+	itsInstance = new Application();
 
 	// Initializing Common Controls...
 	INITCOMMONCONTROLSEX init = {
@@ -99,6 +77,7 @@ void Application::init() {
 
 Application::Application() :
 	itsCmdShow(0),
+	dispatchingAsync(false),
 	appearance(new Appearance),
 	quit(false),
 	threadId(::GetCurrentThreadId())
@@ -139,6 +118,9 @@ void Application::removeWaitEvent(HANDLE hWaitEvent) {
 }
 
 void Application::uninit() {
+	if(!itsInstance) {
+		return;
+	}
 	delete itsInstance;
 	itsInstance = 0;
 	if (itsMutex) {
@@ -149,17 +131,59 @@ void Application::uninit() {
 
 Application& Application::instance() {
 	assert(itsInstance);
+	if(!itsInstance) {
+		throw DWTException("DWT application runtime is not initialized");
+	}
 	return *itsInstance;
 }
 
+bool Application::isInitialized() noexcept {
+	return itsInstance != nullptr;
+}
+
+HMODULE Application::getModuleHandle() noexcept {
+	HMODULE module = nullptr;
+	if(::GetModuleHandleEx(
+		GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+			GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		reinterpret_cast<LPCTSTR>(&itsInstance), &module))
+	{
+		return module;
+	}
+	return ::GetModuleHandle(nullptr);
+}
+
+namespace {
+
+tstring moduleFileName(HMODULE module) {
+	std::vector<TCHAR> buffer(1024);
+	for(;;) {
+		::SetLastError(ERROR_SUCCESS);
+		const auto length = ::GetModuleFileName(
+			module, buffer.data(), static_cast<DWORD>(buffer.size()));
+		if(length == 0) {
+			return tstring();
+		}
+		if(length < buffer.size()) {
+			return tstring(buffer.data(), length);
+		}
+		if(buffer.size() >= 32768) {
+			return tstring();
+		}
+		buffer.resize(std::min<size_t>(buffer.size() * 2, 32768));
+	}
+}
+
+}
+
 tstring Application::getModulePath() const {
-	auto retStr = moduleFileName();
-	retStr = retStr.substr(0, retStr.find_last_of('\\') + 1);
-	return retStr;
+	auto fileName = moduleFileName(getModuleHandle());
+	const auto separator = fileName.find_last_of(_T("\\/"));
+	return separator == tstring::npos ? tstring() : fileName.substr(0, separator + 1);
 }
 
 tstring Application::getModuleFileName() const {
-	return moduleFileName();
+	return moduleFileName(getModuleHandle());
 }
 
 void Application::run() {
@@ -242,6 +266,13 @@ bool Application::dispatch() {
 	return true;
 }
 
+bool Application::processMessages() {
+	while(!quit && dispatch()) {
+	}
+
+	return !quit;
+}
+
 void Application::wake() {
 	::PostThreadMessage(threadId, WM_NULL, 0, 0);
 }
@@ -258,14 +289,30 @@ bool Application::dispatchAsync() {
 	Callback callback;
 	{
 		std::lock_guard<std::mutex> lock(tasksMutex);
-		if(tasks.empty()) {
+		// Keep queued callbacks serialized even when one of them starts a nested
+		// message pump through processMessages(). This preserves FIFO completion
+		// order while still allowing native UI messages to be processed.
+		if(tasks.empty() || dispatchingAsync) {
 			return false;
 		}
 		callback = std::move(tasks.front());
 		tasks.pop();
+		dispatchingAsync = true;
 	}
 
-	callback();
+	try {
+		callback();
+	} catch(...) {
+		std::lock_guard<std::mutex> lock(tasksMutex);
+		dispatchingAsync = false;
+		throw;
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(tasksMutex);
+		dispatchingAsync = false;
+	}
+
 	return true;
 }
 

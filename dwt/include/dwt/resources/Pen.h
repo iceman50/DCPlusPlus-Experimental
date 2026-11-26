@@ -57,6 +57,12 @@ public:
 
 	Pen(COLORREF color, PenStyle style = Solid, int width = 0);
 
+	/** Create a pen from a Win32 logical-pen description. */
+	Pen(const LOGPEN& pen);
+
+	/** Retrieve the Win32 logical-pen description. */
+	LOGPEN getLogPen() const;
+
 private:
 	friend class Handle<GdiPolicy<HPEN> >;
 	typedef Handle<GdiPolicy<HPEN> > ResourceType;

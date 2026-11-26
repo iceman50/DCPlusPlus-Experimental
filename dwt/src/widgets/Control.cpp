@@ -37,6 +37,8 @@
 #include <dwt/widgets/Menu.h>
 #include <dwt/widgets/TabView.h>
 
+#include <limits>
+
 namespace dwt {
 
 Control::Seed::Seed(DWORD style, DWORD exStyle, const tstring& caption) :
@@ -59,7 +61,14 @@ void Control::addAccel(BYTE fVirt, WORD key, const CommandDispatcher::F& f) {
 
 void Control::initAccels() {
 	dwtassert(!accel, "Control::initAccels called twice on the same control");
-	accel = ::CreateAcceleratorTable(&accels[0], static_cast<int>(accels.size()));
+	if(accel || accels.empty()) {
+		return;
+	}
+	if(accels.size() > static_cast<size_t>((std::numeric_limits<int>::max)())) {
+		throw DWTException("Control::initAccels: too many accelerators");
+	}
+	accel = ::CreateAcceleratorTable(
+		accels.data(), static_cast<int>(accels.size()));
 	if(!accel) {
 		throw Win32Exception("Control::initAccels: CreateAcceleratorTable failed");
 	}

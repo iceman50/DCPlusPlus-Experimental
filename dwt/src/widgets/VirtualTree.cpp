@@ -33,6 +33,7 @@
 #include <dwt/widgets/VirtualTree.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include <dwt/util/check.h>
 
@@ -112,16 +113,18 @@ bool VirtualTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 	case TVM_GETITEMRECT:
 		{
 			auto rect = reinterpret_cast<RECT*>(msg.lParam);
-			auto item = rect ?
-				reinterpret_cast<Item*>(*reinterpret_cast<HTREEITEM*>(rect)) :
-				nullptr;
+			HTREEITEM requestedHandle = nullptr;
+			if(rect) {
+				std::memcpy(&requestedHandle, rect, sizeof(requestedHandle));
+			}
+			auto item = reinterpret_cast<Item*>(requestedHandle);
 			if(!validate(item)) {
 				retVal = FALSE;
 				return true;
 			}
 			display(*item);
 			RECT native = { 0 };
-			*reinterpret_cast<HTREEITEM*>(&native) = item->handle;
+			std::memcpy(&native, &item->handle, sizeof(item->handle));
 			retVal = sendTreeMsg(TVM_GETITEMRECT, msg.wParam,
 				reinterpret_cast<LPARAM>(&native));
 			if(retVal) {
@@ -328,10 +331,10 @@ bool VirtualTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 	return BaseType::handleMessage(msg, retVal);
 }
 
-HTREEITEM VirtualTree::insert(const tstring& text, HTREEITEM parent, HTREEITEM insertAfter,
+HTREEITEM VirtualTree::insert(const tstring& text, HTREEITEM parentItem, HTREEITEM insertAfter,
 	LPARAM param, bool expanded, int iconIndex, int selectedIconIndex)
 {
-	TVINSERTSTRUCT item = { parent, insertAfter, { { TVIF_TEXT } } };
+	TVINSERTSTRUCT item = { parentItem, insertAfter, { { TVIF_TEXT } } };
 	auto& value = item.itemex;
 	value.pszText = const_cast<TCHAR*>(text.c_str());
 	if(param) {
@@ -1042,9 +1045,9 @@ void VirtualTree::configureAccessibility() {
 	provider.exists = [this, fromId](accessibility::ItemId id) {
 		return validate(fromId(id));
 	};
-	provider.children = [this, toId, fromId](accessibility::ItemId parent) {
+	provider.children = [this, toId, fromId](accessibility::ItemId parentId) {
 		std::vector<accessibility::ItemId> result;
-		auto item = parent ? fromId(parent) : root;
+		auto item = parentId ? fromId(parentId) : root;
 		if(!validate(item)) {
 			return result;
 		}

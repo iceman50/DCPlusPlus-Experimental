@@ -86,9 +86,10 @@ public:
 
 	/// Sets the range of the Spinner
 	/** The range is the unique values of the control, use this function to set the
-	  * range of the control. Maximum values are 65000 and minimum are -65000
+	  * range of the control. The full signed 32-bit range is supported.
 	  */
 	void setRange( int minimum, int maximum );
+	std::pair<int, int> getRange() const;
 
 	/// Assigns a buddy control
 	/** A "buddy control" can theoretically be any type of control, but the most
@@ -108,12 +109,21 @@ public:
 	  * the setRange function
 	  */
 	int getValue();
+	/** Retrieve the value and report invalid or out-of-range buddy text. */
+	bool tryGetValue(int& value) const;
 
 	/// Sets the value of the control
 	/** The value can be any value between the minimum and maximum range defined in
 	  * the setRange function
 	  */
 	int setValue( int v );
+
+	int getBase() const;
+	int setBase(int base);
+	std::vector<UDACCEL> getAcceleration() const;
+	bool setAcceleration(const std::vector<UDACCEL>& acceleration);
+	bool getUnicodeFormat() const;
+	bool setUnicodeFormat(bool unicode);
 
 	typedef std::function<bool (int, int)> UpdateF;
 	void onUpdate(UpdateF f);

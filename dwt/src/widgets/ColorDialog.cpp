@@ -41,7 +41,7 @@ bool ColorDialog::open( ColorParams & colorParams, bool basic, bool allowFullOpe
 	CHOOSECOLOR cc = { sizeof( CHOOSECOLOR ) };
 	cc.hwndOwner = getParentHandle();
 	cc.rgbResult = colorParams.itsColor;
-	cc.lpCustColors = itsColorParams.itsCustomColors;
+	cc.lpCustColors = colorParams.itsCustomColors;
 	cc.Flags = CC_ANYCOLOR | CC_RGBINIT;
 	if ( !basic )
 		cc.Flags |= CC_FULLOPEN;

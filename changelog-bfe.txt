@@ -1,3 +1,6 @@
+== Unreleased - after 0.8842-RC4 !!!Experimental!!! ==
+* Update DWT from LibDWT (73d029bd): the library's own work since it took in this fork's changes for 0.884.1, among it safer size and grid calculations, more drawing, region, toolbar and rebar helpers, a single-selection list box, and month calendars and date pickers drawn in the theme's colours (iceman50)
+
 == 11-22-2026 - 0.8842-RC4 !!!Experimental!!! ==
 * Keep the country database up to date without setting anything up: the download URL (View > Experimental > Other) now defaults to the GeoLite2 Country database that DC++ Experimental publishes on GitHub, checked once a day. The messages shown when the URL or the MaxMind login is missing, and the note in the message outbox about its limits, now point to that tab instead of Settings. "Message outbox..." in the menus now has an icon (iceman50)
 * Fix a crash in the download queue window, also in DC++ 0.884: an item that changed and was then removed while the window was opening (for example a file list that finished downloading at that moment) was updated after the window had already left it out, and DC++ closed. The window now starts listening to the queue in the same step as it reads it, so it no longer misses such changes or lists an item twice, and an update of an item it doesn't list is ignored (iceman50)

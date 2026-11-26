@@ -36,7 +36,7 @@ namespace dwt { namespace util { namespace win32 {
 
 namespace {
 
-class FileDialogEventSink : public IFileDialogEvents {
+class FileDialogEventSink final : public IFileDialogEvents {
 public:
 	explicit FileDialogEventSink(const FileDialogEvents& events) :
 		refCount(1), events(events) { }

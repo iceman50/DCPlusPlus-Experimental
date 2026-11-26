@@ -34,6 +34,7 @@
 #include "TouchScrolling.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <dwt/CanvasClasses.h>
 #include <dwt/util/check.h>
@@ -103,9 +104,9 @@ void Table::create( const Seed & cs )
 void Table::setFontImpl() {
 	BaseType::setFontImpl();
 	if(HWND header = ListView_GetHeader(handle())) {
-		auto font = getFont();
+		auto currentFont = getFont();
 		::SendMessage(header, WM_SETFONT,
-			reinterpret_cast<WPARAM>(font ? font->handle() : nullptr), TRUE);
+			reinterpret_cast<WPARAM>(currentFont ? currentFont->handle() : nullptr), TRUE);
 	}
 }
 
@@ -194,8 +195,13 @@ void Table::setSelectedImpl(int item) {
 }
 
 void Table::selectAll() {
-	for(size_t i = 0, n = size(); i < n; ++i)
-		setSelected(static_cast<int>(i));
+	if(empty()) {
+		return;
+	}
+	ListView_SetItemState(
+		handle(), -1, LVIS_SELECTED, LVIS_SELECTED);
+	ListView_SetItemState(
+		handle(), 0, LVIS_FOCUSED, LVIS_FOCUSED);
 }
 
 void Table::checkSel() {
@@ -247,6 +253,9 @@ int Table::insertColumnImpl(const Column& column, int n) {
 }
 
 int Table::insert(const std::vector<tstring>& row, LPARAM lPar, int index, int iconIndex) {
+	if(row.empty()) {
+		throw DWTException("Cannot insert an empty row in a table");
+	}
 	LVITEM lvi = { LVIF_TEXT | LVIF_PARAM };
 
 	lvi.pszText = const_cast<LPTSTR>(row[0].c_str());
@@ -376,7 +385,11 @@ void Table::addRemoveTableExtendedStyle( DWORD addStyle, bool add ) {
 
 std::vector<int> Table::getColumnOrderImpl() const {
 	std::vector<int> ret(getColumnCount());
-	if(!::SendMessage(handle(), LVM_GETCOLUMNORDERARRAY, static_cast<WPARAM>(ret.size()), reinterpret_cast<LPARAM>(&ret[0]))) {
+	if(ret.empty()) {
+		return ret;
+	}
+	if(!::SendMessage(handle(), LVM_GETCOLUMNORDERARRAY,
+		static_cast<WPARAM>(ret.size()), reinterpret_cast<LPARAM>(ret.data()))) {
 		ret.clear();
 	}
 	return ret;
@@ -987,7 +1000,9 @@ Column Table::getColumnImpl(unsigned column) const {
 
 	if(!ListView_GetColumn(handle(), column, &col)) {
 		dwtWin32DebugFail("Failed getting column information in Table");
+#ifndef _DEBUG
 		return Column();
+#endif
 	}
 
 	return Column(col.pszText, col.cx,
@@ -1009,45 +1024,99 @@ static int compare(T a, T b) {
 	return (a < b) ? -1 : ((a == b) ? 0 : 1);
 }
 
+namespace {
+
+int sortDirection(int result, bool ascending) noexcept {
+	const int normalized = (result > 0) - (result < 0);
+	return ascending ? normalized : -normalized;
+}
+
+void reportSortException(const char* text) noexcept {
+	::OutputDebugStringA("DWT Table sort callback exception: ");
+	::OutputDebugStringA(text);
+	::OutputDebugStringA("\r\n");
+}
+
+}
+
 int CALLBACK Table::compareFuncCallback(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort) {
-	Table* p = reinterpret_cast<Table*>(lParamSort);
-	int result = p->fun(lParam1, lParam2);
-	if(!p->isAscending())
-		result = -result;
-	return result;
+	try {
+		Table* p = reinterpret_cast<Table*>(lParamSort);
+		if(!p || !p->fun) {
+			return 0;
+		}
+		return sortDirection(
+			p->fun(lParam1, lParam2), p->isAscending());
+	} catch(const std::exception& error) {
+		reportSortException(error.what());
+	} catch(...) {
+		reportSortException("unknown exception");
+	}
+	return 0;
 }
 
 int CALLBACK Table::compareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort) {
-	Table* p = reinterpret_cast<Table*>(lParamSort);
-
-	int na = (int)lParam1;
-	int nb = (int)lParam2;
-
-	int result = 0;
-
-	SortType type = p->sortType;
-	if(type == SORT_CALLBACK) {
-		result = p->fun(p->getData(na), p->getData(nb));
-	} else {
-		const auto buf = p->getText(na, p->sortColumn);
-		const auto buf2 = p->getText(nb, p->sortColumn);
-
-		if(type == SORT_STRING) {
-			result = wcscoll(buf.c_str(), buf2.c_str());
-		} else if(type == SORT_STRING_SIMPLE) {
-			result = wcscmp(buf.c_str(), buf2.c_str());
-		} else if(type == SORT_INT) {
-			result = compare(_ttoi(buf.c_str()), _ttoi(buf2.c_str()));
-		} else if(type == SORT_FLOAT) {
-			double b1, b2;
-			_stscanf(buf.c_str(), _T("%lf"), &b1);
-			_stscanf(buf2.c_str(), _T("%lf"), &b2);
-			result = compare(b1, b2);
+	try {
+		Table* p = reinterpret_cast<Table*>(lParamSort);
+		if(!p) {
+			return 0;
 		}
+
+		const int na = static_cast<int>(lParam1);
+		const int nb = static_cast<int>(lParam2);
+		if(na < 0 || nb < 0 ||
+			static_cast<size_t>(na) >= p->size() ||
+			static_cast<size_t>(nb) >= p->size())
+		{
+			return 0;
+		}
+
+		int result = 0;
+		const SortType type = p->sortType;
+		if(type == SORT_CALLBACK) {
+			if(!p->fun) {
+				return 0;
+			}
+			result = p->fun(p->getData(na), p->getData(nb));
+		} else {
+			if(p->sortColumn < 0 ||
+				p->sortColumn >= static_cast<int>(p->getColumnCount()))
+			{
+				return 0;
+			}
+			const auto textA = p->getText(na, p->sortColumn);
+			const auto textB = p->getText(nb, p->sortColumn);
+
+			if(type == SORT_STRING) {
+				result = _tcscoll(textA.c_str(), textB.c_str());
+			} else if(type == SORT_STRING_SIMPLE) {
+				result = _tcscmp(textA.c_str(), textB.c_str());
+			} else if(type == SORT_INT) {
+				result = compare(_ttoi64(textA.c_str()), _ttoi64(textB.c_str()));
+			} else if(type == SORT_FLOAT) {
+				double b1 = 0.0;
+				double b2 = 0.0;
+				const bool valid1 = _stscanf(textA.c_str(), _T("%lf"), &b1) == 1;
+				const bool valid2 = _stscanf(textB.c_str(), _T("%lf"), &b2) == 1;
+				if(valid1 && valid2) {
+					const bool nan1 = std::isnan(b1);
+					const bool nan2 = std::isnan(b2);
+					result = nan1 || nan2 ? compare(nan1, nan2) :
+						compare(b1, b2);
+				} else if(valid1 != valid2) {
+					result = valid1 ? 1 : -1;
+				} else {
+					result = _tcscoll(textA.c_str(), textB.c_str());
+				}
+			}
+		}
+		return sortDirection(result, p->ascending);
+	} catch(const std::exception& error) {
+		reportSortException(error.what());
+	} catch(...) {
+		reportSortException("unknown exception");
 	}
-	if(!p->ascending)
-		result = -result;
-	return result;
+	return 0;
 }
 
 std::pair<int, int> Table::hitTest(const ScreenCoordinate& pt) {

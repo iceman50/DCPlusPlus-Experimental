@@ -36,6 +36,7 @@
 
 #include <dwt/Widget.h>
 
+#include <dwt/Application.h>
 #include <dwt/DWTException.h>
 #include <dwt/util/check.h>
 #include <dwt/util/win32/ApiHelpers.h>
@@ -88,7 +89,7 @@ int widgetCount;
 #endif
 
 Widget::Widget(Widget* parent_, Dispatcher& dispatcher_) :
-	hwnd(NULL), parent(parent_), dispatcher(dispatcher_),
+	hwnd(NULL), creationInProgress(false), parent(parent_), dispatcher(dispatcher_),
 	dpi(util::win32::defaultDpi), previousDpi(util::win32::defaultDpi),
 	accessibilityProvider(nullptr), accessibleControlType(accessibility::Custom),
 	accessibleKeyboardFocusable(false), appearance(nullptr),
@@ -116,15 +117,27 @@ Widget::~Widget() {
 }
 
 void Widget::kill() {
+	if(creationInProgress) {
+		if(hwnd) {
+			::RemoveProp(hwnd, propAtom);
+			hwnd = nullptr;
+		}
+		return;
+	}
 	delete this;
 }
 
 HWND Widget::create(const Seed & cs) {
+	if(creationInProgress) {
+		throw DWTException("Recursive widget creation is not allowed");
+	}
+	creationInProgress = true;
 	HWND hWnd = ::CreateWindowEx(cs.exStyle, getDispatcher().getClassName(), cs.caption.c_str(), cs.style,
 		cs.location.x(), cs.location.y(), cs.location.width(), cs.location.height(),
-		getParentHandle(), cs.menuHandle, ::GetModuleHandle(NULL), reinterpret_cast<LPVOID>(this));
+		getParentHandle(), cs.menuHandle, Application::getModuleHandle(), reinterpret_cast<LPVOID>(this));
+	creationInProgress = false;
 
-	if(!hWnd) {
+	if(!hWnd || !::IsWindow(hWnd) || hwnd != hWnd) {
 		// The most common error is to forget WS_CHILD in the styles
 		throw Win32Exception("Unable to create widget");
 	}
@@ -143,12 +156,105 @@ void Widget::setHandle(HWND h) {
 		throw DWTException("You may not attach to a widget that's already attached");
 	}
 
+	if(!h || !::IsWindow(h)) {
+		throw DWTException("Cannot attach to an invalid window");
+	}
+
 	hwnd = h;
 	dpi = previousDpi = util::win32::getDpi(hwnd);
 
-	::SetProp(hwnd, propAtom, reinterpret_cast<HANDLE>(this));
+	if(!::SetProp(hwnd, propAtom, reinterpret_cast<HANDLE>(this))) {
+		hwnd = nullptr;
+		throw Win32Exception("Unable to associate a widget with its window");
+	}
 
-	::SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WindowProc::wndProc));
+	::SetLastError(ERROR_SUCCESS);
+	const auto previous = ::SetWindowLongPtr(
+		hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WindowProc::wndProc));
+	if(!previous && ::GetLastError() != ERROR_SUCCESS) {
+		::RemoveProp(hwnd, propAtom);
+		hwnd = nullptr;
+		throw Win32Exception("Unable to install the widget window procedure");
+	}
+}
+
+Point Widget::clientToScreen(const Point& point) const {
+	auto result = point.toPOINT();
+	if(!::ClientToScreen(handle(), &result)) {
+		throw Win32Exception("Unable to convert client coordinates to screen coordinates");
+	}
+	return Point(result);
+}
+
+Rectangle Widget::clientToScreen(const Rectangle& rectangle) const {
+	const auto first = clientToScreen(rectangle.pos);
+	const auto second = clientToScreen(Point(rectangle.right(), rectangle.bottom()));
+	return Rectangle(first, second - first);
+}
+
+Point Widget::screenToClient(const Point& point) const {
+	auto result = point.toPOINT();
+	if(!::ScreenToClient(handle(), &result)) {
+		throw Win32Exception("Unable to convert screen coordinates to client coordinates");
+	}
+	return Point(result);
+}
+
+Rectangle Widget::screenToClient(const Rectangle& rectangle) const {
+	const auto first = screenToClient(rectangle.pos);
+	const auto second = screenToClient(Point(rectangle.right(), rectangle.bottom()));
+	return Rectangle(first, second - first);
+}
+
+bool Widget::invalidate(bool erase) {
+	return ::InvalidateRect(handle(), nullptr, erase ? TRUE : FALSE) != FALSE;
+}
+
+bool Widget::invalidate(const Rectangle& rectangle, bool erase) {
+	const auto rect = rectangle.toRECT();
+	return ::InvalidateRect(handle(), &rect, erase ? TRUE : FALSE) != FALSE;
+}
+
+bool Widget::validate() {
+	return ::ValidateRect(handle(), nullptr) != FALSE;
+}
+
+bool Widget::validate(const Rectangle& rectangle) {
+	const auto rect = rectangle.toRECT();
+	return ::ValidateRect(handle(), &rect) != FALSE;
+}
+
+bool Widget::update() {
+	return ::UpdateWindow(handle()) != FALSE;
+}
+
+bool Widget::getUpdateRect(Rectangle& rectangle, bool erase) const {
+	RECT rect = { 0 };
+	const auto pending = ::GetUpdateRect(handle(), &rect, erase ? TRUE : FALSE) != FALSE;
+	rectangle = Rectangle(rect);
+	return pending;
+}
+
+bool Widget::isMinimized() const {
+	return ::IsIconic(handle()) != FALSE;
+}
+
+bool Widget::isMaximized() const {
+	return ::IsZoomed(handle()) != FALSE;
+}
+
+WINDOWPLACEMENT Widget::getWindowPlacement() const {
+	WINDOWPLACEMENT placement = { sizeof(WINDOWPLACEMENT) };
+	if(!::GetWindowPlacement(handle(), &placement)) {
+		throw Win32Exception("Unable to retrieve window placement");
+	}
+	return placement;
+}
+
+bool Widget::setWindowPlacement(const WINDOWPLACEMENT& placement) {
+	auto value = placement;
+	value.length = sizeof(WINDOWPLACEMENT);
+	return ::SetWindowPlacement(handle(), &value) != FALSE;
 }
 
 bool Widget::redrawWindow(UINT flags) {
@@ -479,7 +585,13 @@ void Widget::onDpiResourcesChanged(
 }
 
 void Widget::setParent(Widget* widget) {
-	::SetWindowLongPtr(handle(), GWLP_HWNDPARENT, widget->toLParam());
+	const auto newParent = widget ? widget->handle() : nullptr;
+	::SetLastError(ERROR_SUCCESS);
+	const auto previous = ::SetWindowLongPtr(
+		handle(), GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(newParent));
+	if(!previous && ::GetLastError() != ERROR_SUCCESS) {
+		throw Win32Exception("Unable to change widget parent");
+	}
 	parent = widget;
 }
 

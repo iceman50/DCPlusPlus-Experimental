@@ -230,7 +230,7 @@ void ClientFrame::layout() {
 }
 
 void ClientFrame::paint(Canvas& canvas) {
-	const auto& colors = getAppearance().getPalette();
+	const auto& colors = getAppearance().getDrawPalette();
 	canvas.fill(Rectangle(getClientSize()), Brush(colors.surface));
 	const long width = getClientSize().x;
 	Rectangle text(owner->scale(8), 0, std::max(0L, width - owner->scale(16)), captionHeight);
@@ -267,7 +267,7 @@ void ClientFrame::paint(Canvas& canvas) {
 
 LRESULT ClientFrame::drawButton(Button* button, UINT command, NMCUSTOMDRAW& data) {
 	if(data.dwDrawStage != CDDS_PREPAINT) return CDRF_DODEFAULT;
-	const auto& colors = getAppearance().getPalette();
+	const auto& colors = getAppearance().getDrawPalette();
 	const bool disabled = !button->getEnabled() || !owner->getEnabled();
 	const bool hot = !disabled && (data.uItemState & (CDIS_HOT | CDIS_SELECTED));
 	const bool closeHot = hot && command == SC_CLOSE;
@@ -306,7 +306,7 @@ LRESULT ClientFrame::drawButton(Button* button, UINT command, NMCUSTOMDRAW& data
 
 LRESULT ClientFrame::drawMenuButton(size_t index, NMCUSTOMDRAW& data) {
 	if(data.dwDrawStage != CDDS_PREPAINT || index >= items.size()) return CDRF_DODEFAULT;
-	const auto& colors = getAppearance().getPalette();
+	const auto& colors = getAppearance().getDrawPalette();
 	const auto button = items[index].button;
 	const bool selected = tracking >= 0 ? tracking == static_cast<int>(index) : ::GetFocus() == button->handle() || (data.uItemState & (CDIS_HOT | CDIS_SELECTED));
 	const auto hidePrefix = !menuFocused() && (owner->sendMessage(WM_QUERYUISTATE) & UISF_HIDEACCEL);
@@ -520,7 +520,7 @@ void ClientFrame::themeSystemMenu(HMENU menu) {
 	MENUINFO background = { sizeof(MENUINFO), MIM_BACKGROUND };
 	::GetMenuInfo(menu, &background);
 	systemMenuBackground = background.hbrBack;
-	systemMenuBrush = new Brush(getAppearance().getPalette().surface);
+	systemMenuBrush = new Brush(getAppearance().getDrawPalette().surface);
 	background.hbrBack = systemMenuBrush->handle();
 	::SetMenuInfo(menu, &background);
 	const int count = ::GetMenuItemCount(menu);
@@ -584,7 +584,7 @@ bool ClientFrame::drawSystemMenuItem(DRAWITEMSTRUCT& data) {
 	saved.restore();
 	const auto command = item->original.wID;
 	if(command != SC_CLOSE && command != SC_MINIMIZE && command != SC_MAXIMIZE && command != SC_RESTORE) return true;
-	const auto& colors = getAppearance().getPalette();
+	const auto& colors = getAppearance().getDrawPalette();
 	const bool disabled = (data.itemState & (ODS_DISABLED | ODS_GRAYED)) != 0;
 	const bool selected = (data.itemState & (ODS_SELECTED | ODS_HOTLIGHT)) != 0;
 	FreeCanvas canvas(data.hDC);

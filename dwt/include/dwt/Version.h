@@ -33,10 +33,10 @@
 #define DWT_VERSION_H
 
 #define DWT_VERSION_MAJOR  0
-#define DWT_VERSION_MINOR  883
+#define DWT_VERSION_MINOR  884
 #define DWT_VERSION_PATCH  1
 
-#define DWT_VERSION_STRING "0.883.1"
+#define DWT_VERSION_STRING "0.884.1"
 
 /** Composite version integer for compile-time comparisons:
  *  e.g. #if DWT_VERSION >= DWT_MAKE_VERSION(0, 884, 0) */

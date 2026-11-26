@@ -40,6 +40,8 @@
 #include "Frame.h"
 #include "../Application.h"
 
+#include <atomic>
+
 namespace dwt {
 
 /// Modal Dialog class
@@ -131,10 +133,11 @@ private:
 	friend class ChainingDispatcher;
 	static const TCHAR* windowClass;
 
-	bool quit;
-	int ret;
+	std::atomic_bool quit;
+	std::atomic_int ret;
 
 	Application::FilterIter filterIter;
+	bool filterRegistered;
 	bool filter(MSG& msg);
 };
 
@@ -143,8 +146,11 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 inline void ModalDialog::endDialog(int retv) {
-	quit = true;
-	ret = retv;
+	ret.store(retv, std::memory_order_relaxed);
+	quit.store(true, std::memory_order_release);
+	if(Application::isInitialized()) {
+		Application::instance().wake();
+	}
 }
 
 }

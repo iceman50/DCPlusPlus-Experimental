@@ -71,9 +71,10 @@ public:
 	  */
 	struct Seed : public BaseType::Seed {
 		typedef ThisType WidgetType;
+		enum Mode { TwoState, ThreeState };
 
 		/// Fills with default parameters
-		Seed(const tstring& caption_ = tstring());
+		Seed(const tstring& caption_ = tstring(), Mode mode = TwoState);
 	protected:
 		// For checkboxes
 		Seed(const tstring& caption_, DWORD style);
@@ -82,12 +83,23 @@ public:
 	/// Returns the checked state of the Check Box
 	/** Return value is true if Check Box is checked, otherwise false.
 	  */
-	bool getChecked();
+	bool getChecked() const;
 
 	/// Sets the checked state of the Check Box
 	/** Call this one to programmaticially check a Check Box.
 	  */
 	void setChecked( bool value = true );
+
+	enum State {
+		Unchecked = BST_UNCHECKED,
+		Checked = BST_CHECKED,
+		Indeterminate = BST_INDETERMINATE
+	};
+
+	State getState() const;
+	void setState(State state);
+	bool isIndeterminate() const;
+	void onStateChanged(std::function<void (State)> callback);
 
 	virtual Point getPreferredSize();
 
@@ -110,9 +122,29 @@ inline void CheckBox::setChecked( bool value )
 	this->sendMessage(BM_SETCHECK, value ? BST_CHECKED : BST_UNCHECKED);
 }
 
-inline bool CheckBox::getChecked()
+inline bool CheckBox::getChecked() const
 {
 	return this->sendMessage(BM_GETCHECK) == BST_CHECKED;
+}
+
+inline CheckBox::State CheckBox::getState() const {
+	return static_cast<State>(sendMessage(BM_GETCHECK));
+}
+
+inline void CheckBox::setState(State state) {
+	sendMessage(BM_SETCHECK, state);
+}
+
+inline bool CheckBox::isIndeterminate() const {
+	return getState() == Indeterminate;
+}
+
+inline void CheckBox::onStateChanged(std::function<void (State)> callback) {
+	addCallback(Message(WM_COMMAND, BN_CLICKED),
+		[this, callback](const MSG&, LRESULT&) -> bool {
+			callback(getState());
+			return false;
+		});
 }
 
 inline CheckBox::CheckBox( dwt::Widget * parent )

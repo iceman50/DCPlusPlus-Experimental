@@ -51,6 +51,16 @@ public:
 		Winding = WINDING
 	};
 
+	/** Operation used when combining two regions. */
+	enum CombineMode {
+		Intersect = RGN_AND,
+		Intersection = Intersect,
+		Union = RGN_OR,
+		Difference = RGN_DIFF,
+		ExclusiveOr = RGN_XOR,
+		Copy = RGN_COPY
+	};
+
 	Region(HRGN h, bool own = true);
 
 	/// create a rectangular region; more information in the ::CreateRectRgn doc.
@@ -59,10 +69,9 @@ public:
 	/// Rounded rectangle; ellipseSize is the full width/height of each corner ellipse.
 	Region(const Rectangle& rect, const Point& ellipseSize);
 
-	enum class CombineMode { Intersection = RGN_AND, Union = RGN_OR, Difference = RGN_DIFF, ExclusiveOr = RGN_XOR };
 	/// Modify this region, preserving the other. Returns the native region type
 	/// (NULLREGION is a successful empty result), or ERROR on failure.
-	int combine(const Region& other, CombineMode mode) noexcept;
+	int combineInPlace(const Region& other, CombineMode mode) noexcept;
 
 	/**
 	* creates a polygonal region; more information in the ::CreatePolygonRgn doc.
@@ -75,7 +84,25 @@ public:
 	* returns a new transformed region; more information in the ::ExtCreateRegion doc.
 	* @param pxform pointer to an XFORM structure; check out its doc for more information.
 	*/
-	RegionPtr transform(const PXFORM pxform) const;
+	RegionPtr transform(const XFORM* transform) const;
+	RegionPtr transform(const XFORM& transform) const;
+
+	/** Return NULLREGION, SIMPLEREGION, or COMPLEXREGION. */
+	int getType() const;
+
+	/** Return the smallest rectangle containing the region. */
+	Rectangle getBounds() const;
+
+	bool empty() const;
+	bool contains(const Point& point) const;
+	bool intersects(const Rectangle& rectangle) const;
+	bool equals(const Region& other) const;
+
+	/** Offset this region and return its resulting complexity. */
+	int offset(const Point& amount);
+
+	/** Return a new region produced by applying a Win32 region combine operation. */
+	RegionPtr combine(const Region& other, CombineMode mode) const;
 
 private:
 	friend class Handle<GdiPolicy<HRGN> >;

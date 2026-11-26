@@ -605,6 +605,14 @@ bool Appearance::refreshSystemState() {
 	return result;
 }
 
+Appearance::Palette Appearance::getDrawPalette() const {
+	if(isManual()) return active;
+	return { ::GetSysColor(COLOR_WINDOW), ::GetSysColor(COLOR_BTNFACE),
+		::GetSysColor(COLOR_WINDOWTEXT), ::GetSysColor(COLOR_GRAYTEXT),
+		::GetSysColor(COLOR_3DSHADOW), ::GetSysColor(COLOR_HIGHLIGHT),
+		::GetSysColor(COLOR_HIGHLIGHTTEXT) };
+}
+
 COLORREF Appearance::getContentBackground() const {
 	return highContrast ? ::GetSysColor(COLOR_WINDOW) : active.background;
 }

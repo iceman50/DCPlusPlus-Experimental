@@ -149,6 +149,8 @@ public:
 	};
 
 	const Palette& getPalette() const { return active; }
+	/** Colors for application-drawn surfaces, including native light and high contrast. */
+	Palette getDrawPalette() const;
 	COLORREF getContentBackground() const;
 	COLORREF getContentText() const;
 	const BrushPtr& getBackgroundBrush() const { return backgroundBrush; }

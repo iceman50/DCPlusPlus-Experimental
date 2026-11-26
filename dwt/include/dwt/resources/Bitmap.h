@@ -94,6 +94,9 @@ public:
 	  */
 	static Point getSize( HBITMAP Bitmap );
 
+	/** Retrieve dimensions, stride, format, and pixel storage metadata. */
+	BITMAP getInfo() const;
+
 	/// Resize the given Bitmap
 	/** This function is IMMUTABLE meaning it will not modify the given bitmap at all
 	  * but rather return a new Bitmap containing the resized Bitmap.

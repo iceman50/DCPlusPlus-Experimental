@@ -30,6 +30,7 @@
 */
 
 #include <dwt/widgets/MonthCalendar.h>
+#include <dwt/util/win32/UxTheme.h>
 
 namespace dwt {
 
@@ -75,6 +76,48 @@ void MonthCalendar::create(const Seed& cs) {
 	if(cs.trailingTextColor != NaC) {
 		setColor(MCSC_TRAILINGTEXT, cs.trailingTextColor);
 	}
+}
+
+COLORREF MonthCalendar::partColor(int part) const {
+	const auto& appearance = getAppearance();
+	if(!appearance.isHighContrast() && explicitColors[part] != NaC)
+		return explicitColors[part];
+
+	// MCM_SETCOLOR takes literal RGB values, including after visual styles are
+	// restored. Resolve the native defaults again when system colors change.
+	const bool manual = isManualAppearance();
+	const auto& palette = appearance.getPalette();
+	switch(part) {
+	case MCSC_BACKGROUND: return manual ? palette.background : ::GetSysColor(COLOR_WINDOW);
+	case MCSC_MONTHBK: return manual ? palette.surface : ::GetSysColor(COLOR_WINDOW);
+	case MCSC_TEXT: return manual ? palette.text : ::GetSysColor(COLOR_WINDOWTEXT);
+	case MCSC_TITLEBK: return manual ? palette.accent : ::GetSysColor(COLOR_ACTIVECAPTION);
+	case MCSC_TITLETEXT: return manual ? palette.highlightText : ::GetSysColor(COLOR_CAPTIONTEXT);
+	case MCSC_TRAILINGTEXT: return manual ? palette.disabledText : ::GetSysColor(COLOR_GRAYTEXT);
+	default: return NaC;
+	}
+}
+
+COLORREF MonthCalendar::setColor(int part, COLORREF color) {
+	if(part >= MCSC_BACKGROUND && part <= MCSC_TRAILINGTEXT) {
+		explicitColors[part] = color;
+		color = partColor(part);
+	}
+	return static_cast<COLORREF>(MonthCal_SetColor(handle(), part, color));
+}
+
+void MonthCalendar::appearanceChanged() {
+	const bool manual = isManualAppearance();
+	if(manual != manualColors) {
+		// With visual styles active Windows ignores all but MCSC_BACKGROUND.
+		manualColors = manual;
+		util::win32::uxtheme::setWindowTheme(handle(), manual ? L"" : nullptr, manual ? L"" : nullptr);
+	}
+	for(int part = MCSC_BACKGROUND; part <= MCSC_TRAILINGTEXT; ++part) {
+		auto color = partColor(part);
+		if(getColor(part) != color) MonthCal_SetColor(handle(), part, color);
+	}
+	BaseType::appearanceChanged();
 }
 
 Point MonthCalendar::getPreferredSize() {

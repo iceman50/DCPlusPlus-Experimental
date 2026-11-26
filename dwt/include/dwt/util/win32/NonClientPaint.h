@@ -16,7 +16,7 @@ inline void invalidateNonClient(HWND window) {
 	Region frame(::CreateRectRgnIndirect(&outer));
 	Region content(::CreateRectRgnIndirect(&client));
 	if(frame.handle() && content.handle()) {
-		frame.combine(content, Region::CombineMode::Difference);
+		frame.combineInPlace(content, Region::CombineMode::Difference);
 		::RedrawWindow(window, nullptr, frame.handle(), RDW_INVALIDATE | RDW_FRAME | RDW_NOCHILDREN);
 	}
 }

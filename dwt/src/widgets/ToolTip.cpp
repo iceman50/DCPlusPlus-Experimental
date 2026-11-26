@@ -66,10 +66,20 @@ void ToolTip::setText(Widget* widget, const tstring& newText) {
 }
 
 void ToolTip::addTool(Widget* widget, LPTSTR textPtr) {
-	TOOLINFO ti = { sizeof(TOOLINFO), TTF_IDISHWND | TTF_SUBCLASS, getParent()->handle(),
-		reinterpret_cast<UINT_PTR>(widget->handle()) };
+	addTool(widget, textPtr, TTF_IDISHWND | TTF_SUBCLASS);
+}
+
+bool ToolTip::addTool(Widget* widget, LPTSTR textPtr, UINT flags) {
+	TOOLINFO ti = { sizeof(TOOLINFO), flags | TTF_IDISHWND,
+		getParent()->handle(), reinterpret_cast<UINT_PTR>(widget->handle()) };
 	ti.lpszText = textPtr;
-	sendMessage(TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&ti));
+	return sendMessage(TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&ti)) != FALSE;
+}
+
+void ToolTip::removeTool(Widget* widget) {
+	TOOLINFO ti = { sizeof(TOOLINFO), TTF_IDISHWND,
+		getParent()->handle(), reinterpret_cast<UINT_PTR>(widget->handle()) };
+	sendMessage(TTM_DELTOOL, 0, reinterpret_cast<LPARAM>(&ti));
 }
 
 void ToolTip::setTool(Widget* widget, F f) {
@@ -123,10 +133,52 @@ void ToolTip::setTipBackgroundColor(COLORREF color) {
 	sendMessage(TTM_SETTIPBKCOLOR, color);
 }
 
+COLORREF ToolTip::getTipBackgroundColor() const {
+	return static_cast<COLORREF>(sendMessage(TTM_GETTIPBKCOLOR));
+}
+
 void ToolTip::setTipTextColor(COLORREF color) {
 	tipTextColor = color;
 	tipTextColorExplicit = true;
 	sendMessage(TTM_SETTIPTEXTCOLOR, color);
+}
+
+COLORREF ToolTip::getTipTextColor() const {
+	return static_cast<COLORREF>(sendMessage(TTM_GETTIPTEXTCOLOR));
+}
+
+int ToolTip::getToolCount() const {
+	return static_cast<int>(sendMessage(TTM_GETTOOLCOUNT));
+}
+
+Point ToolTip::getBubbleSize(Widget* widget) const {
+	TOOLINFO ti = { sizeof(TOOLINFO), TTF_IDISHWND,
+		getParent()->handle(), reinterpret_cast<UINT_PTR>(widget->handle()) };
+	const auto size = static_cast<DWORD>(sendMessage(TTM_GETBUBBLESIZE, 0,
+		reinterpret_cast<LPARAM>(&ti)));
+	return Point(LOWORD(size), HIWORD(size));
+}
+
+bool ToolTip::adjustRectangle(Rectangle& rectangle, bool textToWindow) const {
+	auto value = rectangle.toRECT();
+	if(!sendMessage(TTM_ADJUSTRECT, textToWindow ? TRUE : FALSE,
+		reinterpret_cast<LPARAM>(&value)))
+	{
+		return false;
+	}
+	rectangle = Rectangle(value);
+	return true;
+}
+
+void ToolTip::trackPosition(const ScreenCoordinate& position) {
+	sendMessage(TTM_TRACKPOSITION, 0, position.getPoint().toLParam());
+}
+
+void ToolTip::trackActivate(Widget* widget, bool active) {
+	TOOLINFO ti = { sizeof(TOOLINFO), TTF_IDISHWND | TTF_TRACK,
+		getParent()->handle(), reinterpret_cast<UINT_PTR>(widget->handle()) };
+	sendMessage(TTM_TRACKACTIVATE, active ? TRUE : FALSE,
+		reinterpret_cast<LPARAM>(&ti));
 }
 
 void ToolTip::setWindowTheme(const tstring& theme) {

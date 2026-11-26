@@ -154,6 +154,33 @@ public:
 	Point getWindowSize() const;
 	Point getClientSize() const;
 
+	/** Convert client coordinates belonging to this widget to screen coordinates. */
+	Point clientToScreen(const Point& point) const;
+	Rectangle clientToScreen(const Rectangle& rectangle) const;
+
+	/** Convert screen coordinates to this widget's client coordinates. */
+	Point screenToClient(const Point& point) const;
+	Rectangle screenToClient(const Rectangle& rectangle) const;
+
+	/** Add all or part of the client area to the update region. */
+	bool invalidate(bool erase = true);
+	bool invalidate(const Rectangle& rectangle, bool erase = true);
+
+	/** Remove all or part of the client area from the update region. */
+	bool validate();
+	bool validate(const Rectangle& rectangle);
+
+	/** Paint the update region immediately. */
+	bool update();
+
+	/** Retrieve the current update rectangle; false means no update is pending. */
+	bool getUpdateRect(Rectangle& rectangle, bool erase = false) const;
+
+	bool isMinimized() const;
+	bool isMaximized() const;
+	WINDOWPLACEMENT getWindowPlacement() const;
+	bool setWindowPlacement(const WINDOWPLACEMENT& placement);
+
 	/// Return the effective DPI for this widget.
 	unsigned getDpi() const;
 
@@ -386,6 +413,7 @@ private:
 	std::unordered_map<Message, CallbackList> handlers;
 
 	HWND hwnd;
+	bool creationInProgress;
 
 	Widget *parent;
 

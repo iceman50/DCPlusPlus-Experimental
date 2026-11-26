@@ -41,7 +41,7 @@ bool SaveDialog::openImpl(tstring& file, unsigned flags) {
 	options.legacyFlags = flags;
 	options.initialFileName = file;
 	std::vector<tstring> files;
-	if(!util::win32::showFileDialog(options, files)) {
+	if(!util::win32::showFileDialog(options, files) || files.empty()) {
 		return false;
 	}
 	file = files.front();
@@ -57,7 +57,7 @@ bool SaveDialog::openShellItem(util::win32::FileDialogResult& result, unsigned f
 	}
 
 	std::vector<util::win32::FileDialogResult> results;
-	if(!util::win32::showFileDialogItems(options, results)) {
+	if(!util::win32::showFileDialogItems(options, results) || results.empty()) {
 		return false;
 	}
 	result = std::move(results.front());

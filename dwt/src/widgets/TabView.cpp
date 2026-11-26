@@ -1153,9 +1153,9 @@ void TabView::configureAccessibility() {
 	provider.exists = [this, fromId](accessibility::ItemId id) {
 		return findTab(fromId(id)) >= 0;
 	};
-	provider.children = [this, toId](accessibility::ItemId parent) {
+	provider.children = [this, toId](accessibility::ItemId parentId) {
 		std::vector<accessibility::ItemId> result;
-		if(parent) {
+		if(parentId) {
 			return result;
 		}
 		for(size_t i = 0; i < size(); ++i) {

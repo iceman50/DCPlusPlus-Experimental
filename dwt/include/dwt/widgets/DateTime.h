@@ -124,10 +124,11 @@ public:
 	void setRange(const SYSTEMTIME* minimum, const SYSTEMTIME* maximum);
 	void getRange(std::optional<SYSTEMTIME>& minimum, std::optional<SYSTEMTIME>& maximum);
 	Point getIdealSize() const;
+	Point getPreferredSize() override;
 	void closeMonthCalendar();
 	HWND getMonthCalendarHandle() const;
 	HFONT getMonthCalendarFont() const;
-	void setMonthCalendarFont(FontPtr font, bool redraw = true);
+	void setMonthCalendarFont(FontPtr monthCalendarFont, bool redraw = true);
 	DWORD setMonthCalendarStyle(DWORD style);
 	DWORD getMonthCalendarStyle() const;
 	DATETIMEPICKERINFO getPickerInfo() const;
@@ -199,6 +200,7 @@ public:
 	  * Only if you DERIVE from class you should call this function directly.
 	  */
 	void create( const Seed & cs = Seed() );
+	bool handleMessage(const MSG& msg, LRESULT& result) override;
 
 	using aspects::Clickable<ThisType>::onClicked;
 
@@ -215,6 +217,10 @@ private:
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
 	tstring formatCallbackText;
+	void appearanceChanged() override;
+	void paintTimeField(HDC dc);
+	static LRESULT CALLBACK spinProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+		UINT_PTR id, DWORD_PTR data);
 
 	// aspects::Clickable
 	static Message getClickMessage();
@@ -291,9 +297,9 @@ inline HFONT DateTime::getMonthCalendarFont() const {
 	return reinterpret_cast<HFONT>(sendMessage(DTM_GETMCFONT));
 }
 
-inline void DateTime::setMonthCalendarFont(FontPtr font, bool redraw) {
+inline void DateTime::setMonthCalendarFont(FontPtr monthCalendarFont, bool redraw) {
 	sendMessage(DTM_SETMCFONT,
-		reinterpret_cast<WPARAM>(font ? font->handle() : nullptr),
+		reinterpret_cast<WPARAM>(monthCalendarFont ? monthCalendarFont->handle() : nullptr),
 		redraw ? TRUE : FALSE);
 }
 

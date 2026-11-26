@@ -164,6 +164,17 @@ public:
 
 	bool getModify();
 
+	Point getMargins() const;
+	void setMargins(const Point& margins);
+	Rectangle getFormattingRect() const;
+	void setFormattingRect(const Rectangle& rectangle, bool redraw = true);
+	void resetFormattingRect(bool redraw = true);
+	bool setTabStops(const std::vector<int>& tabStops);
+
+	bool canUndo() const;
+	bool undo();
+	void clearUndo();
+
 	/// Register a file-drop handler for both OLE CF_HDROP and WM_DROPFILES input.
 	/// The handler returns whether the files were accepted by the application.
 	void onFileDrop(std::function<bool (const std::vector<tstring>&, Point)> f);
@@ -262,7 +273,8 @@ public:
 
 	/** Set a "cue banner text", a text that will be displayed in dim color when the control
 	doesn't have any text set. Only works for single-line controls. */
-	void setCue(const tstring& text);
+	void setCue(const tstring& text, bool showWhileFocused = true);
+	tstring getCue(unsigned capacity = 256) const;
 
 	/// Returns the current selected text from the text box
 	/** The selected text of the text box is the return value from this.
@@ -284,6 +296,7 @@ public:
 	  * similar "secret" information.
 	  */
 	void setPassword( bool value = true, TCHAR pwdChar = '*' );
+	TCHAR getPasswordCharacter() const;
 
 	/// Adds (or removes) upper case forcing
 	/** If you pass false you remove this ability <br>
@@ -310,6 +323,7 @@ public:
 	/** Show a balloon popup; see the EM_SHOWBALLOONTIP doc for more info.
 	@param icon see the EDITBALLOONTIP doc for possible values. */
 	void showPopup(const tstring& title, const tstring& text, int icon);
+	bool hidePopup();
 
 	/// Actually creates the TextBox
 	/** You should call WidgetFactory::createTextBox if you instantiate class
@@ -438,8 +452,55 @@ inline bool TextBoxBase::getModify( ) {
 	return this->sendMessage( EM_GETMODIFY ) > 0;
 }
 
+inline Point TextBoxBase::getMargins() const {
+	const auto margins = static_cast<DWORD>(sendMessage(EM_GETMARGINS));
+	return Point(LOWORD(margins), HIWORD(margins));
+}
+
+inline void TextBoxBase::setMargins(const Point& margins) {
+	sendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
+		MAKELPARAM(margins.x, margins.y));
+}
+
+inline Rectangle TextBoxBase::getFormattingRect() const {
+	RECT rectangle = { 0 };
+	sendMessage(EM_GETRECT, 0, reinterpret_cast<LPARAM>(&rectangle));
+	return Rectangle(rectangle);
+}
+
+inline void TextBoxBase::setFormattingRect(const Rectangle& rectangle, bool redraw) {
+	const auto value = rectangle.toRECT();
+	sendMessage(redraw ? EM_SETRECT : EM_SETRECTNP, 0,
+		reinterpret_cast<LPARAM>(&value));
+}
+
+inline void TextBoxBase::resetFormattingRect(bool redraw) {
+	sendMessage(redraw ? EM_SETRECT : EM_SETRECTNP);
+}
+
+inline bool TextBoxBase::setTabStops(const std::vector<int>& tabStops) {
+	return sendMessage(EM_SETTABSTOPS, tabStops.size(),
+		tabStops.empty() ? 0 : reinterpret_cast<LPARAM>(tabStops.data())) != FALSE;
+}
+
+inline bool TextBoxBase::canUndo() const {
+	return sendMessage(EM_CANUNDO) != FALSE;
+}
+
+inline bool TextBoxBase::undo() {
+	return sendMessage(EM_UNDO) != FALSE;
+}
+
+inline void TextBoxBase::clearUndo() {
+	sendMessage(EM_EMPTYUNDOBUFFER);
+}
+
 inline void TextBox::setPassword( bool value, TCHAR pwdChar ) {
 	this->sendMessage(EM_SETPASSWORDCHAR, static_cast< WPARAM >( value ? pwdChar : 0 ));
+}
+
+inline TCHAR TextBox::getPasswordCharacter() const {
+	return static_cast<TCHAR>(sendMessage(EM_GETPASSWORDCHAR));
 }
 
 inline void TextBox::setNumbersOnly( bool value ) {

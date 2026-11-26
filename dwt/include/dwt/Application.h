@@ -93,19 +93,27 @@ public:
 	Appearance& getAppearance() { return *appearance; }
 	const Appearance& getAppearance() const { return *appearance; }
 
-	/// Returns the path to the process
+	/// Returns whether the DWT application runtime is currently initialized.
+	static bool isInitialized() noexcept;
+
+	/// Returns the module that contains this copy of DWT.
+	/** For shared-library builds this is the DLL module, not the host process. */
+	static HMODULE getModuleHandle() noexcept;
+
+	/// Returns the path to the module that contains DWT
 	/** NOTE! <br>
-	  * This function returns the PATH to the application WITHOUT the process image
-	  * name. <br>
-	  * If you want to have the path AND the FILENAME of the image process you must
+	  * This function returns the module path without its image name. In a static
+	  * build this is the application executable; in a shared build it is the DLL
+	  * that contains DWT. <br>
+	  * If you want to have the path and filename of the module you must
 	  * use Application::getModuleFileName.
 	  */
 	tstring getModulePath() const;
 
-	/// Returns the full filename to the process
+	/// Returns the full filename of the module that contains DWT
 	/** NOTE! <br>
-	  * This function returns the full filename to the application WITH the process
-	  * image name. <br>
+	  * In a static build this names the application executable; in a shared build
+	  * it names the DLL that contains DWT. <br>
 	  * If you want to have only the path you must use Application::getModulePath.
 	  */
 	tstring getModuleFileName() const;

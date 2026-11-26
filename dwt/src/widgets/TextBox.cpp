@@ -37,6 +37,9 @@
 #include <dwt/WidgetCreator.h>
 #include <dwt/util/check.h>
 
+#include <cstring>
+#include <limits>
+
 namespace dwt {
 
 TextBoxBase::TextBoxBase(Widget *parent, Dispatcher& dispatcher) :
@@ -336,16 +339,37 @@ void TextBox::setText(const tstring& txt) {
 	}
 }
 
-void TextBox::setCue(const tstring& text) {
-	Edit_SetCueBannerTextFocused(handle(), text.c_str(), TRUE);
+void TextBox::setCue(const tstring& text, bool showWhileFocused) {
+	Edit_SetCueBannerTextFocused(handle(), text.c_str(),
+		showWhileFocused ? TRUE : FALSE);
+}
+
+tstring TextBox::getCue(unsigned capacity) const {
+	if(!capacity) {
+		return tstring();
+	}
+	std::vector<TCHAR> buffer(capacity, _T('\0'));
+	return sendMessage(EM_GETCUEBANNER, reinterpret_cast<WPARAM>(buffer.data()),
+		static_cast<LPARAM>(buffer.size())) ? tstring(buffer.data()) : tstring();
 }
 
 tstring TextBox::getLine(int line) {
-	tstring tmp;
-	tmp.resize(std::max(2, lineLength(lineIndex(line))));
+	if(line < 0 || static_cast<unsigned>(line) >= getLineCount()) {
+		return tstring();
+	}
+	const auto length = std::max(0, lineLength(lineIndex(line)));
+	const auto capacity = std::min(
+		static_cast<size_t>(length) + 1,
+		static_cast<size_t>((std::numeric_limits<WORD>::max)()));
+	tstring tmp(std::max<size_t>(capacity, 2), _T('\0'));
 
-	*reinterpret_cast<WORD*>(&tmp[0]) = static_cast<WORD>(tmp.size());
-	tmp.resize(sendMessage(EM_GETLINE, static_cast<WPARAM>(line), reinterpret_cast<LPARAM>(&tmp[0])));
+	const WORD maximum = static_cast<WORD>(tmp.size());
+	std::memcpy(tmp.data(), &maximum, sizeof(maximum));
+	const auto copied = sendMessage(
+		EM_GETLINE, static_cast<WPARAM>(line),
+		reinterpret_cast<LPARAM>(tmp.data()));
+	tmp.resize(std::min<size_t>(
+		copied > 0 ? static_cast<size_t>(copied) : 0, tmp.size()));
 	return tmp;
 }
 
@@ -372,6 +396,10 @@ tstring TextBox::textUnderCursor(const ScreenCoordinate& p, bool includeSpaces) 
 void TextBox::showPopup(const tstring& title, const tstring& text, int icon) {
 	EDITBALLOONTIP tip { sizeof(EDITBALLOONTIP), title.c_str(), text.c_str(), icon };
 	Edit_ShowBalloonTip(handle(), &tip);
+}
+
+bool TextBox::hidePopup() {
+	return sendMessage(EM_HIDEBALLOONTIP) != FALSE;
 }
 
 tstring TextBox::getSelection() const
@@ -423,8 +451,10 @@ Point TextBoxBase::getPreferredSize() {
 	c.getTextMetrics(tmNew);
 
 	Point ret = c.getTextExtent(getText());
-	ret.x += GetSystemMetrics(SM_CXEDGE) * 2;
-	ret.y = lines * tmNew.tmHeight + std::min(tmNew.tmHeight, tmSys.tmHeight) / 2 + GetSystemMetrics(SM_CYEDGE) * 2;
+	ret.x += getSystemMetric(SM_CXEDGE) * 2;
+	ret.y = lines * tmNew.tmHeight +
+		std::min(tmNew.tmHeight, tmSys.tmHeight) / 2 +
+		getSystemMetric(SM_CYEDGE) * 2;
 	return ret;
 }
 

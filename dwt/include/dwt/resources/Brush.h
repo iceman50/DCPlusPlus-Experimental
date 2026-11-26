@@ -89,6 +89,12 @@ public:
 
 	Brush(COLORREF color);
 
+	/** Create a brush from a Win32 logical-brush description. */
+	Brush(const LOGBRUSH& brush);
+
+	/** Retrieve the Win32 logical-brush description. */
+	LOGBRUSH getLogBrush() const;
+
 private:
 	friend class Handle<GdiPolicy<HBRUSH> >;
 	typedef Handle<GdiPolicy<HBRUSH> > ResourceType;

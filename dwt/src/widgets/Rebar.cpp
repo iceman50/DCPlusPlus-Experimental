@@ -63,7 +63,8 @@ BaseType::Seed(WS_CHILD | WS_CLIPCHILDREN | CCS_NODIVIDER | RBS_AUTOSIZE | RBS_V
 }
 
 Rebar::Rebar(Widget* parent) :
-BaseType(parent, ChainingDispatcher::superClass<Rebar>())
+BaseType(parent, ChainingDispatcher::superClass<Rebar>()),
+imageList(nullptr)
 {
 }
 
@@ -104,11 +105,18 @@ void Rebar::add(Widget* w, unsigned style, const tstring& text) {
 
 	info.hwndChild = w->handle();
 
-	const Point size = w->getPreferredSize();
-	info.cxMinChild = size.x;
-	info.cyMinChild = size.y;
+	const Point preferredSize = w->getPreferredSize();
+	info.cxMinChild = preferredSize.x;
+	info.cyMinChild = preferredSize.y;
 
-	sendMessage(RB_INSERTBAND, static_cast<WPARAM>(-1), reinterpret_cast<LPARAM>(&info));
+	if(!sendMessage(RB_INSERTBAND, static_cast<WPARAM>(-1),
+		reinterpret_cast<LPARAM>(&info)))
+	{
+		if(size() == 0) {
+			setVisible(false);
+		}
+		throw Win32Exception("Unable to insert rebar band");
+	}
 }
 
 void Rebar::remove(Widget* w) {
@@ -130,6 +138,101 @@ bool Rebar::empty() const {
 
 unsigned Rebar::size() const {
 	return static_cast<unsigned>(sendMessage(RB_GETBANDCOUNT));
+}
+
+int Rebar::indexOf(Widget* widget) const {
+	if(!widget) {
+		return -1;
+	}
+	for(unsigned index = 0; index < size(); ++index) {
+		REBARBANDINFO info = { sizeof(REBARBANDINFO), RBBIM_CHILD };
+		if(sendMessage(RB_GETBANDINFO, index, reinterpret_cast<LPARAM>(&info)) &&
+			info.hwndChild == widget->handle())
+		{
+			return static_cast<int>(index);
+		}
+	}
+	return -1;
+}
+
+Rectangle Rebar::getBandRect(unsigned index) const {
+	RECT rectangle = { 0 };
+	return sendMessage(RB_GETRECT, index, reinterpret_cast<LPARAM>(&rectangle)) ?
+		Rectangle(rectangle) : Rectangle();
+}
+
+Rectangle Rebar::getBandBorders(unsigned index) const {
+	RECT borders = { 0 };
+	sendMessage(RB_GETBANDBORDERS, index, reinterpret_cast<LPARAM>(&borders));
+	return Rectangle(borders.left, borders.top, borders.right, borders.bottom);
+}
+
+int Rebar::getBarHeight() const {
+	return static_cast<int>(sendMessage(RB_GETBARHEIGHT));
+}
+
+int Rebar::getRowCount() const {
+	return static_cast<int>(sendMessage(RB_GETROWCOUNT));
+}
+
+int Rebar::getRowHeight(unsigned row) const {
+	return static_cast<int>(sendMessage(RB_GETROWHEIGHT, row));
+}
+
+COLORREF Rebar::getBackgroundColor() const {
+	return static_cast<COLORREF>(sendMessage(RB_GETBKCOLOR));
+}
+
+COLORREF Rebar::setBackgroundColor(COLORREF color) {
+	return static_cast<COLORREF>(sendMessage(RB_SETBKCOLOR, 0, color));
+}
+
+COLORREF Rebar::getTextColor() const {
+	return static_cast<COLORREF>(sendMessage(RB_GETTEXTCOLOR));
+}
+
+COLORREF Rebar::setTextColor(COLORREF color) {
+	return static_cast<COLORREF>(sendMessage(RB_SETTEXTCOLOR, 0, color));
+}
+
+DWORD Rebar::getExtendedStyle() const {
+	return static_cast<DWORD>(sendMessage(RB_GETEXTENDEDSTYLE));
+}
+
+bool Rebar::setImageList(ImageListPtr value) {
+	REBARINFO info = { sizeof(REBARINFO), RBIM_IMAGELIST,
+		value ? value->handle() : nullptr };
+	if(!sendMessage(RB_SETBARINFO, 0, reinterpret_cast<LPARAM>(&info))) {
+		return false;
+	}
+	imageList = value;
+	return true;
+}
+
+int Rebar::hitTest(const ScreenCoordinate& point, UINT* flags) const {
+	RBHITTESTINFO info = { screenToClient(point.getPoint()).toPOINT() };
+	const auto index = static_cast<int>(sendMessage(RB_HITTEST, 0,
+		reinterpret_cast<LPARAM>(&info)));
+	if(flags) {
+		*flags = info.flags;
+	}
+	return index;
+}
+
+bool Rebar::showBand(unsigned index, bool show) {
+	return sendMessage(RB_SHOWBAND, index, show ? TRUE : FALSE) != FALSE;
+}
+
+void Rebar::maximizeBand(unsigned index, bool ideal) {
+	sendMessage(RB_MAXIMIZEBAND, index, ideal ? TRUE : FALSE);
+}
+
+void Rebar::minimizeBand(unsigned index) {
+	sendMessage(RB_MINIMIZEBAND, index);
+}
+
+bool Rebar::moveBand(unsigned from, unsigned to) {
+	return sendMessage(RB_MOVEBAND, from, to) != FALSE;
 }
 
 bool Rebar::handleMessage(const MSG& msg, LRESULT& retVal) {

@@ -31,6 +31,7 @@
 */
 
 #include <dwt/widgets/MDIParent.h>
+#include <dwt/Application.h>
 #include <dwt/CanvasClasses.h>
 #include <dwt/DWTException.h>
 #include <dwt/resources/Bitmap.h>
@@ -127,7 +128,7 @@ void MDIParent::create( const Seed & cs )
 		cs.location.x(), cs.location.y(), cs.location.width(), cs.location.height(),
 		getParentHandle(),
 		cs.menuHandle,
-		::GetModuleHandle(NULL),
+		Application::getModuleHandle(),
 		reinterpret_cast< LPVOID >( &ccs ) );
 
 	if (wnd == NULL) {

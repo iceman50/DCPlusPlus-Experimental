@@ -33,6 +33,7 @@
 #include <dwt/resources/Region.h>
 
 #include <algorithm>
+#include <limits>
 
 #include <dwt/DWTException.h>
 #include <dwt/Point.h>
@@ -46,31 +47,100 @@ Region::Region(const Rectangle& rect) : Region(::CreateRectRgn(rect.left(), rect
 Region::Region(const Rectangle& rect, const Point& ellipseSize) :
 	Region(::CreateRoundRectRgn(rect.left(), rect.top(), rect.right(), rect.bottom(), ellipseSize.x, ellipseSize.y), true) { }
 
-int Region::combine(const Region& other, CombineMode mode) noexcept {
+int Region::combineInPlace(const Region& other, CombineMode mode) noexcept {
 	return ::CombineRgn(handle(), handle(), other.handle(), static_cast<int>(mode));
 }
 
 Region::Region(const std::vector<Point>& points, PolyFillMode mode)
 {
+	if(points.size() > static_cast<size_t>((std::numeric_limits<int>::max)())) {
+		throw DWTException("Too many points in polygon region");
+	}
 	std::vector<POINT> tmp(points.size());
-  std::transform(points.begin(), points.end(), tmp.begin(), [](const Point& pt) { return pt.toPOINT(); });
-	init(::CreatePolygonRgn(&tmp[0], static_cast<int>(tmp.size()), mode), true);
+	std::transform(points.begin(), points.end(), tmp.begin(),
+		[](const Point& pt) { return pt.toPOINT(); });
+	const auto region = tmp.empty() ?
+		::CreateRectRgn(0, 0, 0, 0) :
+		::CreatePolygonRgn(tmp.data(), static_cast<int>(tmp.size()), mode);
+	if(!region) {
+		throw Win32Exception("Unable to create polygon region");
+	}
+	init(region, true);
 }
 
-RegionPtr Region::transform(const PXFORM pxform) const {
+RegionPtr Region::transform(const XFORM* transform) const {
 	DWORD bytes = ::GetRegionData(handle(), 0, NULL);
 	if(!bytes)
 		throw Win32Exception("1st GetRegionData in Region::transform failed");
 
 	std::vector<char> data(bytes);
-	if(!::GetRegionData(handle(), bytes, reinterpret_cast<PRGNDATA>(&data[0])))
+	if(!::GetRegionData(handle(), bytes, reinterpret_cast<PRGNDATA>(data.data())))
 		throw Win32Exception("2nd GetRegionData in Region::transform failed");
 
-	HRGN transformed = ::ExtCreateRegion(pxform, bytes, reinterpret_cast<PRGNDATA>(&data[0]));
+	HRGN transformed = ::ExtCreateRegion(
+		transform, bytes, reinterpret_cast<PRGNDATA>(data.data()));
 	if(!transformed)
 		throw Win32Exception("ExtCreateRegion in Region::transform failed");
 
 	return RegionPtr(new Region(transformed));
+}
+
+RegionPtr Region::transform(const XFORM& transform) const {
+	return this->transform(&transform);
+}
+
+int Region::getType() const {
+	RECT bounds = { 0 };
+	const auto result = ::GetRgnBox(handle(), &bounds);
+	if(result == ERROR) {
+		throw Win32Exception("Unable to query region bounds");
+	}
+	return result;
+}
+
+Rectangle Region::getBounds() const {
+	RECT bounds = { 0 };
+	if(::GetRgnBox(handle(), &bounds) == ERROR) {
+		throw Win32Exception("Unable to query region bounds");
+	}
+	return Rectangle(bounds);
+}
+
+bool Region::empty() const {
+	return getType() == NULLREGION;
+}
+
+bool Region::contains(const Point& point) const {
+	return ::PtInRegion(handle(), point.x, point.y) != FALSE;
+}
+
+bool Region::intersects(const Rectangle& rectangle) const {
+	auto bounds = rectangle.normalized().toRECT();
+	return ::RectInRegion(handle(), &bounds) != FALSE;
+}
+
+bool Region::equals(const Region& other) const {
+	return ::EqualRgn(handle(), other.handle()) != FALSE;
+}
+
+int Region::offset(const Point& amount) {
+	const auto result = ::OffsetRgn(handle(), amount.x, amount.y);
+	if(result == ERROR) {
+		throw Win32Exception("Unable to offset region");
+	}
+	return result;
+}
+
+RegionPtr Region::combine(const Region& other, CombineMode mode) const {
+	auto destination = ::CreateRectRgn(0, 0, 0, 0);
+	if(!destination) {
+		throw Win32Exception("Unable to create combined region");
+	}
+	RegionPtr result(new Region(destination));
+	if(::CombineRgn(result->handle(), handle(), other.handle(), mode) == ERROR) {
+		throw Win32Exception("Unable to combine regions");
+	}
+	return result;
 }
 
 }

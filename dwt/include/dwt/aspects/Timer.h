@@ -32,7 +32,10 @@
 #ifndef DWT_ASPECTTIMER_H_
 #define DWT_ASPECTTIMER_H_
 
+#include "../DWTException.h"
 #include "../Message.h"
+
+#include <atomic>
 
 namespace dwt { namespace aspects {
 
@@ -49,18 +52,33 @@ public:
 	  * If your event handler returns true, it will keep getting called periodically, otherwise
 	  * it will be removed.
 	  */
-	void setTimer(std::function<bool ()> f, unsigned int milliSeconds, unsigned int id = 0) {
+	UINT_PTR setTimer(std::function<bool ()> f, unsigned int milliSeconds, UINT_PTR id = 0) {
 		if(milliSeconds) {
-			::SetTimer(H(), id, milliSeconds, 0);
-			W().setCallback(Message(WM_TIMER, id), [f](const MSG& msg, LRESULT&) -> bool {
+			if(id == 0) {
+				static std::atomic<UINT_PTR> nextId { 1 };
+				do {
+					id = nextId.fetch_add(1, std::memory_order_relaxed);
+				} while(id == 0);
+			}
+
+			const auto actualId = ::SetTimer(H(), id, milliSeconds, nullptr);
+			if(actualId == 0) {
+				throw Win32Exception("Unable to create widget timer");
+			}
+
+			W().setCallback(Message(WM_TIMER, static_cast<LPARAM>(actualId)), [f](const MSG& msg, LRESULT&) -> bool {
 				if(!f()) {
 					/// @todo remove from message map as well...
 					::KillTimer(msg.hwnd, msg.wParam);
 				}
 				return true;
 			});
+			return actualId;
 		} else {
-			::KillTimer(H(), id);
+			if(id != 0) {
+				::KillTimer(H(), id);
+			}
+			return id;
 		}
 	}
 };

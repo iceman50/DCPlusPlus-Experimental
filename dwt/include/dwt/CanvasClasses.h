@@ -37,11 +37,16 @@
 #ifndef DWT_CanvasClasses_h
 #define DWT_CanvasClasses_h
 
+#include "DWTException.h"
 #include "Widget.h"
 #include "resources/Bitmap.h"
 #include "resources/Font.h"
 #include "resources/Icon.h"
 #include "resources/Region.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <limits>
 
 namespace dwt {
 
@@ -98,7 +103,10 @@ public:
 	  */
 	template<typename InitT> // InitT can be a widget pointer or an HDC
 	BufferedCanvas(InitT initT, long width = 0, long height = 0) :
-	CanvasType(initT), itsSource(0), itsBitmap(0), itsOldBitmap(0)
+	CanvasType(initT),
+	itsSource(nullptr),
+	itsBitmap(nullptr),
+	itsOldBitmap(nullptr)
 	{
 		init(this->CanvasType::itsHdc, width, height);
 	}
@@ -130,15 +138,12 @@ public:
 	  */
 	virtual ~BufferedCanvas() {
 		if(this->CanvasType::itsHdc) {
-			// restore and delete the buffer bitmap
 			if(itsOldBitmap) {
 				::SelectObject(this->CanvasType::itsHdc, itsOldBitmap);
 			}
 			if(itsBitmap) {
 				::DeleteObject(itsBitmap);
 			}
-
-			// delete buffer
 			::DeleteDC(this->CanvasType::itsHdc);
 		}
 
@@ -153,6 +158,11 @@ public:
 	  * to that constructor.
 	  */
 	void blast(const Rectangle& rectangle) {
+		if(!itsSource || !this->CanvasType::itsHdc ||
+			rectangle.width() <= 0 || rectangle.height() <= 0)
+		{
+			return;
+		}
 		// note; ::BitBlt might fail with ERROR_INVALID_HANDLE when the desktop isn't visible
 		::BitBlt(itsSource, rectangle.x(), rectangle.y(), rectangle.width(), rectangle.height(), this->CanvasType::itsHdc,
 			rectangle.x(), rectangle.y(), SRCCOPY);
@@ -161,26 +171,43 @@ public:
 private:
 	/// Creates and inits back-buffer for the given source
 	void init(HDC source, long width, long height, bool addScreenSize = true) {
-		if(addScreenSize) {
-			// Preserve the original constructor's coordinate range and sizing behavior.
-			width += this->getDeviceCaps(HORZRES);
-			height += this->getDeviceCaps(VERTRES);
+		if(!source) {
+			throw DWTException("Cannot create a buffered canvas from a null device context");
+		}
+		// the buffer might have to be larger than the screen size
+		const std::int64_t requestedWidth =
+			(addScreenSize ? std::max(1, ::GetDeviceCaps(source, HORZRES)) : 0) +
+			std::max<std::int64_t>(0, width);
+		const std::int64_t requestedHeight =
+			(addScreenSize ? std::max(1, ::GetDeviceCaps(source, VERTRES)) : 0) +
+			std::max<std::int64_t>(0, height);
+		if(requestedWidth > (std::numeric_limits<int>::max)() ||
+			requestedHeight > (std::numeric_limits<int>::max)())
+		{
+			throw DWTException("Buffered canvas dimensions are too large");
 		}
 
-		// create memory buffer for the source and reset itsHDC
+		auto buffer = ::CreateCompatibleDC(source);
+		if(!buffer) {
+			throw Win32Exception("Unable to create a buffered canvas");
+		}
+		auto bitmap = ::CreateCompatibleBitmap(
+			source, static_cast<int>(requestedWidth), static_cast<int>(requestedHeight));
+		if(!bitmap) {
+			::DeleteDC(buffer);
+			throw Win32Exception("Unable to create a buffered canvas bitmap");
+		}
+		auto oldBitmap = reinterpret_cast<HBITMAP>(::SelectObject(buffer, bitmap));
+		if(!oldBitmap || oldBitmap == reinterpret_cast<HBITMAP>(HGDI_ERROR)) {
+			::DeleteObject(bitmap);
+			::DeleteDC(buffer);
+			throw Win32Exception("Unable to select a buffered canvas bitmap");
+		}
+
 		itsSource = source;
-		this->CanvasType::itsHdc = ::CreateCompatibleDC(source);
-
-		// create and select bitmap for buffer
-		if(this->CanvasType::itsHdc) {
-			itsBitmap = ::CreateCompatibleBitmap(source, width, height);
-			if(itsBitmap) {
-				auto oldBitmap = ::SelectObject(this->CanvasType::itsHdc, itsBitmap);
-				if(oldBitmap != HGDI_ERROR) {
-					itsOldBitmap = reinterpret_cast<HBITMAP>(oldBitmap);
-				}
-			}
-		}
+		itsBitmap = bitmap;
+		itsOldBitmap = oldBitmap;
+		this->CanvasType::itsHdc = buffer;
 	}
 
 	HDC itsSource; /// Buffer source
@@ -232,18 +259,35 @@ class Canvas
 	class Selector {
 	public:
 		template<typename T>
-		Selector(Canvas& canvas_, T& t) : canvas(&canvas_), h(::SelectObject(canvas->handle(), t.handle())) { }
+		Selector(Canvas& canvas_, T& t) :
+			canvas(&canvas_), h(::SelectObject(canvas->handle(), t.handle()))
+		{
+			if(!h || h == HGDI_ERROR) {
+				canvas = nullptr;
+				throw Win32Exception("Unable to select a GDI object");
+			}
+		}
 
 		Selector(const Selector&) = delete;
 		Selector& operator=(const Selector&) = delete;
 
-		Selector(Selector &&rhs) : canvas(rhs.canvas), h(rhs.h) { rhs.canvas = nullptr; }
-		// Reassignment can discard restoration state and break nested selections.
+		Selector(Selector &&rhs) noexcept : canvas(rhs.canvas), h(rhs.h) {
+			rhs.canvas = nullptr;
+			rhs.h = nullptr;
+		}
 		Selector& operator=(Selector&&) = delete;
 
-		~Selector() { if(canvas) ::SelectObject(canvas->handle(), h); }
+		~Selector() { restore(); }
 
 	private:
+		void restore() noexcept {
+			if(canvas && h) {
+				::SelectObject(canvas->handle(), h);
+			}
+			canvas = nullptr;
+			h = nullptr;
+		}
+
 		Canvas* canvas;
 		HGDIOBJ h;
 	};
@@ -255,12 +299,17 @@ class Canvas
 		BkMode(const BkMode&) = delete;
 		BkMode& operator=(const BkMode&) = delete;
 
-		BkMode(BkMode &&rhs) : canvas(rhs.canvas), prevMode(rhs.prevMode) { rhs.canvas = nullptr; }
+		BkMode(BkMode &&rhs) noexcept : canvas(rhs.canvas), prevMode(rhs.prevMode) {
+			rhs.canvas = nullptr;
+			rhs.prevMode = 0;
+		}
 		BkMode& operator=(BkMode&&) = delete;
 
 		~BkMode();
 
 	private:
+		void restore() noexcept;
+
 		Canvas* canvas;
 		int prevMode;
 	};
@@ -269,13 +318,34 @@ public:
 	Canvas(const Canvas&) = delete;
 	Canvas& operator=(const Canvas&) = delete;
 
+	/** Saved device-context state that is restored when this object is destroyed. */
+	class State {
+	public:
+		State(const State&) = delete;
+		State& operator=(const State&) = delete;
+		State(State&& other) noexcept;
+		State& operator=(State&& other) noexcept;
+		~State();
+
+	private:
+		friend class Canvas;
+		explicit State(Canvas& canvas);
+		void restore() noexcept;
+
+		Canvas* canvas;
+		int savedState;
+	};
+
+	/** Save all restorable device-context attributes for this scope. */
+	State save();
+
 	CanvasState saveState() const noexcept { return CanvasState(handle()); }
 
 	/** select a new resource (brush / font / pen / etc).
 	* @return object that restores the previous resource when destroyed.
 	*/
-	template<typename T> Selector select(T&& t) {
-		return Selector(*this, std::forward<T>(t));
+	template<typename T> Selector select(T& t) {
+		return Selector(*this, t);
 	}
 
 	/// Returns the Device Context for the Canvas
@@ -287,6 +357,9 @@ public:
 	/** HORZRES, VERTRES give pixels
 	  */
 	int getDeviceCaps( int nIndex );
+
+	/** Return the current drawing position. */
+	Point getCurrentPosition() const;
 
 	/// Moves to a X,Y point.  (But does not draw).
 	/** Moves to x,y in the Device Context of the object.
@@ -337,6 +410,12 @@ public:
 	  */
 	void polygon( POINT points[], unsigned count );
 
+	/** Draw connected line segments without filling them. */
+	void polyline(const std::vector<Point>& points);
+
+	/** Draw one or more cubic Bezier curves. */
+	void polyBezier(const std::vector<Point>& points);
+
 	/// Draws an ellipse in the Device Context.
 	/** Draws an ellipse from (left, top) to (right, bottom).
 	  */
@@ -359,6 +438,9 @@ public:
 	  */
 	void rectangle( const dwt::Rectangle & rect );
 
+	/** Draw a rounded rectangle using the current pen and brush. */
+	void roundRectangle(const dwt::Rectangle& rect, const Point& ellipseSize);
+
 	/// Fills a Rectangle in the Device Context with the given brush.
 	/** Fills a Rectangle from (left, top) to (right, bottom).
 	  */
@@ -371,6 +453,9 @@ public:
 
 	/** Fills "region" with "brush". */
 	void fill(const Region& region, const Brush& brush);
+
+	/** Draw a one-unit frame around a rectangle. */
+	void frame(const Rectangle& rect, const Brush& brush);
 
 	/// Sets the pixel at (x,y) to be pixcolor. Returns the old pixel color.
 	/** Sets the pixel at (x,y) to be pixcol
@@ -401,6 +486,19 @@ public:
 
 	/// invert the colors in the specified region; see the InvertRgn doc for more information.
 	void invert(const Region& region);
+	void invert(const Rectangle& rectangle);
+
+	/** Select, intersect, or exclude portions of the device-context clipping region. */
+	int selectClip(const Region* region = nullptr);
+	int intersectClip(const Rectangle& rectangle);
+	int excludeClip(const Rectangle& rectangle);
+	Rectangle getClipBounds(int* complexity = nullptr) const;
+
+	/** Copy pixels between canvases. */
+	bool bitBlt(const Rectangle& destination, const Canvas& source,
+		const Point& sourcePosition, DWORD operation = SRCCOPY);
+	bool stretchBlt(const Rectangle& destination, const Canvas& source,
+		const Rectangle& sourceRectangle, DWORD operation = SRCCOPY);
 
 	void drawIcon(const IconPtr& icon, const Rectangle& rectangle);
 
@@ -573,13 +671,18 @@ public:
 	BoundCanvas(widget)
 	{
 		itsHdc = windowDC ? ::GetWindowDC(itsHandle) : ::GetDC(itsHandle);
+		if(!itsHdc) {
+			throw Win32Exception("Unable to acquire a window device context");
+		}
 	}
 
 	/// DTOR, automatically calls ReleaseDC
 	/** Automtaically releases the Device Context
 	  */
 	virtual ~UpdateCanvas_() {
-		::ReleaseDC(itsHandle, itsHdc);
+		if(itsHdc) {
+			::ReleaseDC(itsHandle, itsHdc);
+		}
 	}
 };
 typedef UpdateCanvas_<false> UpdateCanvas;

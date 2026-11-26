@@ -82,6 +82,14 @@ Rectangle Frame::getContentRect() const {
 	return Rectangle(std::min(edgeX, size.x / 2), top, std::max(0L, size.x - edgeX * 2), std::max(0L, size.y - top - edgeY));
 }
 
+void Frame::onContentLayout(const std::function<void()>& callback) {
+	onSized([callback](const SizedEvent&) { callback(); });
+	addCallback(Message(frameLayoutMessage()), [callback](const MSG&, LRESULT&) {
+		callback();
+		return false;
+	});
+}
+
 bool Frame::adjustContentRect(RECT& rect) const {
 	if(!manualFrame) return adjustWindowRect(rect, ::GetMenu(handle()) != nullptr);
 	const auto border = getDialogBorderWidth();
@@ -192,10 +200,10 @@ bool Frame::handleMessage(const MSG& msg, LRESULT& result) {
 		if(clientFrame && clientFrame->handleFrameMessage(msg, result)) return true;
 	}
 
+	if(msg.message == frameLayoutMessage()) refreshClientFrame();
 	const bool handled = BaseType::handleMessage(msg, result);
 	if(msg.message == WM_UNINITMENUPOPUP && clientFrame && reinterpret_cast<HMENU>(msg.wParam) == ::GetSystemMenu(handle(), FALSE)) clientFrame->restoreSystemMenu();
 	if(msg.message == frameLayoutMessage()) {
-		refreshClientFrame();
 		layout();
 		result = 0;
 		return true;
@@ -272,7 +280,7 @@ void Frame::paintDialogBorder(HDC dc) {
 	const auto size = getClientSize();
 	const auto border = std::min(getDialogBorderWidth(), std::min(size.x, size.y) / 2);
 	if(border > 0) {
-		const auto& colors = getAppearance().getPalette();
+		const auto colors = getAppearance().getDrawPalette();
 		Brush brush(clientFrame && clientFrame->isActive() ? colors.border : Appearance::blend(colors.background, colors.border, 128));
 		canvas.fill(Rectangle(0, 0, size.x, border), brush);
 		canvas.fill(Rectangle(0, size.y - border, size.x, border), brush);

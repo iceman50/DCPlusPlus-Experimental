@@ -55,11 +55,21 @@ void GroupBox::create( const GroupBox::Seed & cs ) {
 	BaseType::create(cs);
 	setFont(cs.font);
 
-	padding.x = ::GetSystemMetrics(SM_CXEDGE) * 2 + cs.padding.x * 2;
-	padding.y = ::GetSystemMetrics(SM_CYEDGE) + cs.padding.y * 2; // ignore the top border
+	logicalPadding = cs.padding;
+	updatePadding();
 
 	onEnabled([this](bool b) { handleEnabled(b); });
 	onWindowPosChanged([this](const Rectangle &) { layout(); });
+	onDpiResourcesChanged([this](const DpiResourceEvent&) {
+		updatePadding();
+	});
+}
+
+void GroupBox::updatePadding() {
+	padding.x = getSystemMetric(SM_CXEDGE) * 2 +
+		std::max<long>(0, scale(logicalPadding.x)) * 2;
+	padding.y = getSystemMetric(SM_CYEDGE) +
+		std::max<long>(0, scale(logicalPadding.y)) * 2; // ignore the top border
 }
 
 void GroupBox::appearanceChanged() {

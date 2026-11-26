@@ -39,6 +39,7 @@
 
 #include "Control.h"
 #include "../aspects/CustomDraw.h"
+#include "../resources/ImageList.h"
 
 namespace dwt {
 
@@ -99,6 +100,25 @@ public:
 	bool empty() const;
 	unsigned size() const;
 
+	int indexOf(Widget* widget) const;
+	Rectangle getBandRect(unsigned index) const;
+	/** Return border widths in left/top/width/height respectively. */
+	Rectangle getBandBorders(unsigned index) const;
+	int getBarHeight() const;
+	int getRowCount() const;
+	int getRowHeight(unsigned row) const;
+	COLORREF getBackgroundColor() const;
+	COLORREF setBackgroundColor(COLORREF color);
+	COLORREF getTextColor() const;
+	COLORREF setTextColor(COLORREF color);
+	DWORD getExtendedStyle() const;
+	bool setImageList(ImageListPtr imageList);
+	int hitTest(const ScreenCoordinate& point, UINT* flags = nullptr) const;
+	bool showBand(unsigned index, bool show = true);
+	void maximizeBand(unsigned index, bool ideal = true);
+	void minimizeBand(unsigned index);
+	bool moveBand(unsigned from, unsigned to);
+
 	virtual bool handleMessage(const MSG& msg, LRESULT& retVal);
 
 protected:
@@ -109,6 +129,7 @@ protected:
 private:
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
+	ImageListPtr imageList;
 
 	void handlePainting(NMCUSTOMDRAW& data);
 };

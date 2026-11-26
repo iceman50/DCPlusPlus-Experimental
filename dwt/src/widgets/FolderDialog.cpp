@@ -194,7 +194,7 @@ bool FolderDialog::open(tstring& dir) {
 	util::win32::FileDialogEvents restrictedEvents;
 	addRootRestriction(dialogOptions, pidlRoot, restrictedEvents);
 	std::vector<tstring> paths;
-	if(!util::win32::showFileDialog(dialogOptions, paths)) {
+	if(!util::win32::showFileDialog(dialogOptions, paths) || paths.empty()) {
 		return false;
 	}
 	dir = paths.front();
@@ -211,7 +211,7 @@ bool FolderDialog::openShellItem(util::win32::FileDialogResult& result) {
 	addRootRestriction(dialogOptions, pidlRoot, restrictedEvents);
 
 	std::vector<util::win32::FileDialogResult> results;
-	if(!util::win32::showFileDialogItems(dialogOptions, results)) {
+	if(!util::win32::showFileDialogItems(dialogOptions, results) || results.empty()) {
 		return false;
 	}
 	result = std::move(results.front());

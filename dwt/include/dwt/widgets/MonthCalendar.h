@@ -34,6 +34,7 @@
 
 #include "Control.h"
 
+#include <array>
 #include <optional>
 #include <utility>
 
@@ -101,10 +102,15 @@ public:
 	virtual Point getPreferredSize();
 
 protected:
+	void appearanceChanged() override;
 	explicit MonthCalendar(Widget* parent);
 	virtual ~MonthCalendar() { }
 
 private:
+	// Indexed by the six MCSC_* calendar parts. NaC follows the active palette.
+	std::array<COLORREF, MCSC_TRAILINGTEXT + 1> explicitColors{NaC, NaC, NaC, NaC, NaC, NaC};
+	bool manualColors = false;
+	COLORREF partColor(int part) const;
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
 };
@@ -236,10 +242,6 @@ inline int MonthCalendar::setMonthDelta(int months) {
 
 inline COLORREF MonthCalendar::getColor(int part) const {
 	return static_cast<COLORREF>(MonthCal_GetColor(handle(), part));
-}
-
-inline COLORREF MonthCalendar::setColor(int part, COLORREF color) {
-	return static_cast<COLORREF>(MonthCal_SetColor(handle(), part, color));
 }
 
 inline bool MonthCalendar::getUnicodeFormat() const {

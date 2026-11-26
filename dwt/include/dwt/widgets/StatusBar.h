@@ -104,6 +104,7 @@ public:
 	* note: setting "alwaysResize" to true for often changing parts might result in flickering.
 	*/
 	void setText(unsigned part, const tstring& text, bool alwaysResize = false);
+	tstring getText(unsigned part) const;
 
 	/**
 	* Sets the icon of the given part.
@@ -114,6 +115,16 @@ public:
 	* note: setting "alwaysResize" to true for often changing parts might result in flickering.
 	*/
 	void setIcon(unsigned part, const IconPtr& icon, bool alwaysResize = false);
+	HICON getIcon(unsigned part) const;
+	Rectangle getPartRect(unsigned part) const;
+	unsigned size() const;
+
+	void setSimple(bool simple = true);
+	bool isSimple() const;
+	void setSimpleText(const tstring& text, unsigned style = 0);
+	void setMinimumHeight(int height);
+	bool getUnicodeFormat() const;
+	bool setUnicodeFormat(bool unicode);
 
 	void setToolTip(unsigned part, const tstring& text);
 

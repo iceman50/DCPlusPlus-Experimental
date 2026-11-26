@@ -147,6 +147,32 @@ public:
 	/** Get a widget that controls the text box used by this combo box. */
 	TextBoxPtr getTextBox();
 
+	/** Show or hide the drop-down list and query its current state. */
+	void showDropDown(bool show = true);
+	bool isDroppedDown() const;
+
+	int getDroppedWidth() const;
+	int setDroppedWidth(int width);
+	Rectangle getDroppedRect() const;
+
+	int getTopIndex() const;
+	bool setTopIndex(int index);
+	int getHorizontalExtent() const;
+	void setHorizontalExtent(int width);
+
+	int getItemHeight(int index = -1) const;
+	bool setItemHeight(int height, int index = -1);
+	std::pair<int, int> getEditSelection() const;
+	bool setEditSelection(int start, int end);
+
+	LCID getLocale() const;
+	LCID setLocale(LCID locale);
+	int getMinimumVisibleItems() const;
+	bool setMinimumVisibleItems(int count);
+	bool getExtendedUI() const;
+	bool setExtendedUI(bool extended);
+	COMBOBOXINFO getInfo() const;
+
 	virtual Point getPreferredSize();
 
 	using aspects::Clickable<ThisType>::onClicked;

@@ -111,6 +111,8 @@ public:
 
 	/** Client coordinates available for application content, below custom chrome. */
 	Rectangle getContentRect() const;
+	/** Lay out application content after a resize or a change to the client caption/menu. */
+	void onContentLayout(const std::function<void()>& callback);
 	/** Painted outer edge of a custom modal frame, in physical pixels. */
 	long getDialogBorderWidth() const;
 	bool usesClientFrame() const { return manualFrame; }

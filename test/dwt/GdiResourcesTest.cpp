@@ -188,13 +188,13 @@ void regionTests() {
 		dwt::Region actual(dwt::Rectangle(0, 0, 10, 10)), other(dwt::Rectangle(5, 5, 10, 10));
 		dwt::Region expected(dwt::Rectangle(0, 0, 10, 10));
 		const int result = ::CombineRgn(expected.handle(), expected.handle(), other.handle(), static_cast<int>(mode));
-		check(actual.combine(other, mode) == result && ::EqualRgn(actual.handle(), expected.handle()), "Region operation differs from Win32");
+		check(actual.combineInPlace(other, mode) == result && ::EqualRgn(actual.handle(), expected.handle()), "Region operation differs from Win32");
 		check(::PtInRegion(other.handle(), 14, 14), "Region operation modified source");
 	}
 	dwt::Region empty(dwt::Rectangle(0, 0, 10, 10));
-	check(empty.combine(empty, dwt::Region::CombineMode::Difference) == NULLREGION, "Empty result treated as failure");
+	check(empty.combineInPlace(empty, dwt::Region::CombineMode::Difference) == NULLREGION, "Empty result treated as failure");
 	dwt::Region invalid(static_cast<HRGN>(nullptr));
-	check(empty.combine(invalid, dwt::Region::CombineMode::Union) == ERROR, "Invalid region not reported");
+	check(empty.combineInPlace(invalid, dwt::Region::CombineMode::Union) == ERROR, "Invalid region not reported");
 	dwt::Region rounded(dwt::Rectangle(2, 3, 30, 40), dwt::Point(8, 10));
 	dwt::Region reference(::CreateRoundRectRgn(2, 3, 32, 43, 8, 10));
 	check(rounded.handle() && ::EqualRgn(rounded.handle(), reference.handle()), "Rounded rectangle bounds changed");

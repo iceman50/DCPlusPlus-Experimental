@@ -45,4 +45,14 @@ Brush::Brush(COLORREF color) : Brush(::CreateSolidBrush(color), true) {
 
 }
 
+Brush::Brush(const LOGBRUSH& brush) : Brush(::CreateBrushIndirect(&brush), true) {
+
+}
+
+LOGBRUSH Brush::getLogBrush() const {
+	LOGBRUSH brush = { };
+	::GetObject(handle(), sizeof(brush), &brush);
+	return brush;
+}
+
 }

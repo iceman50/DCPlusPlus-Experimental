@@ -40,6 +40,7 @@
 #include "Widget.h"
 
 #include <memory>
+#include <type_traits>
 
 namespace dwt {
 
@@ -58,16 +59,26 @@ public:
 	static typename WidgetType::ObjectType create( const typename WidgetType::Seed & cs )
 	{
 		typename WidgetType::ObjectType retVal(new WidgetType);
-		retVal->create( cs );
-		finalize(retVal);
+		try {
+			retVal->create(cs);
+			finalize(retVal);
+		} catch(...) {
+			destroyFailed(retVal);
+			throw;
+		}
 		return retVal;
 	}
 
 	static typename WidgetType::ObjectType create( Widget * parent, const typename WidgetType::Seed & cs )
 	{
 		typename WidgetType::ObjectType retVal(new WidgetType( parent ));
-		retVal->create( cs );
-		finalize(retVal);
+		try {
+			retVal->create(cs);
+			finalize(retVal);
+		} catch(...) {
+			destroyFailed(retVal);
+			throw;
+		}
 		return retVal;
 	}
 
@@ -75,16 +86,26 @@ public:
 	static typename WidgetType::ObjectType create( Widget * parent, ContainerType * container, const typename WidgetType::Seed & cs )
 	{
 		typename WidgetType::ObjectType retVal(new WidgetType( parent ));
-		retVal->create( container, cs );
-		finalize(retVal);
+		try {
+			retVal->create(container, cs);
+			finalize(retVal);
+		} catch(...) {
+			destroyFailed(retVal);
+			throw;
+		}
 		return retVal;
 	}
 
 	static typename WidgetType::ObjectType create( Widget * parent )
 	{
 		typename WidgetType::ObjectType retVal( new WidgetType( parent ) );
-		retVal->create();
-		finalize(retVal);
+		try {
+			retVal->create();
+			finalize(retVal);
+		} catch(...) {
+			destroyFailed(retVal);
+			throw;
+		}
 		return retVal;
 	}
 
@@ -92,12 +113,36 @@ public:
 	static typename WidgetType::ObjectType attach(Widget* parent, HWND hwnd)
 	{
 		typename WidgetType::ObjectType w(new WidgetType(parent));
-		w->setHandle(hwnd);
-		finalize(w);
+		try {
+			w->setHandle(hwnd);
+			finalize(w);
+		} catch(...) {
+			destroyFailed(w);
+			throw;
+		}
 		return w;
 	}
 
 private:
+	static void destroyFailed(typename WidgetType::ObjectType& widget) noexcept {
+		if(!widget) {
+			return;
+		}
+		if constexpr(std::is_pointer<typename WidgetType::ObjectType>::value) {
+			const auto window = widget->handle();
+			if(window && ::IsWindow(window)) {
+				::DestroyWindow(window);
+			} else {
+				delete widget;
+			}
+			widget = nullptr;
+		} else {
+			// Menu and Notification use unique ownership and non-HWND handles.
+			// Let their destructors release any partially-created native resource.
+			widget.reset();
+		}
+	}
+
 	static void finalize(Widget* object) {
 		object->finalizeAppearance();
 	}

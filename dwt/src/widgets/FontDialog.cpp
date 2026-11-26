@@ -47,6 +47,7 @@ itsParent(parent)
 }
 
 UINT_PTR CALLBACK FontDialog::CFHookProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	try {
 	switch(msg) {
 	case WM_INITDIALOG:
 		{
@@ -54,7 +55,12 @@ UINT_PTR CALLBACK FontDialog::CFHookProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 			actually quite legit as the resources for the font dialog have officially been
 			published (see Font.dlg in the MS SDK). */
 
-			Options& options = *reinterpret_cast<Options*>(reinterpret_cast<LPCHOOSEFONT>(lParam)->lCustData);
+			auto chooseFont = reinterpret_cast<LPCHOOSEFONT>(lParam);
+			if(!chooseFont || !chooseFont->lCustData) {
+				break;
+			}
+			Options& options =
+				*reinterpret_cast<Options*>(chooseFont->lCustData);
 
 			if(!options.strikeout) {
 				// remove the "Strikeout" box
@@ -104,20 +110,32 @@ UINT_PTR CALLBACK FontDialog::CFHookProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 			auto bkMode(canvas.setBkMode(true));
 
 			HWND box = ::GetDlgItem(hwnd, stc5);
+			if(!box) {
+				break;
+			}
 
-			::RECT rc;
-			::GetClientRect(box, &rc);
-			::MapWindowPoints(box, hwnd, reinterpret_cast<LPPOINT>(&rc), 2);
+			::RECT rc {};
+			if(!::GetClientRect(box, &rc)) {
+				break;
+			}
+			// MapWindowPoints may legitimately return zero when no translation is
+			// needed, so its return value cannot be used as a failure indicator.
+			::MapWindowPoints(
+				box, hwnd, reinterpret_cast<LPPOINT>(&rc), 2);
 			Rectangle rect { rc };
 
 			canvas.fill(rect, Brush(*reinterpret_cast<COLORREF*>(prop)));
 
 			HWND colorCombo = ::GetDlgItem(hwnd, cmb4);
 			int i = ComboBox_GetCurSel(colorCombo);
-			if(i != CB_ERR)
-				canvas.setTextColor(static_cast<COLORREF>(ComboBox_GetItemData(colorCombo, i)));
+			if(i != CB_ERR) {
+				const auto color = ComboBox_GetItemData(colorCombo, i);
+				if(color != CB_ERR) {
+					canvas.setTextColor(static_cast<COLORREF>(color));
+				}
+			}
 
-			LOGFONT logFont;
+			LOGFONT logFont {};
 			::SendMessage(hwnd, WM_CHOOSEFONT_GETLOGFONT, 0, reinterpret_cast<LPARAM>(&logFont));
 			Font font { logFont };
 			auto select(canvas.select(font));
@@ -131,6 +149,15 @@ UINT_PTR CALLBACK FontDialog::CFHookProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 			::RemoveProp(hwnd, _T("bgColor"));
 			break;
 		}
+	}
+	return 0;
+	} catch(const std::exception& error) {
+		::OutputDebugStringA("DWT FontDialog callback exception: ");
+		::OutputDebugStringA(error.what());
+		::OutputDebugStringA("\r\n");
+	} catch(...) {
+		::OutputDebugStringA(
+			"DWT FontDialog callback: unknown exception\r\n");
 	}
 	return 0;
 }

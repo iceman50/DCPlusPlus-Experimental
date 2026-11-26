@@ -29,7 +29,31 @@
 #include <dwt/DWTException.h>
 #include <dwt/util/win32/NativeDialogAppearance.h>
 
+#include <cstring>
 #include <sstream>
+
+namespace {
+
+using TaskDialogIndirectFunction = HRESULT (WINAPI *)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
+
+TaskDialogIndirectFunction resolveTaskDialogIndirect() noexcept {
+	static const TaskDialogIndirectFunction function = [] {
+		const auto module = ::GetModuleHandleW(L"comctl32.dll");
+		if(!module) {
+			return static_cast<TaskDialogIndirectFunction>(nullptr);
+		}
+
+		const auto symbol = ::GetProcAddress(module, "TaskDialogIndirect");
+		TaskDialogIndirectFunction resolved = nullptr;
+		static_assert(sizeof(resolved) == sizeof(symbol),
+			"Windows function and data pointers must be the same size");
+		std::memcpy(&resolved, &symbol, sizeof(resolved));
+		return resolved;
+	}();
+	return function;
+}
+
+}
 
 namespace dwt {
 
@@ -208,7 +232,7 @@ TaskDialog::Result TaskDialog::show() {
 
 	TASKDIALOGCONFIG config = { sizeof(TASKDIALOGCONFIG) };
 	config.hwndParent = parent ? parent->handle() : nullptr;
-	config.hInstance = ::GetModuleHandle(nullptr);
+	config.hInstance = Application::getModuleHandle();
 	config.dwFlags = flags;
 	config.dwCommonButtons = commonButtons;
 	config.pszWindowTitle = textOrNull(title);
@@ -247,7 +271,12 @@ TaskDialog::Result TaskDialog::show() {
 	BOOL checked = FALSE;
 	util::win32::NativeDialogAppearance appearance(
 		Application::instance().getAppearance());
-	auto status = ::TaskDialogIndirect(&config, &result.button, &result.radioButton, &checked);
+	const auto taskDialogIndirect = resolveTaskDialogIndirect();
+	if(!taskDialogIndirect) {
+		throw DWTException("TaskDialogIndirect is unavailable in the active common-controls library");
+	}
+
+	const auto status = taskDialogIndirect(&config, &result.button, &result.radioButton, &checked);
 	if(FAILED(status)) {
 		std::ostringstream message;
 		message << "TaskDialogIndirect failed (HRESULT 0x" << std::hex

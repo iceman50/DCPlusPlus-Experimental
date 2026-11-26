@@ -35,6 +35,7 @@
 */
 
 #include <dwt/resources/Icon.h>
+#include <dwt/Application.h>
 #include <dwt/resources/Bitmap.h>
 #include <dwt/resources/IconInfo.h>
 #include <dwt/DWTException.h>
@@ -56,7 +57,7 @@ resId(0)
 */
 
 Icon::Icon(const unsigned resourceId, const Point& size) :
-ResourceType((HICON)::LoadImage(::GetModuleHandle(NULL), MAKEINTRESOURCE(resourceId), IMAGE_ICON, size.x, size.y, LR_DEFAULTCOLOR)),
+ResourceType((HICON)::LoadImage(Application::getModuleHandle(), MAKEINTRESOURCE(resourceId), IMAGE_ICON, size.x, size.y, LR_DEFAULTCOLOR)),
 resId(resourceId)
 {
 	if(!handle()) {

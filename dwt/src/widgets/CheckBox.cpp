@@ -35,8 +35,8 @@
 
 namespace dwt {
 
-CheckBox::Seed::Seed(const tstring& caption) :
-	BaseType::Seed(caption, BS_AUTOCHECKBOX)
+CheckBox::Seed::Seed(const tstring& caption, Mode mode) :
+	BaseType::Seed(caption, mode == ThreeState ? BS_AUTO3STATE : BS_AUTOCHECKBOX)
 {
 
 }
