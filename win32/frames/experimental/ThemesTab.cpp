@@ -796,6 +796,7 @@ ThemeManager::Theme ThemesTab::snapshot() const {
 void ThemesTab::reloadThemes() {
 	const auto wasLoading = loading;
 	loading = true;
+	const auto width = themePreset->getPreferredSize().x;
 	presets = ThemeManager::getThemes();
 	themePreset->clear();
 	int selected = static_cast<int>(presets.size());
@@ -808,6 +809,14 @@ void ThemesTab::reloadThemes() {
 	themePreset->addValue(T_("Custom / current settings"));
 	themePreset->setSelected(selected);
 	loading = wasLoading;
+
+	// The list is as wide as its longest name. The tab was first laid out before the theme files
+	// were read, with only "Custom / current settings" in it, and the list widened at the next
+	// change of any option.
+	if(themePreset->getPreferredSize().x != width) {
+		invalidateLayout();
+		layout();
+	}
 }
 
 void ThemesTab::applyTheme(const ThemeManager::Theme& theme) {
