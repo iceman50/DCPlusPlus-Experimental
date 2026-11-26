@@ -127,12 +127,12 @@ BEGIN
         BEGIN
             VALUE "Comments", "https://github.com/iceman50/DCPlusPlus-Experimental"
             VALUE "FileDescription", "DC++"
-            VALUE "FileVersion", "0.8842-RC3"
+            VALUE "FileVersion", "0.8842-RC4"
             VALUE "InternalName", "DC++"
             VALUE "LegalCopyright", "Copyright 2001-2026 iceman50"
             VALUE "OriginalFilename", "DCPlusPlus.exe"
             VALUE "ProductName", "DC++"
-            VALUE "ProductVersion", "0.8842-RC3"
+            VALUE "ProductVersion", "0.8842-RC4"
         END
     END
     BLOCK "VarFileInfo"

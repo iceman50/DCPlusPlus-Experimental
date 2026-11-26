@@ -22,7 +22,7 @@
 #define FULL_APPNAME "DC++ Experimental"
 
 // don't forget to update the .rc file as well!
-#define VERSIONSTRING "0.8842-RC3"
+#define VERSIONSTRING "0.8842-RC4"
 #define VERSIONFLOAT 0.8842
 
 namespace dcpp {
