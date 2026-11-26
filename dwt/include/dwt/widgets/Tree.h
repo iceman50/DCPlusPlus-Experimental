@@ -79,6 +79,9 @@ class Tree :
 
 		/// Returns true if handled, else false
 		virtual bool handleMessage(const MSG &msg, LRESULT &retVal);
+
+	protected:
+		void appearanceChanged() override;
 	};
 
 	typedef TreeView* TreeViewPtr;
@@ -295,6 +298,8 @@ public:
 
 	/// @todo should not be public
 	HWND treeHandle() const { return tree->handle(); }
+	/** The tree's visual style: none with manual rendering, so that its palette colours are used. */
+	void updateTreeTheme();
 	/// Returns the embedded column header, creating it when necessary.
 	HeaderPtr getHeader();
 

@@ -439,9 +439,10 @@ void MDIClientDispatcher::setWindowProc(WNDPROC wndProc_) {
 	wndProc = wndProc_;
 }
 
-ChainingDispatcher::ChainingDispatcher(WNDCLASSEX& cls, WNDPROC wndProc_) :
+ChainingDispatcher::ChainingDispatcher(WNDCLASSEX& cls, WNDPROC wndProc_, LPCTSTR original_) :
 Dispatcher(cls),
-wndProc(wndProc_)
+wndProc(wndProc_),
+original(original_)
 { }
 
 LRESULT ChainingDispatcher::chain(const MSG& msg) {
@@ -459,7 +460,7 @@ std::unique_ptr<Dispatcher> ChainingDispatcher::superClass(LPCTSTR original, LPC
 
 	fillWndClass(orgClass, newName);
 
-	return std::unique_ptr<Dispatcher>(new ChainingDispatcher(orgClass, proc));
+	return std::unique_ptr<Dispatcher>(new ChainingDispatcher(orgClass, proc, original));
 }
 
 }

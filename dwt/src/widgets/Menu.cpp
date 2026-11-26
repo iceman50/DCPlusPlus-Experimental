@@ -43,6 +43,7 @@
 #include <dwt/DWTException.h>
 #include <dwt/util/check.h>
 #include <dwt/util/StringUtils.h>
+#include <dwt/util/win32/DarkMode.h>
 #include <dwt/dwt_vsstyle.h>
 #include <dwt/dwt_vssym32.h>
 
@@ -155,7 +156,10 @@ void Menu::applyBackground() {
 	}
 
 	MENUINFO info = { sizeof(MENUINFO), MIM_BACKGROUND };
-	info.hbrBack = root->appearance->isManual() && root->backgroundBrush ?
+	// In native dark mode Windows draws the background, dark; the menu bar's is painted on
+	// WM_UAHDRAWMENU.
+	info.hbrBack = root->appearance->isNativeDark() ? nullptr :
+		root->appearance->isManual() && root->backgroundBrush ?
 		root->backgroundBrush->handle() : ::GetSysColorBrush(COLOR_MENU);
 	::SetMenuInfo(handle(), &info);
 	for(auto& child: itsChildren) {
@@ -177,15 +181,18 @@ void Menu::updateAppearance() {
 	if(inheritsApplicationFont && applicationFont != appearance->getFont()) setFont(nullptr);
 	if(appearance->isManual()) {
 		theme.unload();
-		backgroundBrush = new Brush(colors.background);
+		// In native dark mode, the menu bar's colour (its gaps and edges): the window's.
+		backgroundBrush = new Brush(appearance->isNativeDark() ? appearance->getPalette().background :
+			colors.background);
 	} else {
 		theme.reload();
 		backgroundBrush.reset();
 	}
 	/* SetMenuItemInfo may synchronously repaint an attached menu bar. Prepare
-	 * every resource used by that paint before changing the owner-draw state. */
-	setOwnerDrawn(requestedOwnerDrawn || appearance->isManual() ||
-		(appearance->getFont() && !appearance->isHighContrast()));
+	 * every resource used by that paint before changing the owner-draw state.
+	 * In native dark mode Windows draws the items, dark, in its own font. */
+	setOwnerDrawn(!appearance->isNativeDark() && (requestedOwnerDrawn || appearance->isManual() ||
+		(appearance->getFont() && !appearance->isHighContrast())));
 	applyBackground();
 
 	if(getParent() && getParent()->handle() &&
@@ -316,7 +323,8 @@ LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 			 * Use the item bounds so wrapped rows and their text stay intact. */
 			POINT clientOrigin = { 0, 0 };
 			if(::ClientToScreen(window, &clientOrigin)) {
-				Brush background(root->appearance->getPalette().surface);
+				Brush background(root->appearance->isNativeDark() ? root->appearance->getPalette().background :
+					root->appearance->getPalette().surface);
 				auto paintEdge = [&](long top, long bottom) {
 					top = std::max(top, windowRect.top);
 					bottom = std::min(bottom, clientOrigin.y);
@@ -334,6 +342,64 @@ LRESULT Menu::handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam) {
 	}
 
 	return TRUE;
+}
+
+bool Menu::handleUahDraw(const MSG& msg, LRESULT& ret) {
+	using namespace util::win32::darkmode;
+	auto root = getRootMenu();
+	if(!root->appearance || !root->appearance->isNativeDark() || !msg.lParam) {
+		return false;
+	}
+	const auto window = getParent()->handle();
+	const auto& palette = root->appearance->getPalette();
+
+	if(msg.message == WM_UAHDRAWMENU) {
+		const auto& menu = *reinterpret_cast<const UAHMENU*>(msg.lParam);
+		MENUBARINFO bar = { sizeof(MENUBARINFO) };
+		RECT windowRect = { 0 };
+		if(::GetMenuBarInfo(window, OBJID_MENU, 0, &bar) && ::GetWindowRect(window, &windowRect)) {
+			RECT rect = bar.rcBar;
+			::OffsetRect(&rect, -windowRect.left, -windowRect.top);
+			// And the light line Windows leaves just above the bar.
+			rect.top -= 1;
+			Brush background(palette.background);
+			::FillRect(menu.hdc, &rect, background.handle());
+		}
+		ret = TRUE;
+		return true;
+	}
+
+	const auto& item = *reinterpret_cast<const UAHDRAWMENUITEM*>(msg.lParam);
+	TCHAR text[256] = { 0 };
+	MENUITEMINFO info = { sizeof(MENUITEMINFO), MIIM_STRING };
+	info.dwTypeData = text;
+	info.cch = static_cast<UINT>(_countof(text) - 1);
+	::GetMenuItemInfo(item.um.hmenu, item.umi.iPosition, TRUE, &info);
+
+	const auto state = item.dis.itemState;
+	const bool hot = (state & (ODS_HOTLIGHT | ODS_SELECTED)) != 0;
+	const auto hdc = item.um.hdc;
+	RECT rect = item.dis.rcItem;
+	Brush background(hot ? Appearance::blend(palette.background, palette.text, 40) : palette.background);
+	::FillRect(hdc, &rect, background.handle());
+
+	// Windows' menu font, as it draws the bar elsewhere.
+	FontPtr font;
+	NONCLIENTMETRICS metrics = { sizeof(NONCLIENTMETRICS) };
+	if(getParent()->getSystemParameters(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics)) {
+		font = new Font(metrics.lfMenuFont);
+	}
+	const auto previousFont = font ? ::SelectObject(hdc, font->handle()) : nullptr;
+	::SetBkMode(hdc, TRANSPARENT);
+	::SetTextColor(hdc, (state & (ODS_GRAYED | ODS_DISABLED)) ? palette.disabledText :
+		(state & ODS_INACTIVE) ? Appearance::blend(palette.text, palette.background, 96) : palette.text);
+	::DrawText(hdc, text, -1, &rect,
+		DT_CENTER | DT_SINGLELINE | DT_VCENTER | ((state & ODS_NOACCEL) ? DT_HIDEPREFIX : 0));
+	if(previousFont) {
+		::SelectObject(hdc, previousFont);
+	}
+	ret = TRUE;
+	return true;
 }
 
 void Menu::setMenu() {
@@ -358,6 +424,13 @@ void Menu::setMenu() {
 				ret = handleNCPaint(msg.message, msg.wParam, msg.lParam);
 				return true;
 			});
+	}
+	for(auto message: { util::win32::darkmode::WM_UAHDRAWMENU, util::win32::darkmode::WM_UAHDRAWMENUITEM }) {
+		auto& callback = message == util::win32::darkmode::WM_UAHDRAWMENU ? uahDrawCallback : uahDrawItemCallback;
+		if(!callback) {
+			callback = control->addInternalCallback(Message(message),
+				[this](const MSG& msg, LRESULT& ret) -> bool { return handleUahDraw(msg, ret); });
+		}
 	}
 	::DrawMenuBar(control->handle());
 }
@@ -455,6 +528,12 @@ Menu::~Menu() {
 		}
 		if(ncActivateCallback) {
 			parent->clearInternalCallback(Message(WM_NCACTIVATE), *ncActivateCallback);
+		}
+		if(uahDrawCallback) {
+			parent->clearInternalCallback(Message(util::win32::darkmode::WM_UAHDRAWMENU), *uahDrawCallback);
+		}
+		if(uahDrawItemCallback) {
+			parent->clearInternalCallback(Message(util::win32::darkmode::WM_UAHDRAWMENUITEM), *uahDrawItemCallback);
 		}
 	}
 	// destroy this menu.

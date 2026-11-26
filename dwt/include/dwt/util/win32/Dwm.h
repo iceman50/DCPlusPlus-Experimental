@@ -56,6 +56,7 @@ HRESULT getWindowAttribute(HWND window, DWMWINDOWATTRIBUTE attribute,
 HRESULT setWindowAttribute(HWND window, DWMWINDOWATTRIBUTE attribute,
 	LPCVOID value, DWORD size);
 /** Optional native-frame styling. Unsupported attributes return a failure.
+ * setDarkMode uses DWMWA_USE_IMMERSIVE_DARK_MODE, 20, or 19 on Windows 10 1903 and 1909.
  * defaultColor restores Windows' choice; dark mode remains a native preference.
  * These calls do not style client controls or implement high-contrast policy. */
 HRESULT setDarkMode(HWND window, bool enabled);

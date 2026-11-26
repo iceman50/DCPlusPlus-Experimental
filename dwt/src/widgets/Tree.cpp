@@ -131,8 +131,20 @@ void Tree::create( const Seed & cs )
 	layout();
 }
 
-void Tree::appearanceChanged() {
-	if(!tree || !tree->handle()) {
+void Tree::TreeView::appearanceChanged() {
+	// Also here: Appearance takes a native dark style off this window just before this runs (and
+	// puts one on just after), which may come after Tree::appearanceChanged. While the tree is
+	// being created, Tree::appearanceChanged does it once the tree is attached.
+	auto owner = static_cast<Tree*>(getParent());
+	if(owner->tree == this) {
+		owner->updateTreeTheme();
+	}
+	BaseType::appearanceChanged();
+}
+
+void Tree::updateTreeTheme() {
+	// In native dark mode Appearance gives the tree Windows' dark style.
+	if(getAppearance().isNativeDark()) {
 		return;
 	}
 	if(isManualAppearance()) {
@@ -140,10 +152,17 @@ void Tree::appearanceChanged() {
 	} else {
 		util::win32::uxtheme::setWindowTheme(treeHandle(), nullptr, nullptr);
 	}
+}
+
+void Tree::appearanceChanged() {
+	if(!tree || !tree->handle()) {
+		return;
+	}
+	updateTreeTheme();
 	if(!hasExplicitColors()) {
 		clearColorImpl();
 	}
-	setLineColor(isManualAppearance() ? getAppearance().getPalette().border :
+	setLineColor(usesPaletteColors() ? getAppearance().getPalette().border :
 		CLR_DEFAULT);
 	BaseType::appearanceChanged();
 	::InvalidateRect(treeHandle(), nullptr, TRUE);
@@ -151,9 +170,9 @@ void Tree::appearanceChanged() {
 
 void Tree::clearColorImpl() {
 	const auto& appearance = getAppearance();
-	setColorImpl(isManualAppearance() ? appearance.getPalette().text :
+	setColorImpl(usesPaletteColors() ? appearance.getPalette().text :
 		Color::predefined(COLOR_WINDOWTEXT),
-		isManualAppearance() ? appearance.getPalette().background :
+		usesPaletteColors() ? appearance.getPalette().background :
 		Color::predefined(COLOR_WINDOW));
 }
 
@@ -583,6 +602,10 @@ HeaderPtr Tree::getHeader() {
 }
 
 void Tree::layout() {
+	// Theming the tree as it is created can reach here before it is attached.
+	if(!tree) {
+		return;
+	}
 	auto client = getClientSize();
 	if(header) {
 		auto hsize = header->getPreferredSize();
@@ -762,7 +785,8 @@ LRESULT Tree::postPaint(NMTVCUSTOMDRAW& nmcd) {
 }
 
 LRESULT Tree::drawAppearance(NMTVCUSTOMDRAW& data) {
-	if(!isManualAppearance()) {
+	// In native dark mode Windows draws the items, in the tree's palette colours.
+	if(!isManualAppearance() || getAppearance().isNativeDark()) {
 		return CDRF_DODEFAULT;
 	}
 

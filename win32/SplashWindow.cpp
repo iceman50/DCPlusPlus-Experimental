@@ -73,8 +73,10 @@ void SplashWindow::settingsLoaded() {
 		static_cast<COLORREF>(SETTING(THEME_ACCENT_COLOR)),
 		static_cast<COLORREF>(SETTING(THEME_HIGHLIGHT_TEXT_COLOR))
 	};
-	callAsync([this, mode, palette] {
-		dwt::Application::instance().getAppearance().configure(mode, palette);
+	const auto rendering = SETTING(THEME_NATIVE_DARK) ? dwt::Appearance::Rendering::NativeDark :
+		dwt::Appearance::Rendering::Automatic;
+	callAsync([this, mode, palette, rendering] {
+		dwt::Application::instance().getAppearance().configure(mode, palette, rendering);
 		settingsReady = true;
 	});
 }

@@ -132,7 +132,21 @@
 	  <dd cshelp="IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS">Draws a thin outline around custom-themed dialogs using
 	  the theme's border color. The outline scales with display DPI and is subdued for inactive dialogs.
 	  Changes apply at once. Enabled by default. Importing a theme does not change this preference.
-	  Native and high-contrast frames retain their system borders.</dd>
+	  Native and high-contrast frames retain their system borders, so the option is unavailable while
+	  Windows draws dark controls (see below).</dd>
+	</dl>
+	<h2>Native dark mode</h2>
+	<dl style="margin-left: 40px;">
+	  <dt>Let Windows draw dark controls (Windows 10 1903 and later)</dt>
+	  <dd cshelp="IDH_SETTINGS_APPEARANCE_NATIVE_DARK">Whenever the theme is dark (Mode is Dark, or Follow
+	  Windows while Windows uses dark mode), Windows draws dark what it can itself, as in its own
+	  applications: the title bar, the menu bar and menus, scroll bars, buttons, text and combo boxes,
+	  lists and their headers, trees and tooltips, and on Windows 11 check boxes, radio buttons and
+	  group boxes. DC++ draws the rest (tabs, toolbar, status bar and the like) in the same dark
+	  colours. The window colours of the theme are not used then, and the title bar and menus use
+	  Windows' fonts; the colours and fonts of lists and chat still come from the theme. A light theme
+	  is unaffected. Changes apply at once. Off by default; not available on older versions of
+	  Windows.</dd>
 	</dl>
 </body>
 </html>

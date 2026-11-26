@@ -7,6 +7,7 @@
 #include "stdafx.h"
 #include <win32/SingleInstance.h>
 #include <win32/util/UiServices.h>
+#include <win32/util/AppAppearance.h>
 #include <win32/util/ControlSeeds.h>
 #include <win32/util/GeoIPUpdate.h>
 #include <win32/util/IconManager.h>
@@ -476,6 +477,35 @@ void changesApplyAtOnce(dwt::Window* window, dwt::Application& app, const string
 			"The dialog border option did not apply at once");
 		check(dialog.getDialogBorderWidth() == 0, "The dialog border option did not update an open dialog");
 		DestroyWindow(dialog.handle());
+	}
+
+	// Windows' own dark drawing can be chosen only where it exists, and while it is used, its
+	// captions leave the dialog border option nothing to do.
+	{
+		auto native = findCaption(frame->handle(), L"Let Windows draw dark controls (Windows 10 1903 and later)");
+		auto borders = findCaption(frame->handle(), L"Show borders around themed dialogs");
+		check(native && borders, "The Themes tab's appearance options were not found");
+		showTab(frame, native);
+		check((IsWindowEnabled(native) != FALSE) == dwt::Appearance::supportsNativeDark(),
+			"Windows' dark drawing can be chosen where it doesn't exist, or not where it does");
+		if(dwt::Appearance::supportsNativeDark()) {
+			const auto mode = settings->get(SettingsManager::THEME_MODE);
+			settings->set(SettingsManager::THEME_MODE, SettingsManager::THEME_DARK);
+			AppAppearance::refreshTheme();
+			check(!appearance.isNativeDark() && IsWindowEnabled(borders), "Dialog borders are unavailable with DC++'s own dark drawing");
+			click(native);
+			check(appearance.isNativeDark() && !IsWindowEnabled(borders), "Dialog borders are available while Windows draws dark");
+			// A light mode: DC++ may draw captions again (with an application font).
+			settings->set(SettingsManager::THEME_MODE, SettingsManager::THEME_LIGHT);
+			AppAppearance::refreshTheme();
+			check(!appearance.isNativeDark() && IsWindowEnabled(borders), "Dialog borders stayed unavailable in light mode");
+			settings->set(SettingsManager::THEME_MODE, SettingsManager::THEME_DARK);
+			AppAppearance::refreshTheme();
+			click(native);
+			check(!appearance.isNativeDark() && IsWindowEnabled(borders), "Dialog borders stayed unavailable");
+			settings->set(SettingsManager::THEME_MODE, mode);
+			AppAppearance::refreshTheme();
+		}
 	}
 
 	// A number applies once typing pauses.

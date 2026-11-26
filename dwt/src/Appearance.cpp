@@ -39,10 +39,12 @@
 #include <dwt/resources/Pen.h>
 #include <dwt/widgets/Composite.h>
 #include <dwt/widgets/Control.h>
+#include <dwt/util/win32/DarkMode.h>
 #include <dwt/util/win32/UxTheme.h>
 #include <dwt/util/win32/Version.h>
 
 #include <algorithm>
+#include <utility>
 
 namespace dwt {
 
@@ -51,6 +53,106 @@ namespace {
 /** Perceived brightness below half (the formula the theme presets use). */
 bool isDarkColor(COLORREF color) {
 	return GetRValue(color) * 299 + GetGValue(color) * 587 + GetBValue(color) * 114 < 128000;
+}
+
+/** The window property holding the darkmode::Theme a window was given in native dark mode. */
+LPCTSTR nativeThemeProperty() {
+	return _T("dwt.Appearance.NativeTheme");
+}
+
+/** The window's class, or for DWT's superclass of a common control, that control's (so "Button",
+ * not DWT's name for its Button widget class). */
+tstring baseClassName(Widget* widget) {
+	// Some (WC_DIALOG) are atoms, not names.
+	const auto base = widget->getDispatcher().getBaseClassName();
+	if(base && !IS_INTRESOURCE(base)) {
+		return base;
+	}
+	TCHAR name[64] = { 0 };
+	::GetClassName(widget->handle(), name, 64);
+	return name;
+}
+
+/** The dark visual style Windows draws a window of this class with in native dark mode, and
+ * whether DWT then leaves the widget's painting to Windows. Classes without a dark style keep
+ * DWT's painting; if they have scroll bars, Windows draws only those dark. */
+std::pair<util::win32::darkmode::Theme, bool> nativeThemeFor(HWND window, const tstring& name) {
+	using util::win32::darkmode::Theme;
+	const auto is = [&name](LPCTSTR className) { return ::lstrcmpi(name.c_str(), className) == 0; };
+	const auto style = static_cast<DWORD>(::GetWindowLongPtr(window, GWL_STYLE));
+	if(is(WC_BUTTON)) {
+		switch(style & BS_TYPEMASK) {
+		case BS_PUSHBUTTON:
+		case BS_DEFPUSHBUTTON:
+		case BS_SPLITBUTTON:
+		case BS_DEFSPLITBUTTON:
+		case BS_COMMANDLINK:
+		case BS_DEFCOMMANDLINK:
+			return { Theme::Explorer, true };
+		case BS_CHECKBOX:
+		case BS_AUTOCHECKBOX:
+		case BS_3STATE:
+		case BS_AUTO3STATE:
+		case BS_RADIOBUTTON:
+		case BS_AUTORADIOBUTTON:
+		case BS_GROUPBOX:
+			// Before Windows 11, Windows draws their text dark on any background.
+			if(util::win32::darkmode::hasDarkTheme()) {
+				return { Theme::DarkTheme, true };
+			}
+			break;
+		default:
+			break;
+		}
+		return { Theme::None, false };
+	}
+	if(is(WC_EDIT)) {
+		// DarkMode_CFD leaves scroll bars light: a multi-line edit gets Explorer's, and DWT paints
+		// its border (paintClientEdge).
+		if(style & (ES_MULTILINE | WS_VSCROLL | WS_HSCROLL)) {
+			return { Theme::Explorer, false };
+		}
+		return { Theme::Cfd, true };
+	}
+	if(is(WC_COMBOBOX)) {
+		return { Theme::Cfd, true };
+	}
+	if(is(WC_LISTVIEW) || is(WC_TREEVIEW) || is(TOOLTIPS_CLASS)) {
+		return { Theme::Explorer, true };
+	}
+	if(is(WC_HEADER)) {
+		return { Theme::ItemsView, true };
+	}
+	if((style & (WS_VSCROLL | WS_HSCROLL)) || is(WC_LISTBOX) || is(_T("ComboLBox")) ||
+		is(_T("RICHEDIT50W")) || is(_T("RichEdit20W")))
+	{
+		return { Theme::Explorer, false };
+	}
+	return { Theme::None, false };
+}
+
+/** Give a window a dark visual style, or (Theme::None) its usual one back, once per change.
+ * `combo`: the window is a combo box, whose drop-down list gets the dark scroll bars as well. */
+void setNativeTheme(HWND window, util::win32::darkmode::Theme theme, bool combo = false) {
+	using namespace util::win32;
+	const auto previous = static_cast<darkmode::Theme>(
+		reinterpret_cast<UINT_PTR>(::GetProp(window, nativeThemeProperty())));
+	if(previous == theme) {
+		return;
+	}
+	darkmode::allowForWindow(window, theme != darkmode::Theme::None);
+	uxtheme::setWindowTheme(window, darkmode::themeName(theme), nullptr);
+	if(theme == darkmode::Theme::None) {
+		::RemoveProp(window, nativeThemeProperty());
+	} else {
+		::SetProp(window, nativeThemeProperty(), reinterpret_cast<HANDLE>(static_cast<UINT_PTR>(theme)));
+	}
+
+	// A combo box's drop-down list is a window of its own, with scroll bars.
+	COMBOBOXINFO info = { sizeof(COMBOBOXINFO) };
+	if(combo && ::GetComboBoxInfo(window, &info) && info.hwndList) {
+		setNativeTheme(info.hwndList, theme == darkmode::Theme::None ? theme : darkmode::Theme::Explorer);
+	}
 }
 
 enum ScrollDecorationType {
@@ -202,7 +304,7 @@ bool drawScrollDecoration(HWND hwnd, Canvas& canvas) {
 	const auto data = reinterpret_cast<ScrollDecorationData*>(
 		::GetWindowLongPtr(hwnd, GWLP_USERDATA));
 	if(!data || !data->appearance || !data->appearance->isManual() ||
-		!::IsWindow(data->host)) {
+		data->appearance->isNativeDark() || !::IsWindow(data->host)) {
 		return false;
 	}
 
@@ -466,7 +568,9 @@ void positionScrollDecoration(HWND host, ScrollDecorationType type, const RECT& 
 
 void syncScrollDecorations(HWND host, Appearance* appearance) {
 	const auto widget = host ? hwnd_cast<Widget*>(host) : nullptr;
+	// In native dark mode Windows draws the scroll bars dark itself.
 	if(!host || !::IsWindow(host) || !appearance || !appearance->isManual() ||
+		appearance->isNativeDark() ||
 		(widget && widget->getAppearancePolicy() == AppearancePolicy::Native)) {
 		destroyScrollDecorations(host);
 		return;
@@ -540,6 +644,36 @@ Appearance::Palette Appearance::defaultPalette() {
 	return palette;
 }
 
+Appearance::Palette Appearance::nativeDarkPalette() {
+	// The accent Windows shows, dark enough to carry white text.
+	COLORREF accent = RGB(0, 120, 212);
+	DWORD value = 0;
+	DWORD size = sizeof(value);
+	if(::RegGetValue(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\DWM"), _T("AccentColor"),
+		RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS)
+	{
+		accent = value & 0x00ffffff;
+		while(!isDarkColor(blend(accent, RGB(255, 255, 255), 64))) {
+			accent = blend(accent, RGB(0, 0, 0), 48);
+		}
+	}
+	// The colours of Windows 11's dark visual styles (dialog, edit field, text).
+	Palette palette = {
+		RGB(32, 32, 32),
+		RGB(45, 45, 45),
+		RGB(255, 255, 255),
+		RGB(120, 120, 120),
+		RGB(85, 85, 85),
+		accent,
+		RGB(255, 255, 255)
+	};
+	return palette;
+}
+
+bool Appearance::supportsNativeDark() {
+	return util::win32::darkmode::isSupported();
+}
+
 Appearance::Appearance() :
 	mode(Mode::System), rendering(Rendering::Automatic), configured(defaultPalette()), active(configured),
 	highContrast(false), systemDark(false), dark(false), applying(false),
@@ -595,10 +729,13 @@ bool Appearance::refreshSystemState() {
 	systemDark = querySystemDarkPreference();
 	dark = !highContrast && (mode == Mode::Dark ||
 		(mode == Mode::System && systemDark));
+	const bool previousNativeDark = nativeDark;
+	nativeDark = dark && rendering == Rendering::NativeDark && supportsNativeDark();
 	updateActivePalette();
 
 	const bool result = previousHighContrast != highContrast ||
-		previousSystemDark != systemDark || previousDark != dark;
+		previousSystemDark != systemDark || previousDark != dark ||
+		previousNativeDark != nativeDark;
 	if(result) {
 		changed();
 	}
@@ -714,10 +851,19 @@ void Appearance::apply(Widget* widget) {
 		return;
 	}
 	widget->appearanceGeneration = generation;
+	applyNativeTheme(widget);
 	if(widget->appearancePolicy != AppearancePolicy::Native) {
 		if(auto control = dynamic_cast<Control*>(widget)) control->refreshApplicationFont();
 	}
 	widget->appearanceChanged();
+	if(nativeDark && widget->appearancePolicy != AppearancePolicy::Native) {
+		// After the widget's own update, which may set a theme of its own (see applyNativeTheme).
+		const auto name = baseClassName(widget);
+		const auto target = nativeThemeFor(widget->handle(), name).first;
+		if(target != util::win32::darkmode::Theme::None) {
+			setNativeTheme(widget->handle(), target, ::lstrcmpi(name.c_str(), WC_COMBOBOX) == 0);
+		}
+	}
 	if(widget->appearancePolicy == AppearancePolicy::Native) {
 		destroyScrollDecorations(widget->handle());
 	} else {
@@ -725,10 +871,29 @@ void Appearance::apply(Widget* widget) {
 	}
 }
 
+void Appearance::applyNativeTheme(Widget* widget) {
+	const auto window = widget->handle();
+	const bool enabled = nativeDark && widget->appearancePolicy != AppearancePolicy::Native;
+	const auto name = baseClassName(widget);
+	const auto target = enabled ? nativeThemeFor(window, name) :
+		std::make_pair(util::win32::darkmode::Theme::None, false);
+	// Read by isManualAppearance() in the widget's appearanceChanged(), which comes next.
+	widget->nativeTheme = target.second;
+	// A dark style comes off before the widget's own update, which may then set the theme it
+	// uses (Tree and ToolTip do); one goes on after it (in apply), replacing that.
+	if(target.first == util::win32::darkmode::Theme::None) {
+		setNativeTheme(window, target.first, ::lstrcmpi(name.c_str(), WC_COMBOBOX) == 0);
+	}
+	if(!(::GetWindowLongPtr(window, GWL_STYLE) & WS_CHILD)) {
+		util::win32::darkmode::allowForWindow(window, enabled);
+	}
+}
+
 bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) {
 	if(!widget) {
 		return false;
 	}
+
 
 	const auto style = widget->handle() ?
 		static_cast<DWORD>(::GetWindowLongPtr(widget->handle(), GWL_STYLE)) : 0;
@@ -774,6 +939,7 @@ bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) 
 	switch(msg.message) {
 	case WM_DESTROY:
 		destroyScrollDecorations(msg.hwnd);
+		::RemoveProp(msg.hwnd, nativeThemeProperty());
 		break;
 	case WM_GESTURE:
 		if(util::win32::ensureVersion(util::win32::EIGHT_ONE)) {
@@ -876,7 +1042,10 @@ bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) 
 }
 
 void Appearance::updateActivePalette() {
-	if(!highContrast) {
+	if(nativeDark) {
+		// What DWT paints matches what Windows draws dark, whatever the configured palette.
+		active = nativeDarkPalette();
+	} else if(!highContrast) {
 		active = configured;
 	} else {
 		active.background = ::GetSysColor(COLOR_BTNFACE);

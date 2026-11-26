@@ -287,6 +287,9 @@ private:
 	bool handlePainting(MEASUREITEMSTRUCT& measureInfo, ItemDataWrapper& wrapper);
 
 	LRESULT handleNCPaint(UINT message, WPARAM wParam, LPARAM lParam);
+	/** Paint the menu bar (WM_UAHDRAWMENU) and its items (WM_UAHDRAWMENUITEM) dark in native
+	 * dark mode, where Windows draws the items, and would draw them light. */
+	bool handleUahDraw(const MSG& msg, LRESULT& ret);
 
 	Menu* getRootMenu() { return parentMenu ? parentMenu->getRootMenu() : this; }
 	const Menu* getRootMenu() const { return parentMenu ? parentMenu->getRootMenu() : this; }
@@ -324,6 +327,8 @@ private:
 	bool observingAppearance;
 	std::optional<Widget::CallbackIter> ncPaintCallback;
 	std::optional<Widget::CallbackIter> ncActivateCallback;
+	std::optional<Widget::CallbackIter> uahDrawCallback;
+	std::optional<Widget::CallbackIter> uahDrawItemCallback;
 
 	Point iconSize;
 

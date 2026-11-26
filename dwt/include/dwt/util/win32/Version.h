@@ -37,6 +37,7 @@ enum Version {
 	EIGHT,
 	EIGHT_ONE,
 	TEN,
+	TEN_1903,
 	TEN_1909,
 	TEN_2004,
 	TEN_20H2,

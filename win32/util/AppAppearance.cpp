@@ -66,6 +66,12 @@ dwt::Appearance::Mode themeMode() {
 		dwt::Appearance::Mode::System;
 }
 
+/** With "Let Windows draw dark controls", Windows draws dark what it can whenever the mode is dark. */
+dwt::Appearance::Rendering themeRendering() {
+	return SETTING(THEME_NATIVE_DARK) ? dwt::Appearance::Rendering::NativeDark :
+		dwt::Appearance::Rendering::Automatic;
+}
+
 BOOL CALLBACK updateWidgetColors(HWND hwnd, LPARAM) {
 	if(auto widget = dwt::hwnd_cast<dwt::Control*>(hwnd)) {
 		widget->sendCommand(ID_UPDATECOLOR);
@@ -84,12 +90,12 @@ void updateApplicationColors() {
 	// Resolve the active palette again when Windows switches light/dark mode.
 	// The nested notification sees the new palette and needs no further update.
 	const auto desired = themePalette();
-	const auto& active = appearance.getPalette();
+	const auto& active = appearance.getConfiguredPalette();
 	if(!appearance.isHighContrast() && (desired.background != active.background ||
 		desired.surface != active.surface || desired.text != active.text ||
 		desired.disabledText != active.disabledText || desired.border != active.border ||
 		desired.accent != active.accent || desired.highlightText != active.highlightText)) {
-		appearance.configure(themeMode(), desired);
+		appearance.configure(themeMode(), desired, themeRendering());
 		return;
 	}
 	IconManager::setDarkMode(appearance.isDark());
@@ -108,7 +114,7 @@ void init() {
 	auto& appearance = dwt::Application::instance().getAppearance();
 	appearance.setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
 	IconManager::initialize();
-	appearance.configure(themeMode(), themePalette());
+	appearance.configure(themeMode(), themePalette(), themeRendering());
 
 	SettingsManager::getInstance()->setDefault(SettingsManager::BACKGROUND_COLOR, dwt::Color::predefined(COLOR_WINDOW));
 	SettingsManager::getInstance()->setDefault(SettingsManager::TEXT_COLOR, dwt::Color::predefined(COLOR_WINDOWTEXT));
@@ -166,7 +172,7 @@ void refreshTheme() {
 	auto& appearance = dwt::Application::instance().getAppearance();
 	dwt::Appearance::UpdateScope update(appearance);
 	appearance.setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
-	appearance.configure(themeMode(), themePalette());
+	appearance.configure(themeMode(), themePalette(), themeRendering());
 }
 
 void applyUserStyle(const dcpp::Style& snapshot, HFONT& font, COLORREF& text, COLORREF& background) {

@@ -213,8 +213,28 @@ bool Header::handleMessage(const MSG& msg, LRESULT& retVal) {
 	}
 
 	if(msg.message != WM_NOTIFY || !msg.lParam ||
-		reinterpret_cast<NMHDR*>(msg.lParam)->code != NM_CUSTOMDRAW ||
-		!isManualAppearance() ||
+		reinterpret_cast<NMHDR*>(msg.lParam)->code != NM_CUSTOMDRAW) {
+		return handled;
+	}
+	// In native dark mode Windows draws the header dark but its items' text black: give the
+	// text the palette's colour.
+	if(getAppearance().isNativeDark() && !isManualAppearance() &&
+		getAppearancePolicy() != AppearancePolicy::Native &&
+		!(handled && retVal != 0 && retVal != CDRF_DODEFAULT))
+	{
+		auto& data = *reinterpret_cast<NMCUSTOMDRAW*>(msg.lParam);
+		if(data.dwDrawStage == CDDS_PREPAINT) {
+			retVal = CDRF_NOTIFYITEMDRAW;
+			return true;
+		}
+		if(data.dwDrawStage == CDDS_ITEMPREPAINT) {
+			::SetTextColor(data.hdc, getAppearance().getPalette().text);
+			retVal = CDRF_DODEFAULT;
+			return true;
+		}
+		return handled;
+	}
+	if(!isManualAppearance() ||
 		getAppearancePolicy() == AppearancePolicy::Native) {
 		return handled;
 	}

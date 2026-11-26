@@ -78,7 +78,12 @@ public:
 		/** Existing behavior: manual when dark, native otherwise. */
 		Automatic,
 		/** Paint with the supplied palette in both light and dark modes. */
-		CustomPalette
+		CustomPalette,
+		/** When dark, let Windows draw dark what it can (Windows 10 1903 and later): the caption,
+		 * menus, scroll bars and the controls that have a dark visual style. DWT paints the rest
+		 * in Windows' dark colours (nativeDarkPalette), not the supplied palette, which is kept
+		 * for when the mode is light. Elsewhere, and when light, the same as Automatic. */
+		NativeDark
 	};
 
 	/** Semantic colors used by framework renderers. */
@@ -104,6 +109,10 @@ public:
 
 	/** Return the neutral dark palette supplied by DWT. */
 	static Palette defaultPalette();
+	/** Windows' own dark colours, used for what DWT paints in native dark mode. */
+	static Palette nativeDarkPalette();
+	/** Whether Windows can draw dark itself (Rendering::NativeDark): Windows 10 1903 or later. */
+	static bool supportsNativeDark();
 
 	/**
 	 * Set the requested mode and manual palette, then refresh every DWT widget.
@@ -133,6 +142,9 @@ public:
 	bool isSystemDark() const { return systemDark; }
 	bool isHighContrast() const { return highContrast; }
 	bool isManual() const { return !highContrast && (dark || rendering == Rendering::CustomPalette); }
+	/** Windows draws dark what it can (see Rendering::NativeDark); DWT paints the rest, so
+	 * isManual() is true as well. */
+	bool isNativeDark() const { return nativeDark; }
 	unsigned getGeneration() const { return generation; }
 	bool isUpdating() const { return updateDepth != 0; }
 
@@ -149,6 +161,9 @@ public:
 	};
 
 	const Palette& getPalette() const { return active; }
+	/** The palette last passed to configure(), which getPalette() differs from in high
+	 * contrast and native dark mode. */
+	const Palette& getConfiguredPalette() const { return configured; }
 	/** Colors for application-drawn surfaces, including native light and high contrast. */
 	Palette getDrawPalette() const;
 	COLORREF getContentBackground() const;
@@ -188,6 +203,9 @@ private:
 	void changed();
 	void finishUpdate();
 	void scheduleSystemRefresh(bool forceApply);
+	/** Give a widget's window the dark visual style of its class in native dark mode, or take
+	 * it away again; decides whether DWT still paints the widget (Widget::nativeTheme). */
+	void applyNativeTheme(Widget* widget);
 
 	static Palette sanitize(Palette palette);
 	static bool queryHighContrast();
@@ -200,6 +218,7 @@ private:
 	bool highContrast;
 	bool systemDark;
 	bool dark;
+	bool nativeDark = false;
 	bool applying;
 	bool systemRefreshPending;
 	bool systemRefreshRequiresApply;

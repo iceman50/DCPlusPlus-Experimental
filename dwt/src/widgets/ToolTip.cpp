@@ -212,7 +212,7 @@ void ToolTip::appearanceChanged() {
 	if(appearance.isHighContrast()) {
 		background = ::GetSysColor(COLOR_INFOBK);
 		foreground = ::GetSysColor(COLOR_INFOTEXT);
-	} else if(isManualAppearance()) {
+	} else if(usesPaletteColors()) {
 		background = tipBackgroundColorExplicit ? tipBackgroundColor :
 			appearance.getPalette().surface;
 		foreground = tipTextColorExplicit ? tipTextColor :
@@ -224,7 +224,9 @@ void ToolTip::appearanceChanged() {
 			::GetSysColor(COLOR_INFOTEXT);
 	}
 
-	if(isManualAppearance()) {
+	if(appearance.isNativeDark()) {
+		// Appearance gives it Windows' dark tooltip style.
+	} else if(isManualAppearance()) {
 		// Native tooltip behavior and sizing are retained, while visual-style
 		// bitmaps are disabled so the palette messages are honored on Windows 7.
 		util::win32::uxtheme::setWindowTheme(handle(), L"", L"");

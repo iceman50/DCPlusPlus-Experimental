@@ -56,6 +56,9 @@ public:
 	virtual LRESULT chain(const MSG& msg) = 0;
 
 	LPCTSTR getClassName() const { return reinterpret_cast<LPCTSTR>(atom); }
+	/** The window class this one is a superclass of (a common control's), or null. May be an
+	 * atom (IS_INTRESOURCE), as WC_DIALOG is. */
+	virtual LPCTSTR getBaseClassName() const { return nullptr; }
 
 	static HCURSOR getDefaultCursor();
 	static HBRUSH getDefaultBackground();
@@ -157,13 +160,16 @@ public:
 	}
 
 	virtual LRESULT chain(const MSG& msg);
+	LPCTSTR getBaseClassName() const override { return original; }
 
 private:
+	/** `original` must outlive the dispatcher (a widget's static windowClass). */
 	static std::unique_ptr<Dispatcher> superClass(LPCTSTR original, LPCTSTR newName);
 
-	ChainingDispatcher(WNDCLASSEX& cls, WNDPROC wndProc_);
+	ChainingDispatcher(WNDCLASSEX& cls, WNDPROC wndProc_, LPCTSTR original);
 
 	WNDPROC wndProc;
+	LPCTSTR original;
 };
 
 }

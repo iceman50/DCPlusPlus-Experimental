@@ -33,6 +33,7 @@
 #include <dwt/CanvasClasses.h>
 #include <dwt/DWTException.h>
 #include <dwt/resources/Brush.h>
+#include <dwt/util/win32/DarkMode.h>
 #include <dwt/util/win32/Dwm.h>
 
 #include "ClientFrame.h"
@@ -297,7 +298,9 @@ void Frame::updateCaptionAppearance() {
 	// A global font needs our caption even when controls use Windows light styles.
 	const bool styledFont = getAppearance().getFont() && !getAppearance().isHighContrast() &&
 		getAppearancePolicy() != AppearancePolicy::Native;
-	const bool manual = frameRendering == FrameRendering::Automatic && (isManualAppearance() || styledFont) && !(style & WS_CHILD) && (manualFrame || (style & WS_CAPTION) == WS_CAPTION);
+	// In native dark mode Windows draws the caption, dark (updateNativeFrameAppearance).
+	const bool manual = frameRendering == FrameRendering::Automatic && !getAppearance().isNativeDark() &&
+		(isManualAppearance() || styledFont) && !(style & WS_CHILD) && (manualFrame || (style & WS_CAPTION) == WS_CAPTION);
 	changingFrame = true;
 	updateNativeFrameAppearance();
 	if(manual == manualFrame) {
@@ -340,8 +343,16 @@ void Frame::updateCaptionAppearance() {
 }
 
 void Frame::updateNativeFrameAppearance() {
-	const bool eligible = frameRendering == FrameRendering::Native && isManualAppearance() &&
-		!hasStyle(WS_CHILD) && (manualFrame || hasStyle(WS_CAPTION));
+	const bool caption = !hasStyle(WS_CHILD) && (manualFrame || hasStyle(WS_CAPTION));
+	if(caption && getAppearance().isNativeDark() && getAppearancePolicy() != AppearancePolicy::Native) {
+		// Windows' own dark caption and frame, in its own colours.
+		if(nativeFrameAppearanceApplied) {
+			util::win32::dwm::resetFrameAppearance(handle());
+		}
+		nativeFrameAppearanceApplied = SUCCEEDED(util::win32::darkmode::setDarkCaption(handle(), true));
+		return;
+	}
+	const bool eligible = frameRendering == FrameRendering::Native && isManualAppearance() && caption;
 	if(eligible) {
 		const auto& palette = getAppearance().getPalette();
 		// Try independently: older systems can support only part of this contract.

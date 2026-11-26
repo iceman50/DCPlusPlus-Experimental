@@ -249,6 +249,9 @@ void ExperimentalFrame::changed(int setting) {
 	case SettingsManager::THEMED_DIALOG_BORDERS:
 		dwt::Application::instance().getAppearance().setDialogBorders(SETTING(THEMED_DIALOG_BORDERS));
 		break;
+	case SettingsManager::THEME_NATIVE_DARK:
+		AppAppearance::refreshTheme();
+		break;
 	case SettingsManager::ENABLE_RICH_TEXT:
 	case SettingsManager::ENABLE_RTF_TEMP_SHARES:
 		effects = EFFECT_CHAT;

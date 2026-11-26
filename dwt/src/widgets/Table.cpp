@@ -151,9 +151,9 @@ void Table::appearanceChanged() {
 
 void Table::clearColorImpl() {
 	const auto& appearance = getAppearance();
-	const auto text = isManualAppearance() ? appearance.getPalette().text :
+	const auto text = usesPaletteColors() ? appearance.getPalette().text :
 		Color::predefined(COLOR_WINDOWTEXT);
-	const auto background = isManualAppearance() ? appearance.getPalette().background :
+	const auto background = usesPaletteColors() ? appearance.getPalette().background :
 		Color::predefined(COLOR_WINDOW);
 	setColorImpl(text, background);
 }

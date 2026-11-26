@@ -31,6 +31,7 @@
 #include <dcpp/user/UserMatchManager.h>
 #include <cmath>
 
+#include <dwt/Appearance.h>
 #include <dwt/widgets/Button.h>
 #include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/ColorDialog.h>
@@ -82,7 +83,7 @@ showGen(0)
 void ThemesTab::build() {
 	{
 		auto group = addGroup(LEFT, T_("Theme"), IDH_STYLESPAGE);
-		auto cur = group->addChild(Grid::Seed(4, 1));
+		auto cur = group->addChild(Grid::Seed(5, 1));
 		cur->column(0).mode = GridInfo::FILL;
 
 		// Each selector keeps its content width; the row's last column takes the rest.
@@ -115,8 +116,16 @@ void ThemesTab::build() {
 			if(UiServices::mainWindow) UiServices::mainWindow->reloadThemes();
 		});
 
-		addCheck(cur, T_("Show borders around themed dialogs"), SettingsManager::THEMED_DIALOG_BORDERS,
+		dialogBorders = addCheck(cur, T_("Show borders around themed dialogs"), SettingsManager::THEMED_DIALOG_BORDERS,
 			IDH_SETTINGS_APPEARANCE_DIALOG_BORDERS);
+		// The undocumented functions it uses exist with this meaning from Windows 10 1903 on.
+		auto nativeDark = addCheck(cur, T_("Let Windows draw dark controls (Windows 10 1903 and later)"),
+			SettingsManager::THEME_NATIVE_DARK, IDH_SETTINGS_APPEARANCE_NATIVE_DARK);
+		nativeDark->setEnabled(dwt::Appearance::supportsNativeDark());
+		// Whether Windows draws dark changes with this option, the mode and Windows' own mode.
+		appearanceCallback = dwt::Application::instance().getAppearance().onChanged([this] { updateDialogBorders(); });
+		observingAppearance = true;
+		updateDialogBorders();
 	}
 
 	{
@@ -296,6 +305,15 @@ void ThemesTab::build() {
 }
 
 ThemesTab::~ThemesTab() {
+	if(observingAppearance) {
+		dwt::Application::instance().getAppearance().removeChanged(appearanceCallback);
+	}
+}
+
+void ThemesTab::updateDialogBorders() {
+	if(dialogBorders) {
+		dialogBorders->setEnabled(!dwt::Application::instance().getAppearance().isNativeDark());
+	}
 }
 
 void ThemesTab::layout() {

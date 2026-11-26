@@ -30,6 +30,7 @@
 */
 
 #include <dwt/util/win32/Dwm.h>
+#include <dwt/util/win32/Version.h>
 
 #include <dwt/LibraryLoader.h>
 #include <cstring>
@@ -74,7 +75,12 @@ HRESULT setWindowAttribute(HWND window, DWMWINDOWATTRIBUTE attribute,
 
 HRESULT setDarkMode(HWND window, bool enabled) {
 	const BOOL value = enabled ? TRUE : FALSE;
-	return setWindowAttribute(window, darkModeAttribute, &value, sizeof(value));
+	auto result = setWindowAttribute(window, darkModeAttribute, &value, sizeof(value));
+	if(FAILED(result) && ensureVersion(TEN_1903) && !ensureVersion(TEN_2004)) {
+		// Windows 10 1903 and 1909 know the attribute by its former number.
+		result = setWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(19), &value, sizeof(value));
+	}
+	return result;
 }
 
 HRESULT setCaptionColor(HWND window, COLORREF color) {

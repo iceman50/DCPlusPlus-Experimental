@@ -362,8 +362,13 @@ protected:
 	/** Return the appearance service associated with this widget. */
 	Appearance& getAppearance();
 	const Appearance& getAppearance() const;
-	/** Return true when this widget should use DWT's manual palette renderer. */
+	/** Return true when this widget should use DWT's manual palette renderer. In native dark
+	 * mode that is false for a widget Windows draws dark itself. */
 	bool isManualAppearance() const;
+	/** Return true when this widget's colors come from the appearance palette rather than the
+	 * system colors: with manual rendering, including native dark mode, where Windows may draw
+	 * the widget but DWT still chooses its text and background. */
+	bool usesPaletteColors() const;
 
 	/** Update widget-owned colors, themes and cached drawing resources. */
 	virtual void appearanceChanged();
@@ -434,6 +439,8 @@ private:
 	Appearance* appearance;
 	AppearancePolicy appearancePolicy;
 	unsigned appearanceGeneration;
+	/** Windows draws this widget with a dark visual style in native dark mode (set by Appearance). */
+	bool nativeTheme = false;
 };
 
 inline LRESULT Widget::sendMessage( UINT msg, WPARAM wParam, LPARAM lParam) const {
@@ -457,6 +464,11 @@ inline Widget* Widget::getParent() const {
 }
 
 inline bool Widget::isManualAppearance() const {
+	return appearancePolicy != AppearancePolicy::Native &&
+		getAppearance().isManual() && !(nativeTheme && getAppearance().isNativeDark());
+}
+
+inline bool Widget::usesPaletteColors() const {
 	return appearancePolicy != AppearancePolicy::Native &&
 		getAppearance().isManual();
 }

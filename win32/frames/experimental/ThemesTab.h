@@ -25,6 +25,7 @@
 #include <dcpp/message/FontStyle.h>
 #include <win32/util/ThemeManager.h>
 #include <win32/frames/experimental/ExperimentalTabs.h>
+#include <dwt/Appearance.h>
 
 /** The theme: light or dark mode, the theme presets, and the fonts and colors of the interface,
  * lists, chat and user matching definitions, with a live chat preview. Edits apply shortly after
@@ -183,6 +184,13 @@ private:
 	ButtonPtr bgColor;
 
 	CheckBoxPtr showGen;
+
+	/** "Show borders around themed dialogs": only DC++'s own captions have them, so it is
+	 * unavailable while Windows draws dark (and so draws every caption). */
+	CheckBoxPtr dialogBorders;
+	dwt::Appearance::CallbackIter appearanceCallback;
+	bool observingAppearance = false;
+	void updateDialogBorders();
 
 	void handleSelectionChanged();
 	void handleTableHelpId(unsigned& id);

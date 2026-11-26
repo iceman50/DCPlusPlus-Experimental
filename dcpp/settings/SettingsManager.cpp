@@ -179,7 +179,7 @@ const string SettingsManager::settingTags[] =
 	"EnableSUDP", "BroadDetection", "BroadDetection6", "HashDbVerifyStartup", "HashDbCompactOnRebuild",
 	"ShareCache", "EnableRTFTempShares", "RTFDroppedImagesInline",
 	"PreferZstd", "FilelistCache", "GeoIPUseMaxMind", "PFTRequireVerification",
-	"ThemedDialogBorders", "EnableMessageOutbox",
+	"ThemedDialogBorders", "ThemeNativeDark", "EnableMessageOutbox",
 	"LogHashedFiles", "LockOnMinimize", "LockOnStartup", "LockPasswordToExit",
 	"SENTRY",
 	// Int64
@@ -305,6 +305,7 @@ SettingsManager::SettingsManager() {
 	setDefault(CCPM_MAX_AUTOMATIC_ATTEMPTS, 5);
 	setDefault(THEME_MODE, THEME_SYSTEM);
 	setDefault(THEMED_DIALOG_BORDERS, true);
+	setDefault(THEME_NATIVE_DARK, false);
 	setDefault(OUTBOX_MAX_ENTRIES, 500);
 	setDefault(OUTBOX_MAX_MESSAGE_BYTES, 16 * 1024);
 	setDefault(OUTBOX_EXPIRY_DAYS, 7);
