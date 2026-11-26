@@ -1,0 +1,65 @@
+Subject: [PATCH] Fix a crash when a queued item changes while the queue window opens
+
+The download queue window registers as a QueueManager listener and only
+then takes its snapshot of the queue under the queue lock. Events fired in
+between are delivered asynchronously, after the snapshot that already
+reflects them. When an item is updated and then removed in that gap (for
+example a file list that finishes downloading while the window opens, or
+while it waits for the queue lock), the window never lists the item, and
+the queued update dereferences the null QueueItemInfo returned by
+getItemInfo in onUpdated:
+
+  QueueItem.h setPriority <- QueueFrame::onUpdated <- Application::dispatch
+
+An item added in the same gap is also listed twice.
+
+Register the listener inside lockedOperation, so the snapshot and the
+subscription happen in one step. QueueManager fires its events with the
+queue lock held (FileMoved, fired from the file mover thread, has no
+listener that takes the queue lock), so the lock order is the same as in
+fire() itself. Also ignore an update for an item the window doesn't list,
+as onRemoved already does, and free the update's copy on every path.
+
+Applies to the standard DC++ 0.884 source tree.
+
+diff --git a/win32/QueueFrame.cpp b/win32/QueueFrame.cpp
+--- a/win32/QueueFrame.cpp
++++ b/win32/QueueFrame.cpp
+@@ -161,8 +161,13 @@
+ 
+ 	setTimer([this]() -> bool { updateStatus(); return true; }, 500);
+ 
+-	QueueManager::getInstance()->addListener(this);
+-	QueueManager::getInstance()->lockedOperation([this](const QueueItem::StringMap& qsm) { addQueueList(qsm); });
++	// Listen and read the queue in one locked step. An event fired in between would otherwise
++	// reach this window after a snapshot that already has its effect: the update of an item
++	// removed meanwhile then found no row, and an item added meanwhile was listed twice.
++	QueueManager::getInstance()->lockedOperation([this](const QueueItem::StringMap& qsm) {
++		QueueManager::getInstance()->addListener(this);
++		addQueueList(qsm);
++	});
+ 
+ 	layout();
+ }
+@@ -1139,7 +1144,12 @@
+ }
+ 
+ void QueueFrame::onUpdated(QueueItem* qi) {
++	unique_ptr<QueueItem> copy(qi);
+ 	QueueItemInfo* ii = getItemInfo(qi->getTarget());
++	if(!ii) {
++		// Not listed here (as onRemoved); there is nothing to update.
++		return;
++	}
+ 
+ 	ii->setPriority(qi->getPriority());
+ 	ii->setStatus(QueueItemInfo::getStatus(*qi));
+@@ -1154,8 +1164,6 @@
+ 		ii->update();
+ 		files->update(ii);
+ 	}
+-
+-	delete qi;
+ }
+ 
+ void QueueFrame::onRechecked(const string& target, const tstring& message) {

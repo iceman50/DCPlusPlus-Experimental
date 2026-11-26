@@ -172,8 +172,13 @@ fileLists(0)
 
 	setTimer([this]() -> bool { updateStatus(); return true; }, 500);
 
-	QueueManager::getInstance()->addListener(this);
-	QueueManager::getInstance()->lockedOperation([this](const QueueItem::StringMap& qsm) { addQueueList(qsm); });
+	// Listen and read the queue in one locked step. An event fired in between would otherwise
+	// reach this window after a snapshot that already has its effect: the update of an item
+	// removed meanwhile then found no row, and an item added meanwhile was listed twice.
+	QueueManager::getInstance()->lockedOperation([this](const QueueItem::StringMap& qsm) {
+		QueueManager::getInstance()->addListener(this);
+		addQueueList(qsm);
+	});
 
 	layout();
 }
@@ -1152,7 +1157,12 @@ void QueueFrame::onRemoved(const string& s) {
 }
 
 void QueueFrame::onUpdated(QueueItem* qi) {
+	unique_ptr<QueueItem> copy(qi);
 	QueueItemInfo* ii = getItemInfo(qi->getTarget());
+	if(!ii) {
+		// Not listed here (as onRemoved); there is nothing to update.
+		return;
+	}
 
 	ii->setPriority(qi->getPriority());
 	ii->setStatus(QueueItemInfo::getStatus(*qi));
@@ -1167,8 +1177,6 @@ void QueueFrame::onUpdated(QueueItem* qi) {
 		ii->update();
 		files->update(ii);
 	}
-
-	delete qi;
 }
 
 void QueueFrame::onRechecked(const string& target, const tstring& message) {
