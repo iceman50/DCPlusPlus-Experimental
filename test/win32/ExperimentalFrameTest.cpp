@@ -411,6 +411,39 @@ void smallWindowScrolls(dwt::Window* window, dwt::Application& app) {
 	close(frame, app);
 }
 
+/** A group that stretches fills the tab's visible height, not the height of columns the other
+ * column makes taller than the tab: the Icons tab's preview is taller than a short window, and the
+ * package group's last lines were out of view below a list grown to fill the space. */
+void stretchedGroupStaysInView(dwt::Window* window, dwt::Application& app) {
+	auto frame = open(window, app, 1800, 560);
+	auto note = findCaption(frame->handle(), L"Packages are .dcico ZIP files containing info.xml and multi-resolution "
+		L"ICO files.\r\nAutomatic uses Dark.dcico for the dark appearance and the built-in icons otherwise.");
+	check(note != nullptr, "The Icons tab's note was not found");
+	showTab(frame, note);
+	// The packages and the preview are read once the tab is on screen.
+	wait(app, 500);
+	check(idle(app), "The Icons tab keeps the message queue busy");
+
+	dwt::ScrolledContainer* scroller = nullptr;
+	for(HWND parent = note; parent && !scroller; parent = GetParent(parent)) {
+		scroller = dwt::hwnd_cast<dwt::ScrolledContainer*>(parent);
+	}
+	check(scroller != nullptr, "The Icons tab has no scroll container");
+	SCROLLINFO info = { sizeof(SCROLLINFO), SIF_ALL };
+	GetScrollInfo(scroller->handle(), SB_VERT, &info);
+	RECT visible, rect;
+	GetWindowRect(scroller->handle(), &visible);
+	GetWindowRect(note, &rect);
+	if(info.nMax - info.nMin + 1 <= static_cast<int>(info.nPage) || rect.bottom > visible.bottom) {
+		std::printf("  Icons tab: view %ld..%ld, note %ld..%ld, scroll range %d page %d\n", visible.top, visible.bottom,
+			rect.top, rect.bottom, info.nMax - info.nMin + 1, info.nPage);
+	}
+	check(info.nMax - info.nMin + 1 > static_cast<int>(info.nPage), "The Icons tab is not taller than this window");
+	check(info.nPos == 0 && rect.bottom <= visible.bottom,
+		"The Icons tab's last lines are out of view below its stretched package list");
+	close(frame, app);
+}
+
 /** On a number field without a spinner, a number out of range waits until the field is left: it
  * may still be being typed ("1" on the way to "1024"). Leaving applies the nearest value. */
 void numberOutOfRangeWaits(dwt::Window* window, dwt::Application& app) {
@@ -776,6 +809,7 @@ int dwtMain(dwt::Application& app) {
 		layout(window, app);
 		snapshots(window, app, directory);
 		smallWindowScrolls(window, app);
+		stretchedGroupStaysInView(window, app);
 		numberOutOfRangeWaits(window, app);
 		changesApplyAtOnce(window, app, directory);
 		movedOptionsApplyAtOnce(window, app);

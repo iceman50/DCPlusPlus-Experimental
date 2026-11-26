@@ -202,9 +202,11 @@ public:
 
 	void layout() override {
 		const auto size = getClientSize();
+		const auto visible = visibleHeight();
 		// Showing, hiding and resizing the tab or its scroller all lay the columns out; only a
-		// change of size or contents moves anything.
-		if(measured && !relayoutGrids && size.x == laidOut.x && size.y == laidOut.y) {
+		// change of size, visible height or contents moves anything. (The columns keep their size
+		// while a column taller than the tab is scrolled.)
+		if(measured && !relayoutGrids && size.x == laidOut.x && size.y == laidOut.y && visible == laidOutVisible) {
 			return;
 		}
 		Grid::MeasureScope scope;
@@ -217,12 +219,13 @@ public:
 				right = sizes.width[RIGHT];
 				left = size.x - gap() - right;
 			}
-			place({ LEFT }, 0, left, size.y);
-			place({ RIGHT }, left + gap(), right, size.y);
+			place({ LEFT }, 0, left, size.y, visible);
+			place({ RIGHT }, left + gap(), right, size.y, visible);
 		} else {
-			place({ LEFT, RIGHT }, 0, size.x, size.y);
+			place({ LEFT, RIGHT }, 0, size.x, size.y, visible);
 		}
 		laidOut = size;
+		laidOutVisible = visible;
 		relayoutGrids = false;
 	}
 
@@ -248,8 +251,17 @@ private:
 	bool relayoutGrids = true;
 	/** The size the columns were last laid out at. */
 	dwt::Point laidOut;
+	/** The height of the tab that was in view then. */
+	LONG laidOutVisible = 0;
 
 	LONG gap() { return scale(groupGap); }
+
+	/** The height of the scroller's view: as much of the columns as the tab shows at a time. */
+	LONG visibleHeight() {
+		RECT view {};
+		::GetClientRect(::GetParent(handle()), &view);
+		return view.bottom;
+	}
 
 	Measured measure() {
 		if(measured) {
@@ -281,9 +293,9 @@ private:
 			(measured.count[LEFT] && measured.count[RIGHT] ? gap() : 0);
 	}
 
-	/** Stack the groups of these columns, in order, from the top; stretching ones share what is left.
-	 * The groups were just measured. */
-	void place(std::initializer_list<Column> columns, LONG x, LONG width, LONG height) {
+	/** Stack the groups of these columns, in order, from the top; stretching ones share what is left
+	 * of the visible height. The groups were just measured. */
+	void place(std::initializer_list<Column> columns, LONG x, LONG width, LONG height, LONG visible) {
 		std::vector<std::pair<const Item*, LONG>> placed;
 		LONG total = 0;
 		size_t stretching = 0;
@@ -297,7 +309,11 @@ private:
 			}
 		}
 
-		auto extra = std::max<LONG>(0, height - total);
+		// Not to the bottom of columns made taller than the tab by the other column: the stretching
+		// group's last options would be out of view, below a list grown to fill the space. A column
+		// that fits ends at the bottom of the tab; one that doesn't is scrolled, unstretched.
+		const auto target = visible > 0 ? std::min(height, std::max(total, visible)) : height;
+		auto extra = std::max<LONG>(0, target - total);
 		LONG y = 0;
 		for(auto& entry: placed) {
 			auto itemHeight = entry.second;
