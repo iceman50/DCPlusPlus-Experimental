@@ -43,6 +43,7 @@
 #include <dwt/Theme.h>
 
 #include <list>
+#include <memory>
 #include <vector>
 
 namespace dwt {
@@ -62,6 +63,7 @@ class TabView :
 	friend class WidgetCreator< TabView >;
 	typedef std::function<void (const tstring&)> TitleChangedFunction;
 	typedef std::function<bool (const ScreenCoordinate&)> ContextMenuFunction;
+	typedef std::function<std::shared_ptr<void> ()> SwitchingFunction;
 
 	using aspects::Caption<TabView>::setText;
 public:
@@ -124,6 +126,13 @@ public:
 		titleChangedFunction = f;
 	}
 
+	/// Called just before another page comes to the front, however it was chosen (a click,
+	/// the keyboard, setActive, accessibility); the old page is still showing. What it returns
+	/// (may be empty) is kept until the new page is in front, then released.
+	void onSwitching(const SwitchingFunction& f) {
+		switchingFunction = f;
+	}
+
 	void onTabContextMenu(ContainerPtr w, const ContextMenuFunction& f);
 
 	bool filter(const MSG& msg);
@@ -184,6 +193,7 @@ private:
 	ToolTipPtr tip;
 
 	TitleChangedFunction titleChangedFunction;
+	SwitchingFunction switchingFunction;
 
 	// these can be set through the Seed
 	unsigned widthConfig;

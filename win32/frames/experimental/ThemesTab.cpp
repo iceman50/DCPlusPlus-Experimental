@@ -301,7 +301,10 @@ ThemesTab::~ThemesTab() {
 void ThemesTab::layout() {
 	ExperimentalTab::layout();
 
-	table->setColumnWidth(COLUMN_TEXT, table->getWindowSize().x - 30);
+	// The window is laid out before its first tab is built.
+	if(table) {
+		table->setColumnWidth(COLUMN_TEXT, table->getWindowSize().x - 30);
+	}
 }
 
 void ThemesTab::refresh() {

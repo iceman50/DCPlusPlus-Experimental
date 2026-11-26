@@ -93,12 +93,13 @@ private:
 	Columns* columns;
 	bool built = false;
 	bool buildOnShow = false;
-	/** The application font the groups were last measured with. */
+	/** The application font and DPI the groups were last measured with. */
 	HFONT measuredFont = nullptr;
+	unsigned measuredDpi = 0;
 	bool remeasureQueued = false;
 
-	/** Measure and lay out the groups again once no message waits: controls receive the application
-	 * font through posted messages, after they are created and after a font change. */
+	/** Measure and lay out the groups again once no message waits: after a font change, controls
+	 * receive the new application font one after another, after the tab is told. */
 	void queueRemeasure();
 	std::function<void ()> builtCallback;
 };
@@ -120,6 +121,9 @@ private:
 
 	TablePtr tempShares;
 	std::vector<std::unique_ptr<TempShareRow>> tempShareRows;
+	/** The text of each row in the list, once it has been filled. */
+	std::vector<std::vector<tstring>> listedTempShares;
+	bool tempSharesListed = false;
 	LabelPtr tempSummary;
 	ButtonPtr removeTemp;
 	ButtonPtr clearTemps;

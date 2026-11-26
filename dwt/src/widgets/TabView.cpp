@@ -458,17 +458,21 @@ void TabView::handleTabSelected() {
 	if(!ti || ti == old)
 		return;
 
-	swapWidgets(old ? old->w : 0, ti->w);
+	{
+		// Kept until the new page is in front.
+		auto switching = switchingFunction ? switchingFunction() : std::shared_ptr<void>();
+		swapWidgets(old ? old->w : 0, ti->w);
 
-	if(!inTab)
-		setTop(ti->w);
+		if(!inTab)
+			setTop(ti->w);
 
-	if(ti->marked) {
-		ti->marked = false;
-		if(hasStyle(TCS_OWNERDRAWFIXED)) {
-			redraw(i);
-		} else {
-			TabCtrl_HighlightItem(handle(), i, 0);
+		if(ti->marked) {
+			ti->marked = false;
+			if(hasStyle(TCS_OWNERDRAWFIXED)) {
+				redraw(i);
+			} else {
+				TabCtrl_HighlightItem(handle(), i, 0);
+			}
 		}
 	}
 

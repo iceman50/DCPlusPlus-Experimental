@@ -268,6 +268,16 @@ void loadsQuickly(dwt::Window* window, dwt::Application& app) {
 		const auto shown = millisecondsSince(start);
 		slowest = std::max(slowest, shown);
 		std::printf("  %s tab first shown in %.1f ms\n", Text::fromT(frame->pages[i]->getText()).c_str(), shown);
+		// Built as it was shown, it is laid out too.
+		size_t groups = 0;
+		for(auto child: children(frame->pages[i]->handle())) {
+			if(auto group = dwt::hwnd_cast<dwt::GroupBox*>(child)) {
+				const auto size = group->getWindowSize();
+				check(size.x > 0 && size.y > 0, "A tab built as it was shown is not laid out");
+				++groups;
+			}
+		}
+		check(groups > 0, "A tab was not built when it was shown");
 	}
 	double again = 0;
 	for(size_t i = 0; i < frame->pages.size(); ++i) {

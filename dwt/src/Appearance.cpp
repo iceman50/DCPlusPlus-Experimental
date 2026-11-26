@@ -782,6 +782,14 @@ bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) 
 				break;
 			}
 		}
+		/* Neither does masking WS_VISIBLE for a moment to keep a window from painting: it stays
+		 * on screen (showing and hiding come with WM_SHOWWINDOW). */
+		if(msg.wParam == static_cast<WPARAM>(GWL_STYLE) && msg.lParam) {
+			const auto& change = *reinterpret_cast<const STYLESTRUCT*>(msg.lParam);
+			if((change.styleOld ^ change.styleNew) == WS_VISIBLE) {
+				break;
+			}
+		}
 		scheduleScrollDecorationRefresh(msg.hwnd, true);
 		break;
 	case WM_SHOWWINDOW:

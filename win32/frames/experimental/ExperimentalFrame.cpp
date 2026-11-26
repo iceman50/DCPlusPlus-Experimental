@@ -32,6 +32,7 @@
 
 #include <win32/MainWindow.h>
 #include <win32/RichTextBox.h>
+#include <win32/components/ComposedPaint.h>
 #include <win32/components/ContextHelp.h>
 #include <win32/frames/experimental/EmoticonsTab.h>
 #include <win32/frames/experimental/ExperimentalTabs.h>
@@ -60,6 +61,20 @@ ExperimentalFrame::ExperimentalFrame(TabViewPtr parent) :
 	savePending(false),
 	lastFont(UiFonts::font ? UiFonts::font->handle() : nullptr)
 {
+	// Settings may have changed elsewhere while another window was in front. Shown before the
+	// ComposedPaint below draws the tables for the window's first paint, so it draws them as shown.
+	onVisibilityChanged([this](bool visible) {
+		if(visible && composed) {
+			composed->begin();
+			refresh();
+		}
+	});
+
+	// What is built below is painted in one step once it is laid out, and contents filled in
+	// asynchronously with it. (Usually the window is built hidden and shown afterwards.)
+	composed = std::make_unique<ComposedPaint>(this);
+	ComposedPaint::Hold hold(*composed, true);
+
 	grid = addChild(Grid::Seed(2, 1));
 	grid->column(0).mode = GridInfo::FILL;
 	grid->row(0).mode = GridInfo::FILL;
@@ -74,6 +89,9 @@ ExperimentalFrame::ExperimentalFrame(TabViewPtr parent) :
 		seed.closeable = false;
 		tabs = grid->addChild(seed);
 		tabs->setHelpId(IDH_EXPERIMENTALPAGE);
+		// Another tab appears in one step, not control by control over what is left of the
+		// previous one.
+		tabs->onSwitching([this] { return std::make_shared<ComposedPaint::Hold>(*composed, true); });
 
 		// In the order of Page. Each tab creates its controls when it is first shown.
 		pages.push_back(new ThemesTab(tabs, live));
@@ -110,20 +128,15 @@ ExperimentalFrame::ExperimentalFrame(TabViewPtr parent) :
 		page->onBuilt([this, page] { contextHelp->watch(page->handle()); });
 		page->buildWhenShown();
 	}
-	tabs->setActive(pages.front());
-	pages.front()->ensureBuilt();
 
 	initStatus();
 	status->setText(STATUS_STATUS, T_("Changes apply at once and are saved automatically."));
 
-	// Settings may have changed elsewhere while another window was in front.
-	onVisibilityChanged([this](bool visible) {
-		if(visible) {
-			refresh();
-		}
-	});
-
+	// The window is laid out first, so the tab in front is built at its final size and laid out
+	// once.
 	layout();
+	tabs->setActive(pages.front());
+	pages.front()->ensureBuilt();
 
 	// Once the window is up, build the other tabs while it is idle, so switching to one is quick.
 	setTimer([this] {
@@ -164,8 +177,17 @@ void ExperimentalFrame::layout() {
 	if(!grid || !status) {
 		return;
 	}
+	// Resizing moves and repaints every option; the window is painted once it is all done. A drag
+	// of the border resizes many times over, each painted in one step. Being shown lays out too,
+	// at the same size, which moves nothing.
+	const auto size = getClientSize();
+	std::unique_ptr<ComposedPaint::Hold> hold;
+	if(size.x != laidOut.x || size.y != laidOut.y) {
+		hold = std::make_unique<ComposedPaint::Hold>(*composed, false);
+		laidOut = size;
+	}
 
-	dwt::Rectangle r(getClientSize());
+	dwt::Rectangle r(size);
 	r.size.y -= status->refresh();
 	grid->resize(dwt::Rectangle(r.left() + 4, r.top() + 4, std::max<LONG>(0, r.width() - 8),
 		std::max<LONG>(0, r.height() - 8)));

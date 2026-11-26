@@ -171,7 +171,8 @@ void EmoticonsTab::build() {
 		preview = dwt::WidgetCreator<RichTextBox>::create(content, seed);
 		preview->setAccessibleName(T_("Emoticon package preview"));
 		AppAppearance::setColor(preview);
-		previewStatus = content->addChild(Label::Seed());
+		// Filled in once the preview is read; a line high already, so nothing moves then.
+		previewStatus = content->addChild(Label::Seed(_T(" ")));
 	}
 
 	// Reading the packages and extracting the preview wait until the tab is on screen.

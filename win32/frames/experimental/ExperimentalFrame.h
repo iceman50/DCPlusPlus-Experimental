@@ -24,6 +24,7 @@
 #include <win32/frames/StaticFrame.h>
 #include <win32/settings/base/LiveSettings.h>
 
+class ComposedPaint;
 class ContextHelp;
 class ExperimentalTab;
 
@@ -96,6 +97,10 @@ private:
 	static constexpr unsigned prebuildDelay = 150;
 
 	LiveSettings live;
+	/** Paints a tab switch, a resize or the window being shown in one step. */
+	std::unique_ptr<ComposedPaint> composed;
+	/** The client size the window was last laid out at. */
+	dwt::Point laidOut;
 	GridPtr grid;
 	TabViewPtr tabs;
 	RichTextBoxPtr help;

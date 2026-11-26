@@ -165,6 +165,9 @@ public:
 	explicit Columns(dwt::Widget* parent) : dwt::Container(parent) {
 		Seed seed(0, WS_EX_CONTROLPARENT);
 		create(seed);
+		// Created without addChild, which would do this: without it the columns paint in the
+		// system colours until a posted message gives them the application's.
+		finalizeAppearance();
 	}
 
 	void add(dwt::Control* control, Column column, bool stretch) {
@@ -176,10 +179,6 @@ public:
 	void invalidate(bool grids) {
 		measured = false;
 		relayoutGrids = relayoutGrids || grids;
-	}
-
-	bool needsLayout() const {
-		return !measured || relayoutGrids;
 	}
 
 	dwt::Point getPreferredSize() override {
@@ -202,15 +201,20 @@ public:
 	}
 
 	void layout() override {
-		Grid::MeasureScope scope;
 		const auto size = getClientSize();
-		const auto measured = measure();
-		if(twoColumns(measured, size.x)) {
+		// Showing, hiding and resizing the tab or its scroller all lay the columns out; only a
+		// change of size or contents moves anything.
+		if(measured && !relayoutGrids && size.x == laidOut.x && size.y == laidOut.y) {
+			return;
+		}
+		Grid::MeasureScope scope;
+		const auto sizes = measure();
+		if(twoColumns(sizes, size.x)) {
 			// Share the width equally, each column at least as wide as its widest group.
-			auto left = std::max<LONG>(measured.width[LEFT], (size.x - gap()) / 2);
+			auto left = std::max<LONG>(sizes.width[LEFT], (size.x - gap()) / 2);
 			auto right = size.x - gap() - left;
-			if(right < measured.width[RIGHT]) {
-				right = measured.width[RIGHT];
+			if(right < sizes.width[RIGHT]) {
+				right = sizes.width[RIGHT];
 				left = size.x - gap() - right;
 			}
 			place({ LEFT }, 0, left, size.y);
@@ -218,6 +222,7 @@ public:
 		} else {
 			place({ LEFT, RIGHT }, 0, size.x, size.y);
 		}
+		laidOut = size;
 		relayoutGrids = false;
 	}
 
@@ -226,6 +231,8 @@ private:
 		dwt::Control* control;
 		Column column;
 		bool stretch;
+		/** Its preferred size when the columns were last measured. */
+		dwt::Point preferred;
 	};
 
 	struct Measured {
@@ -239,6 +246,8 @@ private:
 	Measured cache;
 	bool measured = false;
 	bool relayoutGrids = true;
+	/** The size the columns were last laid out at. */
+	dwt::Point laidOut;
 
 	LONG gap() { return scale(groupGap); }
 
@@ -247,9 +256,10 @@ private:
 			return cache;
 		}
 		Measured result;
-		for(const auto& item: items) {
+		for(auto& item: items) {
 			fitFillColumns(item.control);
 			const auto size = item.control->getPreferredSize();
+			item.preferred = size;
 			// A grid's FILL columns report only their fixed size, so a group's preferred width
 			// leaves out its labels; a column is never narrower than what its options need.
 			result.width[item.column] = std::max<LONG>({ result.width[item.column], size.x, scale(minColumnWidth) });
@@ -271,7 +281,8 @@ private:
 			(measured.count[LEFT] && measured.count[RIGHT] ? gap() : 0);
 	}
 
-	/** Stack the groups of these columns, in order, from the top; stretching ones share what is left. */
+	/** Stack the groups of these columns, in order, from the top; stretching ones share what is left.
+	 * The groups were just measured. */
 	void place(std::initializer_list<Column> columns, LONG x, LONG width, LONG height) {
 		std::vector<std::pair<const Item*, LONG>> placed;
 		LONG total = 0;
@@ -279,7 +290,7 @@ private:
 		for(auto column: columns) {
 			for(const auto& item: items) {
 				if(item.column != column) continue;
-				const auto preferred = item.control->getPreferredSize().y;
+				const auto preferred = item.preferred.y;
 				total += (placed.empty() ? 0 : gap()) + preferred;
 				stretching += item.stretch ? 1 : 0;
 				placed.emplace_back(&item, preferred);
@@ -318,6 +329,9 @@ ExperimentalTab::ExperimentalTab(TabViewPtr parent, const tstring& title, unsign
 	seed.style &= ~WS_VISIBLE;
 	seed.exStyle |= WS_EX_CONTROLPARENT;
 	create(seed);
+	// As addChild would: otherwise the tab paints in the system colours until a posted message
+	// gives it the application's, and the first tab is painted before that.
+	finalizeAppearance();
 	setHelpId(helpId);
 
 	scroller = addChild(dwt::ScrolledContainer::Seed(0, WS_EX_CONTROLPARENT));
@@ -327,16 +341,13 @@ ExperimentalTab::ExperimentalTab(TabViewPtr parent, const tstring& title, unsign
 	columns->setHelpId(helpId);
 
 	onVisibilityChanged([this](bool visible) {
-		if(!visible) {
+		if(!visible || (!built && !buildOnShow)) {
 			return;
 		}
-		if(!built) {
-			if(buildOnShow) {
-				ensureBuilt();
-			}
-		} else if(columns->needsLayout()) {
-			layout();
-		}
+		ensureBuilt();
+		// Laid out here, not when shown: a page shown while its window holds its painting gets
+		// no WM_WINDOWPOSCHANGED. When nothing changed, this does little.
+		layout();
 	});
 
 	parent->add(this);
@@ -352,9 +363,12 @@ void ExperimentalTab::ensureBuilt() {
 	if(builtCallback) {
 		builtCallback();
 	}
-	queueRemeasure();
-	// A tab built in the background is laid out when it is shown.
-	if(::IsWindowVisible(handle())) {
+	// Controls made with addChild have the application's font and colours at once, so the tab is
+	// measured right away; contents filled in later must not change a group's size (an empty
+	// label is a line high only once it has text: start it with a space).
+	// A tab built in the background is laid out when it is shown. The tab in front is laid out
+	// now, also while its window holds its painting (and so counts as hidden).
+	if(hasStyle(WS_VISIBLE)) {
 		layout();
 	}
 }
@@ -384,20 +398,30 @@ void ExperimentalTab::invalidateLayout(bool grids) {
 }
 
 void ExperimentalTab::layout() {
-	const auto size = getClientSize();
-	scroller->resize(dwt::Rectangle(7, 4, std::max<LONG>(0, size.x - 14), std::max<LONG>(0, size.y - 8)));
+	// A tab is laid out once it has its controls; until then there is nothing to place.
 	if(!built) {
 		return;
 	}
-	// A new application font changes the size of every option.
+	// A new application font or DPI changes the size of every option.
 	const auto font = UiFonts::font ? UiFonts::font->handle() : nullptr;
-	if(font != measuredFont) {
+	const auto dpi = getDpi();
+	if(font != measuredFont || dpi != measuredDpi) {
 		measuredFont = font;
+		measuredDpi = dpi;
 		columns->invalidate(true);
 	}
-	// Content can change without the scroller moving (fonts, DPI, themes), and the columns are
-	// laid out again when their size didn't change.
-	scroller->layout();
+	const auto size = getClientSize();
+	const dwt::Rectangle area(7, 4, std::max<LONG>(0, size.x - 14), std::max<LONG>(0, size.y - 8));
+	const auto current = scroller->getWindowSize();
+	if(current.x != area.width() || current.y != area.height()) {
+		// The scroller lays itself out, and its columns, when its size changes.
+		scroller->resize(area);
+	} else {
+		// Content can change without the scroller moving (fonts, DPI, themes).
+		scroller->layout();
+	}
+	// The columns are laid out again when their contents changed but their size didn't; when
+	// nothing changed this does nothing.
 	columns->layout();
 }
 
@@ -516,8 +540,10 @@ void ChatSharingTab::refresh() {
 	if(!tempShares) {
 		return;
 	}
-	tempShares->clear();
-	tempShareRows.clear();
+	// Asked each time the window is shown: the list is filled again only when its rows changed, so
+	// the selection and scroll position stay.
+	std::vector<std::vector<tstring>> rows;
+	std::vector<std::unique_ptr<TempShareRow>> rowData;
 	const auto shares = ShareManager::getInstance()->getTempShares();
 	for(const auto& share: shares) {
 		bool available = false;
@@ -538,10 +564,20 @@ void ChatSharingTab::refresh() {
 			route += _T(" (") + (nicks.empty() ? T_("private chat") :
 				str(TF_("private chat with %1%") % Text::toT(nicks.front()))) + _T(")");
 		}
-		tempShares->insert({ name, Text::toT(Util::formatBytes(share.size)), route,
-			Text::toT(data->tth), Text::toT(share.realPath) }, reinterpret_cast<LPARAM>(data.get()));
-		tempShareRows.push_back(std::move(data));
+		rows.push_back({ name, Text::toT(Util::formatBytes(share.size)), route,
+			Text::toT(data->tth), Text::toT(share.realPath) });
+		rowData.push_back(std::move(data));
 	}
+	if(tempSharesListed && rows == listedTempShares) {
+		return;
+	}
+	tempShares->clear();
+	tempShareRows = std::move(rowData);
+	for(size_t i = 0; i < rows.size(); ++i) {
+		tempShares->insert(rows[i], reinterpret_cast<LPARAM>(tempShareRows[i].get()));
+	}
+	listedTempShares = std::move(rows);
+	tempSharesListed = true;
 	tempSummary->setText(T_("Active temporary shares: ") + Text::toT(std::to_string(shares.size())));
 	handleTempSelectionChanged();
 }
