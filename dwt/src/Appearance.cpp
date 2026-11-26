@@ -889,11 +889,70 @@ void Appearance::applyNativeTheme(Widget* widget) {
 	}
 }
 
-bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal) {
+void Appearance::paintClientEdge(Widget* widget) {
+	const auto window = widget->handle();
+	RECT bounds = { 0 };
+	::GetWindowRect(window, &bounds);
+	::OffsetRect(&bounds, -bounds.left, -bounds.top);
+	const auto x = widget->getSystemMetric(SM_CXEDGE), y = widget->getSystemMetric(SM_CYEDGE);
+	if(bounds.right <= 2 * x || bounds.bottom <= 2 * y) {
+		return;
+	}
+	// A line in the border colour, then the control's own background up to its client area or
+	// scroll bars, so that the edge reads as a 1-pixel border.
+	COLORREF inside = active.background;
+	auto control = dynamic_cast<Control*>(widget);
+	if(control && control->hasExplicitColors()) {
+		inside = control->getExplicitBackgroundColor();
+	} else {
+		const auto name = baseClassName(widget);
+		if(::lstrcmpi(name.c_str(), WC_EDIT) == 0 || ::lstrcmpi(name.c_str(), WC_COMBOBOX) == 0 ||
+			::lstrcmpi(name.c_str(), WC_LISTBOX) == 0)
+		{
+			inside = active.surface;
+		}
+	}
+	const auto dc = ::GetWindowDC(window);
+	if(!dc) {
+		return;
+	}
+	auto fillRing = [dc, &bounds](int left, int top, int right, int bottom, COLORREF color) {
+		Brush brush(color);
+		const RECT parts[] = {
+			{ left, top, bounds.right - right, top + 1 },
+			{ left, bounds.bottom - bottom - 1, bounds.right - right, bounds.bottom - bottom },
+			{ left, top + 1, left + 1, bounds.bottom - bottom - 1 },
+			{ bounds.right - right - 1, top + 1, bounds.right - right, bounds.bottom - bottom - 1 }
+		};
+		for(const auto& part: parts) {
+			::FillRect(dc, &part, brush.handle());
+		}
+	};
+	fillRing(0, 0, 0, 0, active.border);
+	for(int i = 1; i < std::max(x, y); ++i) {
+		fillRing(std::min(i, x - 1), std::min(i, y - 1), std::min(i, x - 1), std::min(i, y - 1), inside);
+	}
+	::ReleaseDC(window, dc);
+}
+
+bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal, bool handled) {
 	if(!widget) {
 		return false;
 	}
 
+	// Windows draws a child control's sunken edge in its system colours (light on the right and
+	// at the bottom) whatever the palette; paint it over once Windows has drawn the rest (the
+	// scroll bars). In native dark mode a control with a dark visual style has a dark border.
+	if(msg.message == WM_NCPAINT && !handled && isManual() && widget->handle() &&
+		widget->appearancePolicy != AppearancePolicy::Native && !(nativeDark && widget->nativeTheme) &&
+		(::GetWindowLongPtr(widget->handle(), GWL_STYLE) & WS_CHILD) &&
+		(::GetWindowLongPtr(widget->handle(), GWL_EXSTYLE) & WS_EX_CLIENTEDGE))
+	{
+		retVal = widget->getDispatcher().chain(msg);
+		paintClientEdge(widget);
+		redrawScrollDecorations(msg.hwnd);
+		return true;
+	}
 
 	const auto style = widget->handle() ?
 		static_cast<DWORD>(::GetWindowLongPtr(widget->handle(), GWL_STYLE)) : 0;

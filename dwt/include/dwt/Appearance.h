@@ -198,7 +198,11 @@ private:
 	void addWidget(Widget* widget);
 	void removeWidget(Widget* widget);
 	void apply(Widget* widget);
-	bool handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal);
+	/** `handled`: a callback of the widget has handled the message already. */
+	bool handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal, bool handled);
+	/** Paint a child control's sunken client edge (WS_EX_CLIENTEDGE) in the palette's colours, over
+	 * the one Windows draws in its system colours, light on any background. */
+	void paintClientEdge(Widget* widget);
 	void updateActivePalette();
 	void changed();
 	void finishUpdate();

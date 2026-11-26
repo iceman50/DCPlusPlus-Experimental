@@ -391,7 +391,7 @@ bool Widget::handleMessage(const MSG &msg, LRESULT &retVal) {
 		}
 	}
 	if(appearance && (!handled || isAppearanceLifecycleMessage(msg.message))) {
-		handled |= appearance->handleMessage(this, msg, retVal);
+		handled |= appearance->handleMessage(this, msg, retVal, handled);
 	}
 	if(dpiChanged) {
 		layout();
