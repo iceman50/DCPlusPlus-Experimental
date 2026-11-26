@@ -228,7 +228,6 @@ private:
 
 	std::queue<Callback> tasks;
 	std::mutex tasksMutex;
-	bool dispatchingAsync;
 
 	FilterList filters;
 	FilterList keyboardFilters;

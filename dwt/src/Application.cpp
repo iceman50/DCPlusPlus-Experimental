@@ -77,7 +77,6 @@ void Application::init() {
 
 Application::Application() :
 	itsCmdShow(0),
-	dispatchingAsync(false),
 	appearance(new Appearance),
 	quit(false),
 	threadId(::GetCurrentThreadId())
@@ -289,30 +288,18 @@ bool Application::dispatchAsync() {
 	Callback callback;
 	{
 		std::lock_guard<std::mutex> lock(tasksMutex);
-		// Keep queued callbacks serialized even when one of them starts a nested
-		// message pump through processMessages(). This preserves FIFO completion
-		// order while still allowing native UI messages to be processed.
-		if(tasks.empty() || dispatchingAsync) {
+		if(tasks.empty()) {
 			return false;
 		}
 		callback = std::move(tasks.front());
 		tasks.pop();
-		dispatchingAsync = true;
 	}
 
-	try {
-		callback();
-	} catch(...) {
-		std::lock_guard<std::mutex> lock(tasksMutex);
-		dispatchingAsync = false;
-		throw;
-	}
-
-	{
-		std::lock_guard<std::mutex> lock(tasksMutex);
-		dispatchingAsync = false;
-	}
-
+	/* Queued callbacks start in FIFO order, also inside a nested message loop that one of them
+	 * runs (a modal dialog opened from a callback, or processMessages()). Holding them back until
+	 * the outer callback returned would stall every window behind that dialog, and the dialog
+	 * itself where its controls rely on queued callbacks. */
+	callback();
 	return true;
 }
 
