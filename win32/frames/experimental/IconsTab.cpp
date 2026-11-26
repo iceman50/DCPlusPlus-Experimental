@@ -205,7 +205,13 @@ void IconsTab::build() {
 		list = cur->addChild(seed);
 		list->setHelpId(IDH_SETTINGS_EXPERIMENTAL_ICON_PACK);
 		TableLayout::makeColumns(list, packageColumns, COLUMN_LAST);
-		list->onSelectionChanged([this] { showSelected(); });
+		// Only for a row becoming selected: the list also tells of every change to a row's text
+		// (markInUse, each time the window is shown), and a preview reads every icon in a package.
+		list->onItemChanged([this](const NMLISTVIEW& item) {
+			if((item.uChanged & LVIF_STATE) && (item.uNewState & LVIS_SELECTED) && !(item.uOldState & LVIS_SELECTED)) {
+				showSelected();
+			}
+		});
 		list->onDblClicked([this] { useSelected(); });
 
 		auto buttons = cur->addChild(Grid::Seed(1, 5));
@@ -219,7 +225,8 @@ void IconsTab::build() {
 		});
 		buttons->addChild(Button::Seed(T_("&Reload")))->onClicked([this] { fill(SETTING(ICON_PACK)); });
 
-		status = cur->addChild(Label::Seed(tstring()));
+		// Filled in once the packages are read; a line high already, so nothing moves then.
+		status = cur->addChild(Label::Seed(_T(" ")));
 		status->setHelpId(IDH_SETTINGS_EXPERIMENTAL_ICON_PACK);
 		cur->addChild(Label::Seed(T_("Packages are .dcico ZIP files containing info.xml and multi-resolution ICO files.\r\n"
 			"Automatic uses Dark.dcico for the dark appearance and the built-in icons otherwise.")));
@@ -306,9 +313,9 @@ void IconsTab::fill(const std::string& select) {
 		}
 	}
 	markInUse();
+	// Nothing is selected after clear(), so this shows the row's preview.
 	list->setSelected(row);
 	list->ensureVisible(row);
-	showSelected();
 }
 
 void IconsTab::addChoice(Choice choice) {
@@ -330,11 +337,17 @@ void IconsTab::markInUse() {
 	tstring name;
 	for(size_t i = 0; i < choices.size(); ++i) {
 		const bool used = Util::stricmp(choices[i].setting, inUse) == 0;
-		list->setText(static_cast<unsigned>(i), COLUMN_NAME, used ? choices[i].name + T_(" (in use)") : choices[i].name);
+		const auto text = used ? choices[i].name + T_(" (in use)") : choices[i].name;
+		if(list->getText(static_cast<unsigned>(i), COLUMN_NAME) != text) {
+			list->setText(static_cast<unsigned>(i), COLUMN_NAME, text);
+		}
 		if(used) name = choices[i].name;
 	}
-	status->setText(name.empty() ? T_("The package in use can't be found; the built-in icons are shown.") :
-		str(TF_("In use: %1%. Windows that are already open keep their icons until DC++ restarts.") % name));
+	const auto statusText = name.empty() ? T_("The package in use can't be found; the built-in icons are shown.") :
+		str(TF_("In use: %1%. Windows that are already open keep their icons until DC++ restarts.") % name);
+	if(status->getText() != statusText) {
+		status->setText(statusText);
+	}
 	const auto selected = selectedChoice();
 	useButton->setEnabled(selected >= 0 && Util::stricmp(choices[selected].setting, inUse) != 0);
 }
