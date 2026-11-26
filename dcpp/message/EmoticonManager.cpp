@@ -10,7 +10,7 @@
 #include "stdinc.h"
 #include <dcpp/message/EmoticonManager.h>
 
-#include <dcpp/core/io/compress/Archive.h>
+#include <dcpp/core/io/compress/PackageCache.h>
 #include <dcpp/core/io/File.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/core/io/xml/SimpleXML.h>
@@ -117,26 +117,35 @@ namespace {
 		return true;
 	}
 
+	/** The folder a package's files are extracted to, once (see PackageCache), within the
+	 * configured limits. */
+	string extractPackage(const string& path) {
+		if(Text::toLower(Util::getFileExt(path)) != ".dcemo") throw Exception(_("Invalid emoticon package extension"));
+		return PackageCache::extract(path, "Emoticons", {
+			static_cast<size_t>(std::clamp(SETTING(ARCHIVE_MAX_ENTRIES),
+				SettingsManager::ARCHIVE_MAX_ENTRIES_MIN, SettingsManager::ARCHIVE_MAX_ENTRIES_MAX)),
+			static_cast<uint64_t>(std::max(SettingsManager::ARCHIVE_MAX_BYTES_MIN, SETTING(ARCHIVE_MAX_FILE_BYTES))),
+			static_cast<uint64_t>(std::max(SettingsManager::ARCHIVE_MAX_BYTES_MIN, SETTING(ARCHIVE_MAX_TOTAL_BYTES)))
+		});
+	}
+
+	/** The manifest of an extracted package. */
+	void readManifest(const string& directory, SimpleXML& xml) {
+		const auto path = directory + "info.xml";
+		const auto size = File::getSize(path);
+		if(size <= 0 || size > static_cast<int64_t>(MAX_MANIFEST_SIZE)) throw Exception(_("Invalid emoticon package"));
+		xml.fromXML(File(path, File::READ, File::OPEN).read());
+	}
+
 	void loadPackage(PackageState& data, const string& path, EmoticonManager::PackagePreview* preview = nullptr) {
 		data.rules.clear();
 		data.icons.clear();
 		if(preview) *preview = {};
 		if(path.empty()) return;
-		auto packageExtension = Util::getFileExt(path);
-		std::transform(packageExtension.begin(), packageExtension.end(), packageExtension.begin(),
-			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-		if(packageExtension != ".dcemo") throw Exception(_("Invalid emoticon package extension"));
 
-		const auto directory = Util::getTempPath() + (preview ? "dcemo-preview-" : "dcemo-") +
-			std::to_string(std::hash<string>{}(path)) + PATH_SEPARATOR_STR;
-		Archive(path).extract(directory,
-			static_cast<size_t>(std::clamp(SETTING(ARCHIVE_MAX_ENTRIES),
-				SettingsManager::ARCHIVE_MAX_ENTRIES_MIN, SettingsManager::ARCHIVE_MAX_ENTRIES_MAX)),
-			static_cast<uint64_t>(std::max(SettingsManager::ARCHIVE_MAX_BYTES_MIN, SETTING(ARCHIVE_MAX_FILE_BYTES))),
-			static_cast<uint64_t>(std::max(SettingsManager::ARCHIVE_MAX_BYTES_MIN, SETTING(ARCHIVE_MAX_TOTAL_BYTES))));
-
+		const auto directory = extractPackage(path);
 		SimpleXML xml;
-		xml.fromXML(File(directory + "info.xml", File::READ, File::OPEN).read());
+		readManifest(directory, xml);
 		if(!xml.findChild("dcemo")) throw Exception(_("Invalid emoticon package"));
 		xml.stepIn();
 
@@ -212,9 +221,8 @@ namespace {
 }
 
 EmoticonManager::Package EmoticonManager::inspectPackage(const string& path) {
-	if(Text::toLower(Util::getFileExt(path)) != ".dcemo") throw Exception(_("Invalid emoticon package extension"));
 	SimpleXML xml;
-	xml.fromXML(Archive(path).readFile("info.xml", MAX_MANIFEST_SIZE));
+	readManifest(extractPackage(path), xml);
 	if(!xml.findChild("dcemo")) throw Exception(_("Invalid emoticon package"));
 	xml.stepIn();
 	if(!xml.findChild("Name") || xml.getChildData().empty()) throw Exception(_("Invalid emoticon package"));
@@ -246,6 +254,9 @@ vector<EmoticonManager::Package> EmoticonManager::getPackages() {
 			}
 		}
 	};
+
+	// Packages removed or replaced since they were last listed leave their extracted copies.
+	PackageCache::clean("Emoticons");
 
 	const auto applicationDirectory = Util::getPath(Util::PATH_GLOBAL_CONFIG) + "Emoticons" PATH_SEPARATOR_STR;
 	const auto userDirectory = getDirectory();

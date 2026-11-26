@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <dcpp/core/io/compress/Archive.h>
+#include <dcpp/core/io/compress/PackageCache.h>
 #include <dcpp/core/io/File.h>
 #include <dcpp/settings/SettingsManager.h>
 #include <dcpp/core/io/xml/SimpleXML.h>
@@ -41,6 +41,10 @@ constexpr size_t MAX_MANIFEST_SIZE = 256 * 1024;
 constexpr size_t MAX_PACKAGE_ICONS = 512;
 constexpr size_t MAX_METADATA_LENGTH = 128;
 constexpr size_t MAX_ARCHIVE_PATH_LENGTH = 512;
+/** Limits on what a package may extract to: room for every icon, and a few times what the
+ * bundled packages hold. */
+constexpr size_t MAX_ARCHIVE_ENTRIES = 1024;
+constexpr uint64_t MAX_EXTRACTED_SIZE = 128 * 1024 * 1024;
 constexpr const char* DARK_PACK_FILE = "Dark.dcico";
 
 struct IconDefinition {
@@ -103,6 +107,8 @@ struct State {
 	std::unordered_map<uint64_t, CachedIcon> cache;
 	std::unordered_map<string, string> entries;
 	string activePack;
+	/** Where the active package is extracted. */
+	string activeFolder;
 	IconManager::Package package {};
 	bool initialized = false;
 	bool darkMode = false;
@@ -132,13 +138,26 @@ string packDirectory(Util::Paths path) {
 	return Util::getPath(path) + "IconPacks" PATH_SEPARATOR_STR;
 }
 
-IconManager::Package readManifest(const string& path, std::unordered_map<string, string>* entries) {
+/** A manifest path (with / or \) as a path below an extracted package's folder. */
+string nativePath(string path) {
+	std::replace(path.begin(), path.end(), '/', PATH_SEPARATOR);
+	std::replace(path.begin(), path.end(), '\\', PATH_SEPARATOR);
+	return path;
+}
+
+/** Read a package's manifest, from its extracted copy (see PackageCache: a package is extracted the
+ * first time it is read); `folder` receives where that is. */
+IconManager::Package readManifest(const string& path, std::unordered_map<string, string>* entries, string* folder = nullptr) {
 	if(Text::toLower(Util::getFileExt(path)) != ".dcico") throw Exception(_("Invalid icon package extension"));
 	const auto archiveSize = File::getSize(path);
 	if(archiveSize <= 0 || archiveSize > MAX_ICON_ARCHIVE_SIZE) throw Exception(_("Invalid icon package size"));
 
+	const auto directory = PackageCache::extract(path, "IconPacks", { MAX_ARCHIVE_ENTRIES, MAX_ICON_FILE_SIZE, MAX_EXTRACTED_SIZE });
+	const auto manifest = directory + "info.xml";
+	const auto manifestSize = File::getSize(manifest);
+	if(manifestSize <= 0 || manifestSize > static_cast<int64_t>(MAX_MANIFEST_SIZE)) throw Exception(_("Invalid icon package"));
 	SimpleXML xml;
-	xml.fromXML(Archive(path).readFile("info.xml", MAX_MANIFEST_SIZE));
+	xml.fromXML(File(manifest, File::READ, File::OPEN).read());
 	if(!xml.findChild("dcico")) throw Exception(_("Invalid icon package"));
 	xml.stepIn();
 	if(!xml.findChild("Name") || xml.getChildData().empty() || xml.getChildData().size() > MAX_METADATA_LENGTH) throw Exception(_("Invalid icon package"));
@@ -169,6 +188,7 @@ IconManager::Package readManifest(const string& path, std::unordered_map<string,
 		if(entries) (*entries)[normalizedName] = fileValue;
 	}
 	if(!iconCount) throw Exception(_("Icon package contains no usable icons"));
+	if(folder) *folder = directory;
 	return { name, version, scheme, path, iconCount };
 }
 
@@ -205,8 +225,16 @@ string resolvePack(const string& configured, bool darkMode) {
 	if(!configured.empty() && File::getSize(configured) > 0) return configured;
 	const auto wanted = configured.empty() ? (darkMode ? DARK_PACK_FILE : "") : Util::getFileName(configured);
 	if(wanted.empty()) return string();
-	for(const auto& package: discoverPackages()) {
-		if(Util::stricmp(Util::getFileName(package.path), wanted) == 0) return package.path;
+	// As discoverPackages finds it, a valid copy in the user's folder before the bundled one, but
+	// without reading (and so extracting) every other package.
+	for(const auto& directory: { packDirectory(Util::PATH_USER_CONFIG), packDirectory(Util::PATH_GLOBAL_CONFIG) }) {
+		const auto path = directory + wanted;
+		if(File::getSize(path) <= 0) continue;
+		try {
+			readManifest(path, nullptr);
+			return path;
+		} catch(const Exception&) {
+		}
 	}
 	return string();
 }
@@ -216,26 +244,20 @@ void resolveActivePack(State& current) {
 	current.packResolved = true;
 	current.activePack = resolvePack(SETTING(ICON_PACK), current.darkMode);
 	current.entries.clear();
+	current.activeFolder.clear();
 	if(current.activePack.empty()) return;
 	try {
-		current.package = readManifest(current.activePack, &current.entries);
+		current.package = readManifest(current.activePack, &current.entries, &current.activeFolder);
 	} catch(const Exception&) {
 		current.activePack.clear();
+		current.activeFolder.clear();
 		current.entries.clear();
 	}
 }
 
-dwt::IconPtr loadPackIcon(const string& archivePath, const string& entry, long size) {
+dwt::IconPtr loadPackIcon(const string& folder, const string& entry, long size) {
 	try {
-		const auto contents = Archive(archivePath).readFile(entry, MAX_ICON_FILE_SIZE);
-		if(contents.empty()) return dwt::IconPtr();
-		const auto directory = Util::getTempPath() + "dcico-" + std::to_string(std::hash<string>{}(archivePath)) + PATH_SEPARATOR_STR;
-		const auto target = directory + std::to_string(std::hash<string>{}(entry)) + ".ico";
-		File::ensureDirectory(target);
-		File(target, File::WRITE, File::CREATE | File::TRUNCATE).write(contents);
-		return new dwt::Icon(Text::toT(target), dwt::Point(size, size));
-	} catch(const Exception&) {
-		return dwt::IconPtr();
+		return new dwt::Icon(Text::toT(folder + nativePath(entry)), dwt::Point(size, size));
 	} catch(const dwt::DWTException&) {
 		return dwt::IconPtr();
 	}
@@ -250,6 +272,7 @@ void IconManager::initialize() noexcept {
 	current.cache.clear();
 	current.entries.clear();
 	current.activePack.clear();
+	current.activeFolder.clear();
 	current.packResolved = false;
 }
 
@@ -261,6 +284,7 @@ void IconManager::setDarkMode(bool enabled) noexcept {
 		current.cache.clear();
 		current.entries.clear();
 		current.activePack.clear();
+		current.activeFolder.clear();
 		current.packResolved = false;
 	}
 }
@@ -271,6 +295,7 @@ void IconManager::reload() noexcept {
 	current.cache.clear();
 	current.entries.clear();
 	current.activePack.clear();
+	current.activeFolder.clear();
 	current.packResolved = false;
 }
 
@@ -290,7 +315,7 @@ dwt::IconPtr IconManager::load(unsigned resourceId, long size) {
 	const auto fileName = getFileName(resourceId);
 	if(!current.activePack.empty() && fileName) {
 		const auto entry = current.entries.find(Text::toLower(fileName));
-		if(entry != current.entries.end()) icon = loadPackIcon(current.activePack, entry->second, size);
+		if(entry != current.entries.end()) icon = loadPackIcon(current.activeFolder, entry->second, size);
 	}
 	const bool fromPackage = !!icon;
 	if(!icon) icon = new dwt::Icon(resourceId, dwt::Point(size, size));
@@ -397,12 +422,11 @@ IconManager::Preview::Preview(const string& package) {
 		return;
 	}
 	try {
-		readManifest(package, &entries);
-		archive = std::make_unique<Archive>(package);
+		readManifest(package, &entries, &folder);
 		path = package;
 	} catch(const Exception&) {
 		entries.clear();
-		archive.reset();
+		folder.clear();
 	}
 }
 
@@ -411,11 +435,11 @@ IconManager::Preview::~Preview() {
 
 dwt::IconPtr IconManager::Preview::load(unsigned resourceId, long size) {
 	const auto fileName = getFileName(resourceId);
-	if(archive && fileName) {
+	if(!folder.empty() && fileName) {
 		const auto entry = entries.find(Text::toLower(fileName));
 		if(entry != entries.end()) {
 			try {
-				if(auto icon = iconFromIco(archive->readFile(entry->second, MAX_ICON_FILE_SIZE), size)) {
+				if(auto icon = iconFromIco(File(folder + nativePath(entry->second), File::READ, File::OPEN).read(), size)) {
 					return icon;
 				}
 			} catch(const Exception&) {
@@ -426,6 +450,8 @@ dwt::IconPtr IconManager::Preview::load(unsigned resourceId, long size) {
 }
 
 vector<IconManager::Package> IconManager::getPackages() {
+	// Packages removed or replaced since they were last listed leave their extracted copies.
+	PackageCache::clean("IconPacks");
 	return discoverPackages();
 }
 

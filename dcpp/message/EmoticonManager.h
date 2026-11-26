@@ -38,6 +38,9 @@ using std::vector;
  * Rules are literal, case-sensitive strings. Recognition uses chat-token boundaries so rules do
  * not activate in URLs or in the middle of words. Invalid packages simply leave the source text
  * untouched; callers may invoke reload() after changing the configured package.
+ *
+ * A package is extracted once, the first time it is read, into its own folder (see PackageCache),
+ * and read from there afterwards.
  */
 class EmoticonManager {
 public:
@@ -83,11 +86,12 @@ public:
 
 	/** Read package metadata, shortcut rules and extracted icon paths without changing the active package. */
 	static PackagePreview previewPackage(const string& path);
-	/** Read and validate package metadata without extracting image assets. */
+	/** Read and validate package metadata (extracting the package, if it hasn't been). */
 	static Package inspectPackage(const string& path);
 	/** Return the directory reserved for user-installed packages. */
 	static string getDirectory();
-	/** Discover valid flat application-local and user-installed packages. */
+	/** Discover valid flat application-local and user-installed packages, and remove the extracted
+	 * copies of packages that are gone or have changed. */
 	static vector<Package> getPackages();
 
 	/** Forget the current package so it is re-read on the next request. */

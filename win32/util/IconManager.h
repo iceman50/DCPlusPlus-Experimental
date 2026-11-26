@@ -22,11 +22,9 @@
  *
  * An empty ICON_PACK setting selects Dark.dcico only for an effective dark appearance. An explicit
  * package applies to either appearance; EMBEDDED_PACK always uses executable resources.
- * Archive members are read with strict size and path limits,
- * materialized in the process temporary directory for Win32 LoadImage, and cached by resource and size.
+ * A package is extracted once, with strict size and path limits, into its own folder the first time
+ * it is read (see dcpp::PackageCache); its icons are loaded from there and cached by resource and size.
  */
-namespace dcpp { class Archive; }
-
 class IconManager {
 public:
 	static constexpr const char* EMBEDDED_PACK = "@embedded";
@@ -76,8 +74,7 @@ public:
 		/** `package` is a package path, or empty (or EMBEDDED_PACK) for the executable's icons. */
 		explicit Preview(const std::string& package);
 		~Preview();
-		/** An icon of the package; the package stays open while the preview exists, and its icons
-		 * are read straight from it, without temporary files. */
+		/** An icon of the package, read from its extracted folder. */
 		dwt::IconPtr load(unsigned resourceId, long size);
 		/** Whether the package could be read; the executable's icons are shown otherwise. */
 		bool isPackage() const { return !path.empty(); }
@@ -85,7 +82,8 @@ public:
 	private:
 		std::string path;
 		std::unordered_map<std::string, std::string> entries;
-		std::unique_ptr<dcpp::Archive> archive;
+		/** Where the package is extracted. */
+		std::string folder;
 	};
 	static std::vector<Package> getPackages();
 	static std::string getDirectory();

@@ -50,7 +50,7 @@ Archive::~Archive() {
 	}
 }
 
-void Archive::extract(const string& path, size_t maxEntries, uint64_t maxFileBytes, uint64_t maxTotalBytes) {
+Archive::Totals Archive::extract(const string& path, size_t maxEntries, uint64_t maxFileBytes, uint64_t maxTotalBytes) {
 	auto isDir = [](const string& path) { return *(path.end() - 1) == '/' || *(path.end() - 1) == '\\'; };
 	auto isSafeEntry = [](string entry) {
 		if(entry.empty() || entry.front() == '/' || entry.front() == '\\' || entry.find(':') != string::npos) return false;
@@ -68,11 +68,12 @@ void Archive::extract(const string& path, size_t maxEntries, uint64_t maxFileByt
 
 	dcassert(!path.empty() && isDir(path));
 
-	if(check(unzGoToFirstFile(file)) != UNZ_OK) { return; }
+	Totals totals;
+	if(check(unzGoToFirstFile(file)) != UNZ_OK) { return totals; }
 
 	// Count what is actually decompressed: shared packages must not be able to fill the disk.
-	size_t entries = 0;
-	uint64_t totalBytes = 0;
+	auto& entries = totals.entries;
+	auto& totalBytes = totals.totalBytes;
 	do {
 		if(++entries > maxEntries) throw Exception(_("Archive has too many entries"));
 		unz_file_info64 info = { };
@@ -113,8 +114,10 @@ void Archive::extract(const string& path, size_t maxEntries, uint64_t maxFileByt
 
 		// this does the CRC check.
 		check(unzCloseCurrentFile(file));
+		totals.largestFile = std::max(totals.largestFile, fileBytes);
 
 	} while(check(unzGoToNextFile(file)) == UNZ_OK);
+	return totals;
 }
 
 bool Archive::isPackagePath(const string& path) {
