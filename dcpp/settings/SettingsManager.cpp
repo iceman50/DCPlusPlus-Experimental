@@ -298,6 +298,7 @@ SettingsManager::SettingsManager() {
 	// Temporary testing default while the contact-verification workflow is revised.
 	setDefault(PFT_REQUIRE_VERIFICATION, false);
 	setDefault(MAX_SYSTEM_LOG_ITEMS, 100);
+	setDefault(GEOIP_DOWNLOAD_URL, "https://github.com/iceman50/exp-geoip2/releases/latest/download/GeoLite2-Country.mmdb");
 	setDefault(CCPM_RECONNECT_BASE_DELAY, 5);
 	setDefault(CCPM_RECONNECT_MAX_DELAY, 60);
 	setDefault(CCPM_STABLE_CONNECTION_TIME, 60);

@@ -1260,7 +1260,7 @@ PrivateFrame::UserInfoList PrivateFrame::selectedUsersImpl() {
 }
 
 void PrivateFrame::tabMenuImpl(dwt::Menu* menu) {
-	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); });
+	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); }, IconManager::menuIcon(IDI_TRAY_PM));
 	appendUserItems(getParent(), menu, false, false);
 	prepareMenu(menu, UserCommand::CONTEXT_USER, replyTo.getUser().hint);
 	menu->appendSeparator();
@@ -1292,7 +1292,7 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 
 void PrivateFrame::handleChannelMenu() {
 	auto menu = addChild(ControlSeeds::menu);
-	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); });
+	menu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); }, IconManager::menuIcon(IDI_TRAY_PM));
 	menu->appendSeparator();
 	if(SETTING(ENABLE_PRIVATE_SEND) && DirectTransferManager::available()) {
 		menu->appendItem(T_("Private Send..."), [this] { handlePrivateSend(); }, IconManager::menuIcon(IDI_FILE));

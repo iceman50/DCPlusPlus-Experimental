@@ -209,7 +209,7 @@ void GeoIPUpdate::startUpdate(bool force) {
 		if(account.empty() || key.empty() || !std::all_of(account.begin(), account.end(), [](char c) { return c >= '0' && c <= '9'; })) {
 			if(force)
 				LogManager::getInstance()->message(
-					_("Enter your MaxMind account ID and license key in Settings > Experimental > Interface."), LogMessage::SEV_WARNING,
+					_("Enter your MaxMind account ID and license key in View > Experimental > Other."), LogMessage::SEV_WARNING,
 					"GeoIP");
 			return;
 		}
@@ -218,7 +218,7 @@ void GeoIPUpdate::startUpdate(bool force) {
 	} else if(!validHostedUrl(source)) {
 		if(force)
 			LogManager::getInstance()->message(
-				_("Enter an HTTPS country database URL in Settings > Appearance."), LogMessage::SEV_WARNING, "GeoIP");
+				_("Enter an HTTPS country database URL in View > Experimental > Other."), LogMessage::SEV_WARNING, "GeoIP");
 		return;
 	}
 

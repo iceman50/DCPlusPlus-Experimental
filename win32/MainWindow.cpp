@@ -406,7 +406,7 @@ void MainWindow::initMenu() {
 
 	{
 		viewMenu = mainMenu->appendPopup(T_("&View"));
-		viewMenu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); });
+		viewMenu->appendItem(T_("Message outbox..."), [this] { MessageOutboxDlg(this).run(); }, IconManager::menuIcon(IDI_TRAY_PM));
 
 		viewIndexes[PublicHubsFrame::id] = viewMenu->appendItem(T_("&Public Hubs\tCtrl+P"),
 			[this] { PublicHubsFrame::openWindow(getTabView()); }, IconManager::menuIcon(IDI_PUBLICHUBS));
