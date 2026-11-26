@@ -106,6 +106,13 @@ int dwtMain(dwt::Application& app) {
 		seed.caption = L"Native menu appearance test";
 		seed.location = dwt::Rectangle(100, 100, 200, 100);
 		window->create(seed);
+		// A menu whose window isn't in the foreground is drawn inactive, its text gray, and Windows
+		// refuses the foreground while another application holds it (one being used, typically).
+		if(!SetForegroundWindow(window->handle())) {
+			DestroyWindow(window->handle());
+			std::puts("SKIP: another application holds the foreground, so menus would be drawn inactive");
+			return 0;
+		}
 
 		// A dark custom palette, as the user's themes are.
 		const dwt::Appearance::Palette dark = { RGB(0x06, 0x07, 0x0D), RGB(0x10, 0x13, 0x21), RGB(0xE6, 0xF1, 0xFF),
