@@ -298,7 +298,7 @@ public:
 
 	/// @todo should not be public
 	HWND treeHandle() const { return tree->handle(); }
-	/** The tree's visual style: none with manual rendering, so that its palette colours are used. */
+	/** The tree's visual style: none with manual rendering, so that its palette colors are used. */
 	void updateTreeTheme();
 	/// Returns the embedded column header, creating it when necessary.
 	HeaderPtr getHeader();

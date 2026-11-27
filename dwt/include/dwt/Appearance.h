@@ -81,7 +81,7 @@ public:
 		CustomPalette,
 		/** When dark, let Windows draw dark what it can (Windows 10 1903 and later): the caption,
 		 * menus, scroll bars and the controls that have a dark visual style. DWT paints the rest
-		 * in Windows' dark colours (nativeDarkPalette), not the supplied palette, which is kept
+		 * in Windows' dark colors (nativeDarkPalette), not the supplied palette, which is kept
 		 * for when the mode is light. Elsewhere, and when light, the same as Automatic. */
 		NativeDark
 	};
@@ -109,7 +109,7 @@ public:
 
 	/** Return the neutral dark palette supplied by DWT. */
 	static Palette defaultPalette();
-	/** Windows' own dark colours, used for what DWT paints in native dark mode. */
+	/** Windows' own dark colors, used for what DWT paints in native dark mode. */
 	static Palette nativeDarkPalette();
 	/** Whether Windows can draw dark itself (Rendering::NativeDark): Windows 10 1903 or later. */
 	static bool supportsNativeDark();
@@ -200,8 +200,8 @@ private:
 	void apply(Widget* widget);
 	/** `handled`: a callback of the widget has handled the message already. */
 	bool handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal, bool handled);
-	/** Paint a child control's sunken client edge (WS_EX_CLIENTEDGE) in the palette's colours, over
-	 * the one Windows draws in its system colours, light on any background. */
+	/** Paint a child control's sunken client edge (WS_EX_CLIENTEDGE) in the palette's colors, over
+	 * the one Windows draws in its system colors, light on any background. */
 	void paintClientEdge(Widget* widget);
 	void updateActivePalette();
 	void changed();

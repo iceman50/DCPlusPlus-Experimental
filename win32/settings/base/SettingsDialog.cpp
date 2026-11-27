@@ -443,7 +443,7 @@ void SettingsDialog::handleSelectionChanged() {
 		/* Showing a page with a report-view table paints the composited host right away,
 		 * and that paint posts its discard message. Handled after the invalidation below,
 		 * it would validate the whole new page before it is painted, leaving the page's
-		 * background in the default light colour on its first visit. Ignore that message
+		 * background in the default light color on its first visit. Ignore that message
 		 * and let the next composed paint post its own. */
 		++composedPaintGeneration;
 		composingPainted = false;

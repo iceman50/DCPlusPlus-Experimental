@@ -46,7 +46,7 @@ void event(const char* hook, const Job& job, void* data = nullptr) {
 
 void receive(const Job& job) {
 	auto checkDeadline = [&] {
-		if(service().stopping || job.cancelled) throw Exception("Plugin request cancelled");
+		if(service().stopping || job.cancelled) throw Exception("Plugin request canceled");
 	};
 	string body;
 	HttpConnection connection("DC++ Plugin API");

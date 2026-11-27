@@ -133,7 +133,7 @@ void initStyleDefaults() {
 	}
 
 	{
-		// default log color: more grey than the text color
+		// default log color: more gray than the text color
 		auto hls = ColorUtil::RGB2HLS(textColor);
 		SettingsManager::getInstance()->setDefault(SettingsManager::LOG_COLOR, ColorUtil::HLS2RGB(HLS(HLS_H(hls), 120, HLS_S(hls) / 2)));
 	}

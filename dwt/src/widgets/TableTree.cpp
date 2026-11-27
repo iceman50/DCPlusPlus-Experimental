@@ -257,7 +257,7 @@ LRESULT TableTree::handleCustomDraw(NMLVCUSTOMDRAW& data) {
 	if(data.nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM) && data.dwItemType == LVCDI_ITEM && data.iSubItem == 0) {
 		FreeCanvas canvas { data.nmcd.hdc };
 		const long drawIndent = std::max<long>(indent, 16);
-		// Palette colours also when Windows draws the list (native dark mode).
+		// Palette colors also when Windows draws the list (native dark mode).
 		const auto manual = usesPaletteColors();
 		const auto& palette = getAppearance().getPalette();
 

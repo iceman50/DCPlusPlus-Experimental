@@ -2103,7 +2103,7 @@ bool MainWindow::checkLockPassword(const tstring& password) {
 }
 
 void MainWindow::initLockPanel() {
-	// One centred column: a title, a hint, the password box, the Unlock button and a line for errors.
+	// One centered column: a title, a hint, the password box, the Unlock button and a line for errors.
 	lockPanel = addChild(Grid::Seed(1, 1));
 	lockPanel->column(0).mode = GridInfo::FILL;
 	lockPanel->column(0).align = GridInfo::CENTER;
@@ -2114,12 +2114,12 @@ void MainWindow::initLockPanel() {
 	column->setSpacing(column->scale(8));
 	column->column(0) = GridInfo(column->scale(300), GridInfo::STATIC, GridInfo::STRETCH);
 
-	Label::Seed centred;
-	centred.style |= SS_CENTER;
-	centred.caption = T_("DC++ is locked");
-	lockTitle = column->addChild(centred);
-	centred.caption = T_("Enter the lock password to use DC++ again.");
-	lockHint = column->addChild(centred);
+	Label::Seed centered;
+	centered.style |= SS_CENTER;
+	centered.caption = T_("DC++ is locked");
+	lockTitle = column->addChild(centered);
+	centered.caption = T_("Enter the lock password to use DC++ again.");
+	lockHint = column->addChild(centered);
 
 	lockPassword = column->addChild(ControlSeeds::Dialog::textBox);
 	lockPassword->setPassword();
@@ -2127,8 +2127,8 @@ void MainWindow::initLockPanel() {
 	lockButton = column->addChild(Button::Seed(T_("&Unlock")));
 	lockButton->onClicked([this] { tryUnlock(); });
 
-	centred.caption = Util::emptyStringT;
-	lockError = column->addChild(centred);
+	centered.caption = Util::emptyStringT;
+	lockError = column->addChild(centered);
 
 	lockPanel->setVisible(false);
 }
@@ -2309,7 +2309,7 @@ bool MainWindow::filterLockedKeys(MSG& msg) {
 
 bool MainWindow::confirmExit() {
 	if(SETTING(LOCK_PASSWORD_TO_EXIT) && hasLockPassword()) {
-		// The prompt is centred on the main window; bring that back from the tray first.
+		// The prompt is centered on the main window; bring that back from the tray first.
 		if(isIconic() || !getVisible()) {
 			handleRestore();
 		}

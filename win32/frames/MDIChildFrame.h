@@ -63,8 +63,8 @@ protected:
 		cs.location = tabView->getClientSize();
 		this->create(cs);
 		// Adding the window to the tab view below shows and paints it at once; created without
-		// addChild, it would otherwise get the application's colours only from a posted
-		// message, after that paint, and flash in the system colours.
+		// addChild, it would otherwise get the application's colors only from a posted
+		// message, after that paint, and flash in the system colors.
 		this->finalizeAppearance();
 
 		if(helpId)

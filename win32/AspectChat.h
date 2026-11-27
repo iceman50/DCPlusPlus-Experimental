@@ -133,7 +133,7 @@ protected:
 		const auto acceptTempFiles = temporarySharing && !hubUrl.empty() && SETTING(ENABLE_RTF_TEMP_SHARES);
 		if(routeChanged || !acceptTempFiles) {
 			if(!attachmentRequests.empty())
-				t().addStatus(T_("Dropped attachment preparation cancelled: the chat route is unavailable or changed."));
+				t().addStatus(T_("Dropped attachment preparation canceled: the chat route is unavailable or changed."));
 			cancelAttachmentRequests();
 		}
 		message->setFileDropEnabled(acceptTempFiles);

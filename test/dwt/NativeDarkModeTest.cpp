@@ -1,6 +1,6 @@
 // Copyright (C) 2026 iceman50. GPL-3.0-or-later.
 // Native dark mode (Rendering::NativeDark): Windows draws dark what it can (the caption, the menus
-// and the controls with a dark visual style) and DWT paints the rest in Windows' dark colours; a
+// and the controls with a dark visual style) and DWT paints the rest in Windows' dark colors; a
 // light mode, or the Automatic rendering, undoes all of it.
 #include <dwt/Application.h>
 #include <dwt/widgets/Button.h>
@@ -138,7 +138,7 @@ std::pair<int, int> selectedItemBrightness(HWND list) {
 }
 
 /** Have the window paint its menu bar's background (WM_UAHDRAWMENU) into a bitmap, and return the
- * colour in the middle of the bar, or CLR_INVALID if the window left it to Windows. */
+ * color in the middle of the bar, or CLR_INVALID if the window left it to Windows. */
 COLORREF menuBarColor(HWND window) {
 	RECT windowRect = { 0 };
 	GetWindowRect(window, &windowRect);
@@ -247,7 +247,7 @@ int dwtMain(dwt::Application& app) {
 			const auto selected = selectedItemBrightness(list->handle());
 			check(selected.first - selected.second > 100, "A list box's selected item can't be read");
 			check(ListView_GetBkColor(table->handle()) == appearance.getPalette().background,
-				"Windows draws the list, but not in the palette's colours");
+				"Windows draws the list, but not in the palette's colors");
 
 			// A widget created afterwards is dark at once.
 			auto later = window->addChild(dwt::Button::Seed(L"Later"));

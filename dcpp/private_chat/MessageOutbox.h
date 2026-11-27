@@ -37,7 +37,7 @@ public:
 	void open(const string& path);
 	int64_t enqueue(Entry entry, int64_t now);
 	std::vector<Entry> list() const;
-	bool erase(int64_t id); // Sending messages cannot be cancelled.
+	bool erase(int64_t id); // Sending messages cannot be canceled.
 	bool retry(int64_t id, int64_t now); // Explicit acknowledgement of duplicate risk.
 	bool hasPending(const string& cid, const string& hub) const;
 	// One serialized dispatcher; never call external code holding the database mutex.

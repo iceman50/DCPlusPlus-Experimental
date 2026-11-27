@@ -276,7 +276,7 @@ void HttpConnection::start(string body, bool post) {
 				perform(source, options, [this](const HttpConnection&, const uint8_t* data, size_t len) {
 					fire(HttpConnectionListener::Data(), this, data, len);
 				}, body, post, true);
-				if(stopped) throw Exception("HTTP request cancelled");
+				if(stopped) throw Exception("HTTP request canceled");
 				fire(HttpConnectionListener::Complete(), this);
 			} catch(const Exception& e) {
 				statusLine = e.getError();
@@ -303,7 +303,7 @@ void HttpConnection::perform(string source, const Options& options, const DataCa
 	auto lastProgress = began;
 	auto progress = [&] { lastProgress = Clock::now(); };
 	auto check = [&] {
-		if(stopped || (options.cancelled && options.cancelled())) throw Exception("HTTP request cancelled");
+		if(stopped || (options.cancelled && options.cancelled())) throw Exception("HTTP request canceled");
 		const auto now = Clock::now();
 		if(std::chrono::duration_cast<std::chrono::milliseconds>(now - began).count() >= static_cast<int64_t>(options.timeoutMs) ||
 			std::chrono::duration_cast<std::chrono::milliseconds>(now - lastProgress).count() >= static_cast<int64_t>(options.idleTimeoutMs))

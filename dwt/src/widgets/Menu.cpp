@@ -181,7 +181,7 @@ void Menu::updateAppearance() {
 	if(inheritsApplicationFont && applicationFont != appearance->getFont()) setFont(nullptr);
 	if(appearance->isManual()) {
 		theme.unload();
-		// In native dark mode, the menu bar's colour (its gaps and edges): the window's.
+		// In native dark mode, the menu bar's color (its gaps and edges): the window's.
 		backgroundBrush = new Brush(appearance->isNativeDark() ? appearance->getPalette().background :
 			colors.background);
 	} else {

@@ -620,7 +620,7 @@ size_t ShareManager::clearTempShares() noexcept {
 	}
 	for(auto& request: cancelled) {
 		deliverChatAttachmentCallback(std::move(request), nullopt,
-			_("Attachment preparation was cancelled when temporary shares were cleared"));
+			_("Attachment preparation was canceled when temporary shares were cleared"));
 	}
 	return count;
 }
@@ -704,7 +704,7 @@ uint64_t ShareManager::prepareChatAttachment(const string& realPath, const strin
 	}
 	if(cleared) {
 		deliverChatAttachmentCallback(std::move(request), nullopt,
-			_("Attachment preparation was cancelled when temporary shares were cleared"));
+			_("Attachment preparation was canceled when temporary shares were cleared"));
 		return requestId;
 	}
 	if(completed) finishChatAttachment(std::move(*completed), *exactTth);
@@ -749,7 +749,7 @@ void ShareManager::deliverChatAttachmentCallback(PendingChatAttachment&& request
 	if(state == ChatAttachmentRequestState::CANCELLED) return;
 	if(state == ChatAttachmentRequestState::CLEARED) {
 		attachment = nullopt;
-		error = _("Attachment preparation was cancelled when temporary shares were cleared");
+		error = _("Attachment preparation was canceled when temporary shares were cleared");
 	}
 	invokeChatAttachmentCallback(std::move(request), std::move(attachment), std::move(error));
 }

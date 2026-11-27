@@ -143,7 +143,7 @@ public:
 	size_t clearTempShares() noexcept;
 	/** Prepare a local file as an exact-TTH attachment for one chat route. The
 	 * callback may run immediately or on the hashing thread and is called exactly
-	 * once unless the request is cancelled. */
+	 * once unless the request is canceled. */
 	uint64_t prepareChatAttachment(const string& realPath, const string& hubUrl,
 		ChatAttachmentCallback callback) noexcept;
 	/** As above, for a private chat: a temporary share is only for the recipient. */

@@ -217,7 +217,7 @@ bool Header::handleMessage(const MSG& msg, LRESULT& retVal) {
 		return handled;
 	}
 	// In native dark mode Windows draws the header dark but its items' text black: give the
-	// text the palette's colour.
+	// text the palette's color.
 	if(getAppearance().isNativeDark() && !isManualAppearance() &&
 		getAppearancePolicy() != AppearancePolicy::Native &&
 		!(handled && retVal != 0 && retVal != CDRF_DODEFAULT))

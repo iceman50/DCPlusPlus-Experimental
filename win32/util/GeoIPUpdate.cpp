@@ -272,7 +272,7 @@ int GeoIPTransfer::run() {
 		receive();
 		output.reset();
 		if(cancelled)
-			throw Exception("GeoLite2 download cancelled");
+			throw Exception("GeoLite2 download canceled");
 
 		const auto magic = File(staging + ".download", File::READ, File::OPEN).read(2);
 		const bool archive =
@@ -280,7 +280,7 @@ int GeoIPTransfer::run() {
 		if(archive)
 			GeoIP::extractCountry(staging + ".download", staging);
 		if(cancelled)
-			throw Exception("GeoLite2 download cancelled");
+			throw Exception("GeoLite2 download canceled");
 
 		GeoManager::getInstance()->install(archive ? staging : staging + ".download");
 		success = true;

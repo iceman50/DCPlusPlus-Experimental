@@ -1702,7 +1702,7 @@ void HashManager::Hasher::stopHashing(const string& baseDir) {
 	for(const auto& item: cancelled) {
 		HashManager::getInstance()->hashFailed(item.first, item.second.size, item.second.timestamp,
 			item.second.jobId,
-			HashManagerListener::Failure::CANCELLED, _("Hashing was cancelled"));
+			HashManagerListener::Failure::CANCELLED, _("Hashing was canceled"));
 	}
 }
 
@@ -1952,7 +1952,7 @@ int HashManager::Hasher::run() {
 					HashManager::getInstance()->hashFailed(fname, requestedSize, requestedTimestamp,
 						requestedJobId,
 						stop ? HashManagerListener::Failure::CANCELLED : HashManagerListener::Failure::INCOMPLETE,
-						stop ? _("Hashing was cancelled") : _("Hashing did not read the complete file"));
+						stop ? _("Hashing was canceled") : _("Hashing did not read the complete file"));
 				} else if(xcrc32 && xcrc32->getValue() != expectedCrc) {
 					beginTerminal();
 					LogManager::getInstance()->message(str(F_("%1% not shared; calculated CRC32 does not match the one found in SFV file.") % Util::addBrackets(fname)),

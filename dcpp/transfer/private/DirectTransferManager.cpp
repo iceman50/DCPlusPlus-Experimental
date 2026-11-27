@@ -238,7 +238,7 @@ const char* DirectTransferManager::stateName(State state) noexcept {
 		"Paused - resume before expiry",
 		"Bytes sent; awaiting receipt",
 		"Saved and verified",
-		"Cancelled",
+		"Canceled",
 		"Declined",
 		"Expired",
 		"Failed securely"
@@ -304,7 +304,7 @@ size_t DirectTransferManager::clearFinished(const HintedUser& peer) {
 		auto& session = *entry.second;
 		if(session.peer.user == peer.user && isTerminal(session.state) && !session.dismissed) {
 			// Keep the protocol session until normal expiry: a saved file can still
-			// need a receipt retry, and cancelled hashing jobs must be harvested.
+			// need a receipt retry, and canceled hashing jobs must be harvested.
 			session.dismissed = true;
 			++cleared;
 		}

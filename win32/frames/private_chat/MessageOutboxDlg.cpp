@@ -147,7 +147,7 @@ void MessageOutboxDlg::action(bool retryMessage) {
 	try {
 		auto& store = MessageOutboxManager::getInstance()->getStore();
 		const auto changed = retryMessage ? store.retry(id, time(nullptr)) : store.erase(id);
-		if(!changed) ::MessageBox(handle(), T_("The message state changed. A message already being sent cannot be cancelled.").c_str(), T_("Message outbox").c_str(), MB_OK);
+		if(!changed) ::MessageBox(handle(), T_("The message state changed. A message already being sent cannot be canceled.").c_str(), T_("Message outbox").c_str(), MB_OK);
 		refresh();
 	} catch(const std::exception& e) {
 		::MessageBox(handle(), Text::toT(e.what()).c_str(), T_("Message outbox").c_str(), MB_OK | MB_ICONERROR);

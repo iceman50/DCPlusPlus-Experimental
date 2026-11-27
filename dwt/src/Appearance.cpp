@@ -663,7 +663,7 @@ Appearance::Palette Appearance::nativeDarkPalette() {
 			accent = blend(accent, RGB(0, 0, 0), 48);
 		}
 	}
-	// The colours of Windows 11's dark visual styles (dialog, edit field, text).
+	// The colors of Windows 11's dark visual styles (dialog, edit field, text).
 	Palette palette = {
 		RGB(32, 32, 32),
 		RGB(45, 45, 45),
@@ -904,7 +904,7 @@ void Appearance::paintClientEdge(Widget* widget) {
 	if(bounds.right <= 2 * x || bounds.bottom <= 2 * y) {
 		return;
 	}
-	// A line in the border colour, then the control's own background up to its client area or
+	// A line in the border color, then the control's own background up to its client area or
 	// scroll bars, so that the edge reads as a 1-pixel border.
 	COLORREF inside = active.background;
 	auto control = dynamic_cast<Control*>(widget);
@@ -946,7 +946,7 @@ bool Appearance::handleMessage(Widget* widget, const MSG& msg, LRESULT& retVal, 
 		return false;
 	}
 
-	// Windows draws a child control's sunken edge in its system colours (light on the right and
+	// Windows draws a child control's sunken edge in its system colors (light on the right and
 	// at the bottom) whatever the palette; paint it over once Windows has drawn the rest (the
 	// scroll bars). In native dark mode a control with a dark visual style has a dark border.
 	if(msg.message == WM_NCPAINT && !handled && isManual() && widget->handle() &&

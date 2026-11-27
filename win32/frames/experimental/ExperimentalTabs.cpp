@@ -166,7 +166,7 @@ public:
 		Seed seed(0, WS_EX_CONTROLPARENT);
 		create(seed);
 		// Created without addChild, which would do this: without it the columns paint in the
-		// system colours until a posted message gives them the application's.
+		// system colors until a posted message gives them the application's.
 		finalizeAppearance();
 	}
 
@@ -345,7 +345,7 @@ ExperimentalTab::ExperimentalTab(TabViewPtr parent, const tstring& title, unsign
 	seed.style &= ~WS_VISIBLE;
 	seed.exStyle |= WS_EX_CONTROLPARENT;
 	create(seed);
-	// As addChild would: otherwise the tab paints in the system colours until a posted message
+	// As addChild would: otherwise the tab paints in the system colors until a posted message
 	// gives it the application's, and the first tab is painted before that.
 	finalizeAppearance();
 	setHelpId(helpId);
@@ -379,7 +379,7 @@ void ExperimentalTab::ensureBuilt() {
 	if(builtCallback) {
 		builtCallback();
 	}
-	// Controls made with addChild have the application's font and colours at once, so the tab is
+	// Controls made with addChild have the application's font and colors at once, so the tab is
 	// measured right away; contents filled in later must not change a group's size (an empty
 	// label is a line high only once it has text: start it with a space).
 	// A tab built in the background is laid out when it is shown. The tab in front is laid out

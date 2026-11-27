@@ -785,7 +785,7 @@ LRESULT Tree::postPaint(NMTVCUSTOMDRAW& nmcd) {
 }
 
 LRESULT Tree::drawAppearance(NMTVCUSTOMDRAW& data) {
-	// In native dark mode Windows draws the items, in the tree's palette colours.
+	// In native dark mode Windows draws the items, in the tree's palette colors.
 	if(!isManualAppearance() || getAppearance().isNativeDark()) {
 		return CDRF_DODEFAULT;
 	}
