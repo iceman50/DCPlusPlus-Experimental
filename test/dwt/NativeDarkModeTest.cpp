@@ -7,6 +7,7 @@
 #include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/ComboBox.h>
 #include <dwt/widgets/Label.h>
+#include <dwt/widgets/ListBox.h>
 #include <dwt/widgets/Menu.h>
 #include <dwt/widgets/Table.h>
 #include <dwt/widgets/TextBox.h>
@@ -105,6 +106,37 @@ int scrollBarBrightness(HWND window) {
 	return value;
 }
 
+/** The lightest and darkest pixels of a list box's selected item, as it paints itself. */
+std::pair<int, int> selectedItemBrightness(HWND list) {
+	RECT item = { 0 };
+	check(SendMessage(list, LB_GETITEMRECT, SendMessage(list, LB_GETCURSEL, 0, 0), reinterpret_cast<LPARAM>(&item)) != LB_ERR,
+		"The list box has no selected item");
+	RECT client = { 0 };
+	GetClientRect(list, &client);
+	BITMAPINFO info {};
+	info.bmiHeader = { sizeof(BITMAPINFOHEADER), client.right, -client.bottom, 1, 32 };
+	void* bits = nullptr;
+	auto screen = GetDC(nullptr);
+	auto dc = CreateCompatibleDC(screen);
+	auto bitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+	auto previous = SelectObject(dc, bitmap);
+	SendMessage(list, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(dc), PRF_CLIENT | PRF_ERASEBKGND);
+	GdiFlush();
+	int lightest = 0, darkest = 255;
+	for(int y = item.top; y < item.bottom && y < client.bottom; ++y) {
+		for(int x = 0; x < client.right; ++x) {
+			const auto value = brightness(static_cast<const DWORD*>(bits)[static_cast<size_t>(y) * client.right + x]);
+			lightest = std::max(lightest, value);
+			darkest = std::min(darkest, value);
+		}
+	}
+	SelectObject(dc, previous);
+	DeleteObject(bitmap);
+	DeleteDC(dc);
+	ReleaseDC(nullptr, screen);
+	return { lightest, darkest };
+}
+
 /** Have the window paint its menu bar's background (WM_UAHDRAWMENU) into a bitmap, and return the
  * colour in the middle of the bar, or CLR_INVALID if the window left it to Windows. */
 COLORREF menuBarColor(HWND window) {
@@ -163,6 +195,10 @@ int dwtMain(dwt::Application& app) {
 		table->resize(dwt::Rectangle(10, 60, 400, 200));
 		table->addColumn(L"Header text", 300);
 		auto label = window->addChild(dwt::Label::Seed(L"Label"));
+		auto list = window->addChild(dwt::ListBox::Seed());
+		list->resize(dwt::Rectangle(320, 270, 150, 90));
+		for(auto text : { L"First", L"Second item", L"Third" }) list->addValue(text);
+		SendMessage(list->handle(), LB_SETCURSEL, 1, 0);
 		auto edit = window->addChild(dwt::TextBox::Seed(L"Single line"));
 		auto editSeed = dwt::TextBox::Seed(L"Several lines");
 		editSeed.style |= ES_MULTILINE | WS_VSCROLL;
@@ -207,6 +243,9 @@ int dwtMain(dwt::Application& app) {
 			// DarkMode_CFD has light scroll bars.
 			check(nativeTheme(multiline->handle()) == Theme::Explorer, "A multi-line text box's scroll bars aren't dark");
 			check(scrollBarBrightness(multiline->handle()) < 80, "A multi-line text box's scroll bar is drawn light");
+			// Windows' dark selection is a white bar, under the palette's white text.
+			const auto selected = selectedItemBrightness(list->handle());
+			check(selected.first - selected.second > 100, "A list box's selected item can't be read");
 			check(ListView_GetBkColor(table->handle()) == appearance.getPalette().background,
 				"Windows draws the list, but not in the palette's colours");
 

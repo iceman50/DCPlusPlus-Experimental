@@ -132,15 +132,21 @@ std::pair<util::win32::darkmode::Theme, bool> nativeThemeFor(HWND window, const 
 }
 
 /** Give a window a dark visual style, or (Theme::None) its usual one back, once per change.
- * `combo`: the window is a combo box, whose drop-down list gets the dark scroll bars as well. */
-void setNativeTheme(HWND window, util::win32::darkmode::Theme theme, bool combo = false) {
+ * `className` is its class, or the common control's a DWT class is a superclass of; a combo box's
+ * drop-down list gets the dark scroll bars as well. */
+void setNativeTheme(HWND window, util::win32::darkmode::Theme theme, const tstring& className) {
 	using namespace util::win32;
 	const auto previous = static_cast<darkmode::Theme>(
 		reinterpret_cast<UINT_PTR>(::GetProp(window, nativeThemeProperty())));
 	if(previous == theme) {
 		return;
 	}
-	darkmode::allowForWindow(window, theme != darkmode::Theme::None);
+	// A list box (a combo box's drop-down list too) allowed dark mode gets Windows' dark selection,
+	// a white bar, under the palette's white text: the selected item can't be read. Its dark
+	// visual style alone gives it dark scroll bars, and the selection keeps the system colors.
+	const bool listBox = ::lstrcmpi(className.c_str(), WC_LISTBOX) == 0 ||
+		::lstrcmpi(className.c_str(), _T("ComboLBox")) == 0;
+	darkmode::allowForWindow(window, theme != darkmode::Theme::None && !listBox);
 	uxtheme::setWindowTheme(window, darkmode::themeName(theme), nullptr);
 	if(theme == darkmode::Theme::None) {
 		::RemoveProp(window, nativeThemeProperty());
@@ -150,8 +156,8 @@ void setNativeTheme(HWND window, util::win32::darkmode::Theme theme, bool combo 
 
 	// A combo box's drop-down list is a window of its own, with scroll bars.
 	COMBOBOXINFO info = { sizeof(COMBOBOXINFO) };
-	if(combo && ::GetComboBoxInfo(window, &info) && info.hwndList) {
-		setNativeTheme(info.hwndList, theme == darkmode::Theme::None ? theme : darkmode::Theme::Explorer);
+	if(::lstrcmpi(className.c_str(), WC_COMBOBOX) == 0 && ::GetComboBoxInfo(window, &info) && info.hwndList) {
+		setNativeTheme(info.hwndList, theme == darkmode::Theme::None ? theme : darkmode::Theme::Explorer, _T("ComboLBox"));
 	}
 }
 
@@ -861,7 +867,7 @@ void Appearance::apply(Widget* widget) {
 		const auto name = baseClassName(widget);
 		const auto target = nativeThemeFor(widget->handle(), name).first;
 		if(target != util::win32::darkmode::Theme::None) {
-			setNativeTheme(widget->handle(), target, ::lstrcmpi(name.c_str(), WC_COMBOBOX) == 0);
+			setNativeTheme(widget->handle(), target, name);
 		}
 	}
 	if(widget->appearancePolicy == AppearancePolicy::Native) {
@@ -882,7 +888,7 @@ void Appearance::applyNativeTheme(Widget* widget) {
 	// A dark style comes off before the widget's own update, which may then set the theme it
 	// uses (Tree and ToolTip do); one goes on after it (in apply), replacing that.
 	if(target.first == util::win32::darkmode::Theme::None) {
-		setNativeTheme(window, target.first, ::lstrcmpi(name.c_str(), WC_COMBOBOX) == 0);
+		setNativeTheme(window, target.first, name);
 	}
 	if(!(::GetWindowLongPtr(window, GWL_STYLE) & WS_CHILD)) {
 		util::win32::darkmode::allowForWindow(window, enabled);
