@@ -155,6 +155,9 @@ private:
 	bool changingFrame;
 	FrameRendering frameRendering = FrameRendering::Automatic;
 	bool nativeFrameAppearanceApplied = false;
+	/** The caption has Windows' dark appearance (native dark mode). */
+	bool nativeDarkCaption = false;
+	void redrawNativeFrame();
 	long lastDialogBorderWidth = 0;
 };
 

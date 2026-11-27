@@ -345,13 +345,22 @@ void Frame::updateCaptionAppearance() {
 void Frame::updateNativeFrameAppearance() {
 	const bool caption = !hasStyle(WS_CHILD) && (manualFrame || hasStyle(WS_CAPTION));
 	if(caption && getAppearance().isNativeDark() && getAppearancePolicy() != AppearancePolicy::Native) {
-		// Windows' own dark caption and frame, in its own colours.
-		if(nativeFrameAppearanceApplied) {
-			util::win32::dwm::resetFrameAppearance(handle());
+		// Windows' own dark caption and frame, in its own colors. Set once: every change of the
+		// attribute needs the frame repainted, which DWM doesn't do by itself for a window on
+		// screen, and switching it off and on again at each appearance change (a theme switch makes
+		// several) left captions drawn light.
+		if(!nativeDarkCaption) {
+			if(nativeFrameAppearanceApplied) {
+				util::win32::dwm::resetFrameAppearance(handle());
+			}
+			nativeFrameAppearanceApplied = SUCCEEDED(util::win32::darkmode::setDarkCaption(handle(), true));
+			nativeDarkCaption = true;
+			redrawNativeFrame();
 		}
-		nativeFrameAppearanceApplied = SUCCEEDED(util::win32::darkmode::setDarkCaption(handle(), true));
 		return;
 	}
+	const bool leavingNativeDark = nativeDarkCaption;
+	nativeDarkCaption = false;
 	const bool eligible = frameRendering == FrameRendering::Native && isManualAppearance() && caption;
 	if(eligible) {
 		const auto& palette = getAppearance().getPalette();
@@ -365,6 +374,15 @@ void Frame::updateNativeFrameAppearance() {
 		util::win32::dwm::resetFrameAppearance(handle());
 		nativeFrameAppearanceApplied = false;
 	}
+	if(leavingNativeDark) {
+		redrawNativeFrame();
+	}
+}
+
+void Frame::redrawNativeFrame() {
+	// DWM draws the caption again only when the frame changes.
+	::SetWindowPos(handle(), nullptr, 0, 0, 0, 0,
+		SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 }
 
 }
