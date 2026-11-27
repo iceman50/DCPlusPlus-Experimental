@@ -689,8 +689,10 @@ void TransfersTab::build() {
 			IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
 		addInt(cur, T_("Received partial file list limit"), SettingsManager::MAX_RECEIVED_PARTIAL_LIST_BYTES,
 			IDH_SETTINGS_EXPERIMENTAL_MAX_RECEIVED_PARTIAL_LIST_BYTES, T_("KiB"), 1, MAX_KIB_SETTING, BYTES_PER_KIB);
-		addCheck(cur, T_("Prefer Zstandard over zlib when the peer supports both"), SettingsManager::PREFER_ZSTD);
-		addCheck(cur, T_("Cache file lists on disk and load file entries on demand"), SettingsManager::FILELIST_CACHE);
+		addCheck(cur, T_("Prefer Zstandard over zlib when the peer supports both"), SettingsManager::PREFER_ZSTD,
+			IDH_SETTINGS_EXPERIMENTAL_PREFER_ZSTD);
+		addCheck(cur, T_("Cache file lists on disk and load file entries on demand"), SettingsManager::FILELIST_CACHE,
+			IDH_SETTINGS_EXPERIMENTAL_FILELIST_CACHE);
 		cur->addChild(Label::Seed(T_("The XML limit is also under Settings > Advanced > Experts only.")))
 			->setHelpId(IDH_SETTINGS_EXPERT_MAX_FILELIST_SIZE);
 	}
@@ -738,6 +740,7 @@ void TransfersTab::build() {
 		buttons->addChild(Button::Seed(T_("Full &check")))->onClicked([this] { handleVerifyHashDb(true); });
 		buttons->addChild(Button::Seed(T_("&Optimize")))->onClicked([this] { handleOptimizeHashDb(); });
 		buttons->addChild(Button::Seed(T_("&Compact")))->onClicked([this] { handleCompactHashDb(); });
+		buttons->setHelpId(IDH_SETTINGS_EXPERIMENTAL_HASH_MAINTENANCE);
 		hashDbStatus = buttons->addChild(Label::Seed(_T(" ")));
 		buttons->setWidget(hashDbStatus, 1, 0, 1, 5);
 	}
@@ -809,8 +812,10 @@ void PrivateSendTab::build() {
 		auto group = addGroup(LEFT, T_("Private Send (experimental PFT1)"));
 		auto cur = group->addChild(Grid::Seed(4, 1));
 		cur->column(0).mode = GridInfo::FILL;
-		addCheck(cur, T_("Enable Private Send (requires TLS 1.2+)"), SettingsManager::ENABLE_PRIVATE_SEND);
-		addCheck(cur, T_("Require contact verification (off for testing)"), SettingsManager::PFT_REQUIRE_VERIFICATION);
+		addCheck(cur, T_("Enable Private Send (requires TLS 1.2+)"), SettingsManager::ENABLE_PRIVATE_SEND,
+			IDH_SETTINGS_EXPERIMENTAL_ENABLE_PRIVATE_SEND);
+		addCheck(cur, T_("Require contact verification (off for testing)"), SettingsManager::PFT_REQUIRE_VERIFICATION,
+			IDH_SETTINGS_EXPERIMENTAL_PFT_REQUIRE_VERIFICATION);
 		cur->addChild(Label::Seed(T_("Use Private Send in a private chat's menu.\r\nTesting mode skips contact verification on this client.")));
 		cur->addChild(Label::Seed(
 			T_("Disabling revokes transfers. Received files stay in a protected, unshared folder;\r\nfiles never open automatically.")));
@@ -820,8 +825,8 @@ void PrivateSendTab::build() {
 		auto group = addGroup(RIGHT, T_("Time limits"));
 		auto cur = group->addChild(Grid::Seed(2, 1));
 		cur->column(0).mode = GridInfo::FILL;
-		addInt(cur, T_("Offer expires after"), SettingsManager::PFT_OFFER_MINUTES, IDH_EXPERIMENTALPAGE, T_("minutes"), 1, 1440);
-		addInt(cur, T_("Accepted transfer expires after"), SettingsManager::PFT_TRANSFER_MINUTES, IDH_EXPERIMENTALPAGE,
+		addInt(cur, T_("Offer expires after"), SettingsManager::PFT_OFFER_MINUTES, IDH_SETTINGS_EXPERIMENTAL_PFT_OFFER_MINUTES, T_("minutes"), 1, 1440);
+		addInt(cur, T_("Accepted transfer expires after"), SettingsManager::PFT_TRANSFER_MINUTES, IDH_SETTINGS_EXPERIMENTAL_PFT_TRANSFER_MINUTES,
 			T_("minutes"), 1, 10080);
 	}
 }
@@ -933,21 +938,22 @@ void OtherTab::build() {
 		addCheck(cur, T_("Keep messages for offline users and send them later"), SettingsManager::ENABLE_MESSAGE_OUTBOX,
 			IDH_SETTINGS_EXPERIMENTAL_ENABLE_OUTBOX);
 		addInt(cur, T_("Maximum retained messages"), SettingsManager::OUTBOX_MAX_ENTRIES,
-			IDH_EXPERIMENTALPAGE, T_("messages"), MessageOutbox::entryLimitMin, MessageOutbox::entryLimitMax);
+			IDH_SETTINGS_EXPERIMENTAL_OUTBOX_MAX_ENTRIES, T_("messages"), MessageOutbox::entryLimitMin, MessageOutbox::entryLimitMax);
 		addInt(cur, T_("Maximum message size"), SettingsManager::OUTBOX_MAX_MESSAGE_BYTES,
-			IDH_EXPERIMENTALPAGE, T_("KiB"), MessageOutbox::messageLimitMin / BYTES_PER_KIB,
+			IDH_SETTINGS_EXPERIMENTAL_OUTBOX_MAX_MESSAGE_SIZE, T_("KiB"), MessageOutbox::messageLimitMin / BYTES_PER_KIB,
 			MessageOutbox::messageLimitMax / BYTES_PER_KIB, BYTES_PER_KIB);
 		addInt(cur, T_("Pending messages expire after"), SettingsManager::OUTBOX_EXPIRY_DAYS,
-			IDH_EXPERIMENTALPAGE, T_("days"), MessageOutbox::expiryDaysMin, MessageOutbox::expiryDaysMax);
+			IDH_SETTINGS_EXPERIMENTAL_OUTBOX_EXPIRY_DAYS, T_("days"), MessageOutbox::expiryDaysMin, MessageOutbox::expiryDaysMax);
 		cur->addChild(Label::Seed(T_("Applies to new messages and retries.\r\nExisting messages keep their deadlines.")));
 	}
 
 	{
-		auto group = addGroup(LEFT, T_("Hub user lists"));
+		auto group = addGroup(LEFT, T_("Hub user lists"), IDH_SETTINGS_EXPERIMENTAL_HUB_USER_ICON_SIZE);
 		auto cur = group->addChild(Grid::Seed(2, 2));
 		cur->column(0).mode = GridInfo::FILL;
-		cur->addChild(Label::Seed(T_("Default user icon size")));
+		cur->addChild(Label::Seed(T_("Default user icon size")))->setHelpId(IDH_SETTINGS_EXPERIMENTAL_HUB_USER_ICON_SIZE);
 		auto iconSize = cur->addChild(ControlSeeds::Dialog::comboBox);
+		iconSize->setHelpId(IDH_SETTINGS_EXPERIMENTAL_HUB_USER_ICON_SIZE);
 		iconSize->setAccessibleName(T_("Default hub user icon size"));
 		for(auto size: HubSettings::userIconSizes) {
 			iconSize->addValue(Text::toT(std::to_string(size)) + _T(" px"));
@@ -1001,10 +1007,12 @@ void OtherTab::build() {
 
 		auto enabled = fields->addChild(CheckBox::Seed(T_("Download directly from MaxMind (testing override)")));
 		fields->setWidget(enabled, 2, 0, 1, 2);
+		enabled->setHelpId(IDH_SETTINGS_EXPERIMENTAL_GEOIP_USE_MAXMIND);
 		live.addBool(enabled, SettingsManager::GEOIP_USE_MAXMIND);
 
-		fields->addChild(Label::Seed(T_("MaxMind account ID")));
+		fields->addChild(Label::Seed(T_("MaxMind account ID")))->setHelpId(IDH_SETTINGS_EXPERIMENTAL_MAXMIND_ACCOUNT_ID);
 		auto account = fields->addChild(ControlSeeds::Dialog::textBox);
+		account->setHelpId(IDH_SETTINGS_EXPERIMENTAL_MAXMIND_ACCOUNT_ID);
 		account->setAccessibleName(T_("MaxMind account ID"));
 		live.addText(account, SettingsManager::MAXMIND_ACCOUNT_ID, [] {
 			return Text::toT(SETTING(MAXMIND_ACCOUNT_ID));
@@ -1016,8 +1024,9 @@ void OtherTab::build() {
 			return true;
 		});
 
-		fields->addChild(Label::Seed(T_("License key")));
+		fields->addChild(Label::Seed(T_("License key")))->setHelpId(IDH_SETTINGS_EXPERIMENTAL_MAXMIND_LICENSE_KEY);
 		auto key = fields->addChild(ControlSeeds::Dialog::textBox);
+		key->setHelpId(IDH_SETTINGS_EXPERIMENTAL_MAXMIND_LICENSE_KEY);
 		key->setPassword();
 		key->setAccessibleName(T_("MaxMind license key"));
 		live.addText(key, SettingsManager::MAXMIND_LICENSE_KEY, [] {
@@ -1032,6 +1041,7 @@ void OtherTab::build() {
 		});
 
 		auto note = fields->addChild(Label::Seed(T_("The MaxMind login overrides the URL.\r\nThe key is protected for this Windows account.")));
+		note->setHelpId(IDH_SETTINGS_EXPERIMENTAL_GEOIP_USE_MAXMIND);
 		fields->setWidget(note, 5, 0, 1, 2);
 	}
 

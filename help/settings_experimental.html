@@ -9,241 +9,384 @@
 <body>
 <h1>Experimental</h1>
 <p>The Experimental window holds the theme, the icon and emoticon packages and every option that DC++
-Experimental adds to DC++; the Settings dialog keeps the options of DC++ itself. Open the window from
+Experimental adds to DC++; the Settings dialog keeps the options of DC++ itself. Open it from
 <em>View &gt; Experimental</em>, or with the button on the <em>Experimental</em> page of Settings (which closes
 Settings as OK does). Its tabs are <em>Themes</em>, <em>Icons</em>, <em>Emoticons</em>, <em>Chat and sharing</em>,
-<em>Transfers and hashing</em>, <em>Private Send</em>, <em>Protocol limits</em> and <em>Other</em>. Each tab lays its
-groups out in two columns when the window is wide enough, and in one otherwise; the box at the bottom
-shows the help for the option with the focus.</p>
+<em>Transfers and hashing</em>, <em>Private Send</em>, <em>Protocol limits</em> and <em>Other</em>. Each tab shows its
+groups in two columns when the window is wide enough and in one otherwise, and scrolls when the window is
+too small for it. The box at the bottom shows the help for the option that has the focus.</p>
 <p>Changes apply at once, without an OK button: check boxes and lists when they change, and number and text
 fields after a short pause in typing, when Enter is pressed or when the field is left. A number field keeps
 its value within the allowed range, and text that isn't a number is replaced by the current value when the
 field is left. Settings are saved automatically shortly after a change.</p>
 
 <h2>Themes</h2>
-<p>The Themes tab edits the light or dark mode, the theme presets and the fonts and colors of the
-interface, lists, chat and user matching definitions, with a live chat preview. See
+<p>The Themes tab sets the light or dark mode, the theme and the fonts and colors of the interface, lists,
+chat and user matching definitions, with a live chat preview. See
 <placeholder><a href="settings_styles.html">Themes</a></placeholder>.</p>
 
 <h2 id="icons">Icons</h2>
 <dl style="margin-left: 40px;">
   <dt>Icon packages</dt>
   <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ICON_PACK">The icons DC++ uses in its menus, toolbar, tabs and lists.
-Select a package to preview each of its icons on a light and on a dark background, at the size chosen above the
-preview; point at an icon to see its name. <b>Use this package</b> (or a double click) switches to it. Windows
-that are already open keep their icons until DC++ restarts. <b>Automatic</b> uses Dark.dcico for the dark
-appearance and the icons built into DC++ otherwise; <b>Embedded icons</b> always uses the built-in ones. Packages
-are .dcico ZIP files containing info.xml and multi-resolution ICO files, found in the IconPacks folder (<b>Open
-folder</b>); <b>Browse</b> picks one from elsewhere, and <b>Reload</b> lists the folder again. An icon a package
-doesn't have is shown from the built-in set.</dd>
+Select a package to preview its icons on a light and on a dark background, at the size chosen above the
+preview; point at an icon to see its name. <b>Use this package</b> (or a double click) switches to it; windows
+that are already open keep their icons until DC++ restarts. <b>Automatic</b> uses Dark.dcico in a dark theme and
+the icons built into DC++ otherwise; <b>Embedded icons</b> always uses the built-in ones. An icon a package
+doesn't have is shown from the built-in set. Packages are .dcico ZIP files containing info.xml and
+multi-resolution ICO files, kept in the IconPacks folder (<b>Open folder</b>); <b>Browse</b> uses one from
+elsewhere and <b>Reload</b> lists the folder again. Each package is unpacked once, into the Extracted folder of
+DC++'s local data folder (beside DCPlusPlus.exe in the portable version), and read from there.</dd>
 </dl>
 
 <h2 id="emoticons">Emoticons</h2>
 <dl style="margin-left: 40px;">
   <dt>Emoticons</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_EMOTICONS">Turns emoticons in chat on or off and chooses the emoticon
-package (.dcemo), its display size and the preferred bit depth of its images. The preview on the right shows
-what the selected package contains. <b>Browse</b> picks a package from elsewhere, <b>Build</b> makes one from
-images, and <b>Import XML</b> converts an older XML emoticon package. Choose <b>Custom / edit selected</b> in the
-package list to add, update or remove emoticons.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_EMOTICONS"><b>Enable emoticons in chat</b> turns emoticons on or off.
+Choose the emoticon package (.dcemo), the size emoticons are shown at and the preferred bit depth of their
+images; the list on the right shows what the selected package contains. <b>Browse</b> uses a package from
+elsewhere, <b>Build</b> makes one from images, and <b>Import XML</b> converts an older XML emoticon package.
+Choose <b>Custom / edit selected</b> in the package list to add, change or remove emoticons.</dd>
 </dl>
 <h3>Package extraction limits</h3>
-<p>Emoticon packages (.dcemo) are ZIP archives that are extracted when a package is selected or previewed. These limits stop a crafted package from filling the disk; extraction stops with an error as soon as one is exceeded, counting the data actually decompressed.</p>
+<p>An emoticon package (.dcemo) is a ZIP file. It is unpacked once, the first time it is used or after it
+changes, into the Extracted folder of DC++'s local data folder, and read from there. These limits stop a
+crafted package from filling the disk: unpacking stops with an error as soon as one is exceeded, counting the
+data actually decompressed. A package unpacked earlier is checked against the current limits as well.</p>
 <dl style="margin-left: 40px;">
   <dt>Maximum package entries</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_ENTRIES">Maximum number of entries (files and folders) in a package. Minimum: 1. Maximum: 65535. Default: 4096.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_ENTRIES">The most files and folders a package may contain.
+Range: 1 to 65535. Default: 4096.</dd>
   <dt>Maximum extracted file size</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_FILE_BYTES">Maximum decompressed size of any single file in a package, in KiB. Minimum: 1 KiB. Default: 16384 KiB (16 MiB).</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_FILE_BYTES">The largest any single file in a package may be
+once unpacked, in KiB. Minimum: 1 KiB. Default: 16384 KiB (16 MiB).</dd>
   <dt>Maximum total extracted size</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_TOTAL_BYTES">Maximum decompressed size of all files in a package together, in KiB. Minimum: 1 KiB. Default: 131072 KiB (128 MiB).</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ARCHIVE_MAX_TOTAL_BYTES">The most all files in a package together may take
+up once unpacked, in KiB. Minimum: 1 KiB. Default: 131072 KiB (128 MiB).</dd>
 </dl>
 
-<h2>Chat and sharing: rich text and temporary shares</h2>
+<h2>Chat and sharing</h2>
 <dl style="margin-left: 40px;">
   <dt>Enable ADC RTF0 CommonMark chat</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_RICH_TEXT">Advertise ADC RTF0 support on hubs and direct CCPM connections and render its safe CommonMark dialect. Supporting chats provide the RTF0 editor and drag-and-drop attachments.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_RICH_TEXT">Announces support for rich text chat (the ADC RTF0
+extension) on hubs and in direct encrypted private chats, and shows rich text messages formatted, using a safe
+subset of CommonMark. Chats with other RTF0 clients get the rich text editor and attachments by drag and drop.
+Default: on.</dd>
   <dt>Enable temporary file sharing in chats</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_TEMP_SHARES">Allow unshared files dropped on any connected ADC or NMDC hub or private chat—and files selected by the RTF0 editor—to be hashed and exposed by exact TTH for that route. Plain and RTF0 chat displays keep the magnet URI visible and clickable and show its human-readable file size; RTF0 routes may additionally render formatted attachments and inline images. Disabling this prevents new temporary shares and makes existing temporary entries unavailable to search or transfer while retaining them in the management list until removed or the application exits.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_TEMP_SHARES">Lets you share a file without adding it to your
+share: drop it on a hub chat or a private chat, on ADC or NMDC hubs, or attach it in the rich text editor.
+DC++ hashes it and posts a magnet link, which shows the file's size and can be clicked. A file shared in hub
+chat can be found by exact TTH search and downloaded on that hub only; a file sent in a private chat is
+available to that user only and never appears in searches. These files are never part of your file list or
+share size. Turning this off stops new temporary shares and makes the existing ones unavailable; they stay in
+the list of active temporary shares until removed or DC++ exits. Default: on.</dd>
   <dt>Insert dropped image files as inline media</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_DROPPED_IMAGES_INLINE">Use RTF0 inline-image syntax for recognized BMP, GIF, ICO, JPEG, PNG, TIFF, and WebP files when the chat supports RTF0. Plain ADC and NMDC chats always receive an ordinary magnet link.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_DROPPED_IMAGES_INLINE">In a chat with rich text support, a dropped image
+(BMP, GIF, ICO, JPEG, PNG, TIFF or WebP) is inserted as an inline image. Other chats always get a magnet link.
+Default: on.</dd>
   <dt>Rich text message size limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_RICH_TEXT_MAX_SIZE">Maximum UTF-8 size of an incoming or outgoing ADC RTF0 rich text message, in KiB. Larger incoming messages are replaced with an omission notice; larger editor drafts cannot be inserted into chat. Minimum: 1 KiB. Default: 64 KiB.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_RICH_TEXT_MAX_SIZE">The largest rich text message, sent or received, in
+KiB of UTF-8 text. A larger incoming message is replaced with a notice that it was left out; a larger draft
+can't be inserted into chat. Minimum: 1 KiB. Default: 64 KiB.</dd>
   <dt>Clickable chat link length limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CHAT_LINK_MAX_LENGTH">Maximum URL or magnet URI length that will be turned into a clickable chat link. Longer links remain visible as plain text. Minimum: 1 character. Default: 256 characters.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CHAT_LINK_MAX_LENGTH">The longest web address or magnet link that is
+made clickable in chat; a longer one is shown as plain text. Minimum: 1 character. Default: 256 characters.</dd>
   <dt>Maximum temporary shares</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_LIMIT">Maximum number of temporary RTF0 attachments retained for the current application session. Adding another entry removes the least recently used entries first. Minimum: 1. Default: 256.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_LIMIT">How many files can be shared in chats at once. When the
+limit is reached, the file shared or reused longest ago stops being shared. Range: 1 to 10000. Default: 256.</dd>
   <dt>Automatically remove temporary shares after</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_EXPIRATION">Set the lifetime in minutes, measured from the most recent addition of the file to a chat draft. Default: 0 (no automatic expiration). Changes apply to existing entries too. Expiration stops new searches and downloads through the temporary share; it does not delete the local file, remove posted messages, or affect normally shared files. Expired entries are cleaned up every minute.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARE_EXPIRATION">Stops sharing a chat file this many minutes after
+it was last added to a chat. It only ends searches and downloads of it: the file itself, the messages already
+posted and your normal share are not touched. A change applies to files already shared too. 0 keeps them
+shared until they are removed or DC++ exits. Default: 0.</dd>
   <dt>Active temporary shares</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES">Lists the session-only files currently addressable by exact TTH, including their route and local path. These files appear in search results only on the hub or CCPM route where they were added, remain absent from file lists and share totals, and can be downloaded by TTH only from that route. Remove selected entries, clear the full list, or refresh file availability from here.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_TEMP_SHARES">The files currently shared in chats, with their size, where
+they were shared (a hub, or a private chat with a user), their TTH and their location on disk. <b>Remove
+selected</b> and <b>Clear all</b> stop sharing them; <b>Refresh</b> checks again whether the files are still
+there. Files shared in chats are kept for this session only.</dd>
 </dl>
 
 <h2>Transfers and hashing: file lists</h2>
 <dl style="margin-left: 40px;">
   <dt>Largest file list to download</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_FILELIST_DOWNLOAD_SIZE">Largest full file list downloaded from another user, in MiB, as the user announces it: the compressed size of a .bz2 list, or the XML size of an uncompressed one. A larger list is refused before anything is written to disk. A list larger than the largest file list to open is refused as well, since it could not be opened. 0 means no limit. Default: 512 MiB.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_FILELIST_DOWNLOAD_SIZE">The largest full file list downloaded from
+another user, in MiB, as that user announces it: the size of the compressed .bz2 file, or of the XML when the
+list is sent as XML. A larger list is refused before anything is written to disk, and so is a list larger than
+the largest file list to open, since it could not be opened. 0 means no limit. Default: 512 MiB.</dd>
   <dt>Largest file list to open (XML)</dt>
-  <dd>The most XML a file list may contain when it is opened, in MiB; it protects against lists that need a great deal of memory to decode. This is the <placeholder><a href="settings_expert.html#maxlistsize">Max filelist size</a></placeholder> of Settings &gt; Advanced &gt; Experts only, shown here too. 0 means no limit. Default: 512 MiB.</dd>
+  <dd>The most XML a file list may contain when it is opened, in MiB; it protects against lists that need a great
+deal of memory. This is <placeholder><a href="settings_expert.html#maxlistsize">Max filelist size</a></placeholder>
+in Settings &gt; Advanced &gt; Experts only, shown here too. 0 means no limit. Default: 512 MiB.</dd>
   <dt>Generated partial file list limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES">Maximum uncompressed XML size generated in response to a partial file-list request, in KiB. Minimum: 1 KiB. Default: 65536 KiB.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_PARTIAL_LIST_BYTES">The largest partial file list DC++ makes when
+another user browses a folder of your share, in KiB of uncompressed XML. A request for a larger list is
+refused. Minimum: 1 KiB. Default: 65536 KiB (64 MiB).</dd>
   <dt>Received partial file list limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_RECEIVED_PARTIAL_LIST_BYTES">Largest partial file list accepted from another user, in KiB of uncompressed XML. Partial lists are kept in memory while they download, and compressed transfers can expand a small amount of data into a very large list, so larger lists are refused before they are received. A recursive list over the limit is downloaded as a full file list instead, which is saved to disk. Minimum: 1 KiB. Default: 393216 KiB (384 MiB).</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_RECEIVED_PARTIAL_LIST_BYTES">The largest partial file list accepted
+from another user, in KiB of uncompressed XML. Partial lists are kept in memory while they download, and a
+compressed transfer can expand a little data into a very large list, so a larger list is refused before it is
+received. A list of a folder and everything in it that is over the limit is downloaded as a full file list
+instead, which is saved to disk. Minimum: 1 KiB. Default: 393216 KiB (384 MiB).</dd>
   <dt>Prefer Zstandard over zlib when the peer supports both</dt>
-  <dd>Use Zstandard for downloads from clients supporting the experimental ZST1 extension on ADC or NMDC. Older clients continue to use the existing compression. Full lists from supporting clients use compressed XML instead of bzip2. Requires Compress transfers. The default is off. The preference affects new download requests; supporting peers may still request Zstandard uploads.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PREFER_ZSTD">Downloads from a client that supports both zlib and Zstandard
+compression (the experimental ZST1 extension, on ADC or NMDC) use Zstandard. Without this, zlib is used
+then; a client that supports only Zstandard gets Zstandard either way, and other clients are unaffected. Full
+file lists asked for with Zstandard are sent as compressed XML instead of bzip2. Nothing is compressed unless
+<b>Enable safe and compressed transfers</b> is on (Settings &gt; Advanced). Applies to new download requests.
+Default: off.</dd>
   <dt>Cache file lists on disk and load file entries on demand</dt>
-  <dd>Build a compressed disk index when opening XML, bzip2, or Zstandard lists. Directory metadata remains available, while file entries load when a directory is visited and are released when leaving it. The original list is retained. The first open builds the index; later opens reuse it unless the source changes. Search, queue matching, ADL rules, and directory downloads include unloaded entries. One very large directory still needs memory for its own entries. This uses additional disk space and defaults to off. Applies to newly opened lists.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_FILELIST_CACHE">When a file list is opened, DC++ builds a compressed index
+of it on disk and keeps only the folders in memory; the files of a folder are loaded when you open it and
+released when you leave it. This saves memory with very large lists, at the cost of disk space. The first
+opening builds the index, later ones reuse it until the list changes, and the original list is kept. Searching
+the list, matching it against the queue, ADL Search and downloading folders include files not loaded. A single
+very large folder still needs memory for its own files. Applies to lists opened afterwards. Default: off.</dd>
 </dl>
 
 <h2>Transfers and hashing: multi-connection transfers (MCN)</h2>
 <dl style="margin-left: 40px;">
   <dt>Maximum regular download connections per user</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MCN_DOWNLOADS">Limits simultaneous regular ADC MCN1 download connections opened to one user. The peer's <code>CO</code> limit is also respected; a missing <code>CO</code> field or <code>CO0</code> means that the peer has no separate per-user limit. Multiple connections can download different files, and may also download different segments when segmented downloading is enabled.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MCN_DOWNLOADS">How many regular connections DC++ opens to one user to
+download from them at the same time (the ADC MCN1 extension). The other user's own limit, announced as
+<code>CO</code>, is respected too; no <code>CO</code>, or <code>CO0</code>, means they have no separate limit.
+The connections can download different files, and different parts of one file when segmented downloading is
+on. Range: 1 to 100. Default: 2.</dd>
   <dt>Maximum regular upload connections per user</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MCN_UPLOADS">Limits simultaneous regular ADC MCN1 upload connections accepted from one user. This value is advertised to MCN1-capable peers. Upload slots count unique regular upload users rather than their physical MCN connections, and excess connections are redistributed when another user needs a slot.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MCN_UPLOADS">How many regular connections one user may use to download
+from you at the same time (MCN1); DC++ announces this number to clients that support it. Upload slots count
+users, not connections: a user with several connections takes one slot, and their extra connections are given
+up when another user needs a slot. Range: 1 to 100. Default: 2.</dd>
   <dt>Priority connection</dt>
-  <dd>MCN1 automatically maintains one additional connection for partial file lists and files smaller than 64 KiB. It is outside both regular per-user connection limits and the normal upload/download slot totals. Its transfer role is fixed for the life of the connection; full file lists, file trees, and larger files remain on regular connections.</dd>
+  <dd>MCN1 also keeps one more connection per user for partial file lists and files smaller than 64 KiB, so
+they don't wait behind large files. It counts toward neither limit above nor the upload and download slots.
+Full file lists, file trees and larger files always use regular connections.</dd>
 </dl>
 
 <h2>Transfers and hashing: hashing and share database</h2>
 <dl style="margin-left: 40px;">
   <dt>Maximum hash speed</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_SPEED">Limits file hashing speed in MiB/s, for each drive being hashed. Zero means unlimited.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_SPEED">Limits how fast files are read for hashing, in MiB/s for
+each drive being hashed. 0 means no limit. Default: 0.</dd>
   <dt>Drives hashed at the same time</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_VOLUMES">Files on different drives, or on different network shares, are hashed at the same time, up to this many at once. Each drive is still read one file at a time, so a hard disk or a NAS is never made to seek between files; this is how AirDC++ hashes. When more drives are waiting than this allows, they share the hashers. Use 1 to hash one file at a time across all drives. Default: 2 drives. Minimum: 1. Maximum: 16.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_HASH_VOLUMES">Files on different drives, or on different network
+shares, are hashed at the same time, up to this many drives at once. Each drive is still read one file at a
+time, so a hard disk or a NAS never has to seek between files. When more drives are waiting, they take turns.
+Use 1 to hash one file at a time across all drives. Range: 1 to 16. Default: 2.</dd>
   <dt>Hashing worker threads</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASHING_THREADS">Maximum number of CPU workers used to calculate independent Tiger Tree Hash blocks for one file. File input remains sequential and SFV checks remain ordered. DC++ may use fewer workers when the file has too few blocks, the computer exposes fewer logical processors, or the fixed 256 MiB pipeline-memory limit would be exceeded. Use one thread to retain serial hashing. Default: 2 threads. Minimum: 1. Maximum: 64.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASHING_THREADS">How many processor threads may calculate the hash of one
+file. The file is still read in order, and SFV checks keep their order. DC++ uses fewer threads for a file with
+few blocks, on a computer with fewer logical processors, or when more would need over 256 MiB of memory. Use 1
+to hash with a single thread. Range: 1 to 64. Default: 2.</dd>
   <dt>Hash database write batch size</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_BATCH_SIZE">Number of SQLite hash database row changes grouped into one transaction. Larger values improve bulk hashing throughput; smaller values commit newly hashed files sooner.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_BATCH_SIZE">How many changes to the hash database are written together
+in one transaction. Larger values hash large shares faster; smaller values save each newly hashed file sooner.
+Minimum: 1. Default: 256.</dd>
   <dt>Report each hashed file in the system log</dt>
-  <dd cshelp="IDH_SETTINGS_ADVANCED_LOG_HASHED_FILES">Adds a line to the system log for every file that is hashed. When this is off (the default), hashing reports one summary per folder instead, which keeps the system log readable while a large share is hashed.</dd>
+  <dd cshelp="IDH_SETTINGS_ADVANCED_LOG_HASHED_FILES">Adds a line to the system log for every file that is hashed.
+When this is off, hashing reports one summary per folder instead, which keeps the system log readable while a
+large share is hashed. Default: off.</dd>
   <dt>Verify hash database on startup</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_VERIFY_STARTUP">Runs a quick SQLite integrity check when the hash database opens.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_VERIFY_STARTUP">Runs a quick SQLite integrity check of the hash
+database when DC++ starts. If it fails, the damaged database is renamed and a new one is started, so shared
+files are hashed again. Default: off.</dd>
   <dt>Compact hash database after rebuild</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_COMPACT_REBUILD">Compacts SQLite storage after a hash database rebuild.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_COMPACT_REBUILD">Gives back the disk space the hash database no longer
+needs after it has been rebuilt. Default: off.</dd>
   <dt>Use cached share tree on startup</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_SHARE_CACHE">Loads a validated cached share tree before the background filesystem refresh completes, for local, mapped and network (\\server\share) folders alike. Loading it reads no shared file, so it is quick even for very large shares on network drives.</dd>
-  <dt>Verify / Full check / Optimize / Compact</dt>
-  <dd>Runs hash database maintenance immediately. Verify uses SQLite quick_check, Full check uses integrity_check, Optimize updates query planning hints, and Compact checkpoints the WAL and reclaims unused space.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_SHARE_CACHE">At startup, DC++ shares the folder tree it saved last time
+while it scans your shared folders again in the background, for local, mapped and network (\\server\share)
+folders alike. Loading it reads none of the shared files, so it is quick even for very large shares on network
+drives. Default: on.</dd>
+  <dt>Verify, Full check, Optimize, Compact</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HASH_MAINTENANCE">Maintains the hash database at once. <b>Verify</b> runs a
+quick integrity check (SQLite quick_check), <b>Full check</b> a thorough one (integrity_check), <b>Optimize</b>
+updates the statistics SQLite uses to plan queries, and <b>Compact</b> writes out the log of pending changes
+and gives back unused disk space.</dd>
 </dl>
 
 <h2>Private Send (experimental PFT1)</h2>
-<p>Disabled by default. Private Send offers a selected file directly from private chat without a search result,
-file list, or public magnet. Both clients must support the same experimental draft, use an ADCS hub and a fresh
-TLS 1.2+ direct chat (TLS 1.2 requires ECDHE and authenticated encryption). Manual contact verification is temporarily off by default for testing. After enabling,
-reconnect an existing direct chat to negotiate support. Open <b>Private Send...</b> from the chat menu,
-or click the file icon in the PM status bar. This shortcut is also available before the connection or contact verification is ready.</p>
-<p><b>Clear list</b> dismisses finished, cancelled, declined, expired and failed transfers for this contact.
-Active and paused transfers stay in the list, and saved files are kept.</p>
+<p>Private Send offers a file directly from a private chat, without a search result, a file list or a public
+magnet link. Both clients must support the same experimental draft and be connected through an ADCS (secure)
+hub, with a direct encrypted private chat using TLS 1.2 or later (with ECDHE and authenticated encryption).
+After turning it on, reconnect an existing direct chat so the two clients agree on it. Open <b>Private
+Send...</b> from the chat's menu, or click the file icon in the status bar of the private chat; it can be
+opened before the direct connection or contact verification is ready.</p>
+<p>The recipient accepts each file. A received file is fully verified against its hash and passes Windows'
+attachment checks before it is saved below <b>PrivateSend\Received</b> in DC++'s local data folder; it is never
+opened or shared automatically. A paused transfer can be resumed by the recipient for up to 30 minutes, within
+the transfer's time limit, at most three times. <b>Clear list</b> removes finished, canceled, declined, expired
+and failed transfers of this contact; active and paused ones stay, and saved files are kept.</p>
+<p>When an offer or a transfer expires, access ends and an incomplete received file is deleted; the sender's
+original and a completed received file are never deleted. Transfers do not survive a restart. PFT1 is a
+proposed protocol: it is not yet known to work with other clients and has not had an independent security
+review.</p>
 <dl style="margin-left: 40px;">
+  <dt>Enable Private Send (requires TLS 1.2+)</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_PRIVATE_SEND">Turns Private Send on for direct encrypted private
+chats. Turning it off ends all Private Send transfers. Default: off.</dd>
   <dt>Require contact verification (off for testing)</dt>
-  <dd>Default: off. When enabled, each person chooses <b>Add contact</b> to verify the actual peer certificate against the identity advertised by the current secure hub and remember it. Alternatively, use <b>Details &gt; Compare fingerprint...</b> to compare a CID and fingerprint received independently. Turning verification on cancels transfers without an approved matching fingerprint. Testing mode skips contact approval; it does not automatically save contacts as verified.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PFT_REQUIRE_VERIFICATION">When on, each of you chooses <b>Add contact</b>
+to check the other client's certificate against the identity the current secure hub announces for them, and
+to remember it; or use <b>Details &gt; Compare fingerprint...</b> to compare a CID and fingerprint obtained
+another way. Turning it on cancels transfers with a contact whose fingerprint has not been approved, and
+forgetting a verified contact ends their transfers. When off, as for testing, contacts are not checked, and
+they are not saved as verified either. Default: off.</dd>
   <dt>Offer expires after</dt>
-  <dd>Lifetime of a new outgoing offer before acceptance. Default: 15 minutes. Range: 1–1440 minutes.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PFT_OFFER_MINUTES">How long a new offer of yours waits to be accepted.
+Range: 1 to 1440 minutes. Default: 15 minutes.</dd>
   <dt>Accepted transfer expires after</dt>
-  <dd>Maximum lifetime after acceptance. Default: 1440 minutes. Range: 1–10080 minutes. The earlier peer deadline wins. Existing deadlines are never extended by settings changes.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PFT_TRANSFER_MINUTES">How long an accepted transfer may take. When the two
+clients' limits differ, the earlier one applies. Changing this never extends a transfer already under way.
+Range: 1 to 10080 minutes (one week). Default: 1440 minutes (one day).</dd>
 </dl>
-<p>Recipients explicitly accept each file. Received files undergo full hash verification and Windows attachment
-policy before being saved below <b>PrivateSend\Received</b> in the profile's local data directory. They are never
-opened or shared automatically. Pause permits recipient-initiated resume for up to 30 minutes within the hard
-deadline, with at most three attempts. Disabling the feature or forgetting a verified contact revokes transfers.</p>
-<p>Expiry removes access and incomplete received files; it never deletes the sender's original or a completed
-received file. Sessions do not survive restart. PFT1 is a proposed identifier, and stable interoperability and
-independent security review remain release gates.</p>
 
 <h2>Protocol limits: direct private-message channels (CCPM)</h2>
-<p>These controls govern automatic recovery of an encrypted direct private-message channel. Each failed attempt uses
-an exponentially longer delay, with random jitter to keep two identical clients from retrying in lockstep.</p>
+<p>These options control how DC++ reconnects a direct encrypted private chat that was lost. Each failed attempt
+waits longer than the one before, with a little randomness, so two clients don't retry at the same moment.</p>
 <dl style="margin-left: 40px;">
   <dt>Initial automatic reconnect delay</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_BASE_DELAY">Delay before the first automatic reconnect and the starting point for exponential backoff. Minimum: 1 second. Maximum: 3600 seconds. Default: 5 seconds.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_BASE_DELAY">How long DC++ waits before the first attempt to
+reconnect; later attempts wait longer. Range: 1 to 3600 seconds. Default: 5 seconds.</dd>
   <dt>Maximum automatic reconnect delay</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_MAX_DELAY">Upper bound for the exponential reconnect delay. A value below the initial delay is raised to match it. Minimum: 1 second. Maximum: 3600 seconds. Default: 60 seconds.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_RECONNECT_MAX_DELAY">The longest DC++ waits between attempts. A value
+below the initial delay is raised to match it. Range: 1 to 3600 seconds. Default: 60 seconds.</dd>
   <dt>Stable connection reset time</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_STABLE_CONNECTION_TIME">Time a direct channel must remain connected before a later disconnect resets the accumulated automatic-attempt count. Minimum: 1 second. Maximum: 86400 seconds. Default: 60 seconds.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_STABLE_CONNECTION_TIME">How long a direct chat must stay connected
+before the count of attempts starts again from zero. Range: 1 to 86400 seconds. Default: 60 seconds.</dd>
   <dt>Maximum automatic reconnect attempts</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_MAX_AUTOMATIC_ATTEMPTS">Number of automatic attempts permitted before reconnection is paused. Starting the direct channel manually resets the attempt budget. Minimum: 1. Maximum: 100. Default: 5.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_CCPM_MAX_AUTOMATIC_ATTEMPTS">How many times DC++ tries to reconnect on its
+own before it stops. Starting the direct chat yourself starts the count again. Range: 1 to 100. Default: 5.</dd>
 </dl>
 
 <h2>Protocol limits: hub authentication</h2>
 <dl style="margin-left: 40px;">
   <dt>Minimum ADC password challenge length</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ADC_MIN_SALT_LENGTH">Shortest password challenge (salt), in Base32 characters, that an ADC hub may send before DC++ answers it with your password hash. Short challenges make captured responses easier to crack. If a hub sends a shorter one, the password is not sent, the hub is disconnected and automatic reconnection is turned off. Lower this only for older hub software you trust. Range: 2 to 39 (39 is the 24 bytes the ADC specification requires). Default: 10, as in DC++ 0.884.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ADC_MIN_SALT_LENGTH">The shortest password challenge (salt), in Base32
+characters, an ADC hub may send before DC++ answers it with your password hash. A short challenge makes a
+captured answer easier to crack. If a hub sends a shorter one, the password is not sent, the hub is disconnected
+and automatic reconnection to it is turned off. Lower this only for older hub software you trust. Range: 2 to 39
+(39 is the 24 bytes the ADC specification requires). Default: 10, as in DC++ 0.884.</dd>
 </dl>
 
 <h2>Protocol limits: NMDC hubs</h2>
 <dl style="margin-left: 40px;">
   <dt>Default encoding for NMDC hubs</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING">Character encoding (code page) used for NMDC hubs that do not have their own encoding in the favorite hub properties. It applies to hub chat, nicks, private messages, search results and direct connections. <b>Windows default</b> uses the system code page. NMDC hubs use a single encoding for everything, so DC++ no longer guesses the encoding from each line: on a hub that uses UTF-8, choose <b>65001 (UTF-8)</b> here or in that hub's favorite properties, otherwise names and messages with non-English characters will be garbled. Default: Windows default.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_NMDC_ENCODING">The character encoding (code page) used for NMDC hubs that
+have no encoding of their own in their favorite hub properties: for hub chat, nicks, private messages, search
+results and direct connections. <b>Windows default</b> uses the system code page. An NMDC hub uses one encoding
+for everything, and DC++ doesn't guess it from each line: for a hub that uses UTF-8, choose <b>65001
+(UTF-8)</b> here or in the hub's favorite properties, or names and messages with non-English characters will be
+garbled. Default: Windows default.</dd>
 </dl>
 
 <h2>Protocol limits: protocol resource limits</h2>
-<p>These limits protect DC++ from excessive memory, connection, and packet use. The defaults are
-recommended for normal use. Lower values can reject legitimate traffic; higher values increase
-resource usage and exposure to denial-of-service traffic. Changes apply to new operations without
-restarting DC++. The partial file list limits are on the Transfers and hashing tab.</p>
+<p>These limits protect DC++ from using too much memory, too many connections or too many network packets. The
+defaults suit normal use: lower values can turn away legitimate traffic, and higher ones use more resources
+and leave DC++ more open to flooding. Changes apply to new connections and packets without restarting DC++. The
+partial file list limits are on the Transfers and hashing tab.</p>
 <dl style="margin-left: 40px;">
   <dt>Queued protocol data limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_QUEUED_PROTOCOL_DATA">Maximum unsent protocol data retained for one socket, in KiB. The socket is disconnected when another write would exceed the limit. Minimum: 1 KiB. Default: 16384 KiB.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_QUEUED_PROTOCOL_DATA">The most protocol data DC++ keeps waiting to be
+sent on one connection, in KiB. A connection that would exceed it is closed. Minimum: 1 KiB. Default: 16384 KiB
+(16 MiB).</dd>
   <dt>Concurrent peer connection limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_CONCURRENT_CONNECTIONS">New incoming peer connections are rejected when this many incoming and outgoing transfer or private-message connections already exist. Hub connections are not included. Minimum: 1. Default: 512.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_CONCURRENT_CONNECTIONS">Incoming connections from other users are turned
+away while this many connections to users (transfers and direct private chats, in either direction) are open.
+Hub connections don't count. Minimum: 1. Default: 512.</dd>
   <dt>Incoming connection flood window</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_FLOOD_WINDOW">Time span used to count incoming peer connection attempts from each IP address. The allowed burst is derived from the multi-connection upload setting. Minimum: 1 millisecond. Default: 10000 milliseconds.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_FLOOD_WINDOW">The period over which incoming connection attempts are counted
+for each IP address. Within it, an address may make twice the maximum regular upload connections per user plus
+8 attempts, and at least 32; further ones are turned away. Minimum: 1 millisecond. Default: 10000 milliseconds.</dd>
   <dt>Global UDP rate window</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GLOBAL_WINDOW">Time span used by the global incoming search-result UDP packet limiter. Minimum: 1 millisecond. Default: 1000 milliseconds.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GLOBAL_WINDOW">The period over which incoming search results (UDP packets)
+are counted for the global packet limit. Minimum: 1 millisecond. Default: 1000 milliseconds.</dd>
   <dt>Global UDP packet limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GLOBAL_LIMIT">Maximum incoming search-result UDP packets processed during the global UDP rate window. Minimum: 1. Default: 2000.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GLOBAL_LIMIT">The most incoming search result packets processed in each
+global UDP rate window; more are ignored. Minimum: 1. Default: 2000.</dd>
   <dt>Per-peer UDP packet limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PEER_LIMIT">Maximum incoming search-result UDP packets processed from one IP address during the per-peer UDP rate window. Minimum: 1. Default: 500.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PEER_LIMIT">The most incoming search result packets processed from one IP
+address in each per-peer UDP rate window; more are ignored. Minimum: 1. Default: 500.</dd>
   <dt>Per-peer UDP rate window</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PEER_WINDOW">Time span used to count incoming search-result UDP packets separately for each IP address. Minimum: 1 millisecond. Default: 10000 milliseconds.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_PEER_WINDOW">The period over which incoming search result packets are counted
+for each IP address. Minimum: 1 millisecond. Default: 10000 milliseconds.</dd>
   <dt>Tracked UDP peer limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_TRACKED_PEERS">Maximum number of IP addresses retained by the per-peer UDP limiter. New addresses are ignored while the table is full and no expired entries can be removed. Minimum: 1. Default: 4096.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_TRACKED_PEERS">How many IP addresses the per-peer UDP limit keeps track
+of. While the table is full and no entry has expired, packets from new addresses are ignored. Minimum: 1.
+Default: 4096.</dd>
   <dt>Encrypted UDP packet limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_PACKET">Maximum encrypted search-result UDP packet accepted for decryption. Valid packets must also be at least 32 bytes and aligned to a 16-byte AES block. Minimum: 32 bytes. Default: 4096 bytes.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_PACKET">The largest encrypted search result packet DC++ decrypts,
+in bytes. A valid packet is also at least 32 bytes and a multiple of 16 bytes (the AES block size). Minimum:
+32 bytes. Default: 4096 bytes.</dd>
   <dt>Stored encrypted UDP key limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_KEYS">Maximum recent search encryption keys retained for decrypting SUDP results. Oldest keys are discarded first. Minimum: 1. Default: 64.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_SUDP_KEYS">How many keys of your recent searches DC++ keeps to decrypt
+encrypted search results; the oldest is dropped first. Minimum: 1. Default: 64.</dd>
   <dt>BBS boards per hub limit</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_BBS_MAX_BOARDS">Maximum BBS0 boards kept for each hub. Additional boards announced by the hub, or referenced by its posts, are ignored and a single status message is shown. Range: 1 to 1000. Default: 100.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_BBS_MAX_BOARDS">The most bulletin boards (BBS0) kept for each hub. Further
+boards the hub announces, or that its posts refer to, are ignored, with a single status message. Range: 1 to
+1000. Default: 100.</dd>
 </dl>
 
 <h2>Other: offline message outbox</h2>
 <dl style="margin-left: 40px;">
   <dt>Keep messages for offline users and send them later</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_OUTBOX">Private messages written to a user who is offline are kept in the message outbox and sent when the user is next online. The same switch is in View &gt; Message outbox, which lists the waiting messages. The limits below apply to new messages and retries; existing messages keep their deadlines.</dd>
-  <dt>Maximum retained messages, Maximum message size, Pending messages expire after</dt>
-  <dd>How many messages the outbox keeps (1 to 10000), how long each may be (1 to 64 KiB), and how many days a message waits before it expires.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_ENABLE_OUTBOX">A private message written to a user who is offline is kept
+in the message outbox and sent when the user is next online. <b>View &gt; Message outbox</b> lists the waiting
+messages and has the same switch. Default: off.</dd>
+  <dt>Maximum retained messages</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_OUTBOX_MAX_ENTRIES">How many messages the outbox keeps. It applies to new
+messages and retries; messages already waiting keep their deadlines. Range: 1 to 10000. Default: 500.</dd>
+  <dt>Maximum message size</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_OUTBOX_MAX_MESSAGE_SIZE">The longest message the outbox keeps, in KiB. It
+applies to new messages and retries. Range: 1 to 64 KiB. Default: 16 KiB.</dd>
+  <dt>Pending messages expire after</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_OUTBOX_EXPIRY_DAYS">How many days a message waits for its recipient before
+it is dropped. It applies to new messages and retries; messages already waiting keep their deadlines. Range: 1
+to 365 days. Default: 7 days.</dd>
 </dl>
 
 <h2>Other: hub user lists</h2>
 <dl style="margin-left: 40px;">
   <dt>Default user icon size</dt>
-  <dd>The global size for hub user-list icons: 16, 20, 24, 28, 32, 40 or 48 pixels, scaled for display DPI. The default is 16. Each favorite hub can override this in Favorite Hub Properties or the Icons dropdown beside its user filter. Choosing Default removes the hub override and inherits the global or favorite-group setting. Changing the global default updates open hubs that inherit it. Non-favorite hubs keep a selected size only for the current window; adding the hub to Favorites saves that choice.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_HUB_USER_ICON_SIZE">The size of the icons in hub user lists: 16, 20, 24,
+28, 32, 40 or 48 pixels, scaled for the display's DPI. Each favorite hub can choose its own size in its Favorite
+Hub Properties, or with the Icons list beside the user filter of its window; choosing Default there uses this
+setting (or that of the hub's favorite group). Changing this updates open hubs that use it. A hub that is not
+a favorite keeps a size chosen in its window only while the window is open, unless the hub is added to
+Favorites. Default: 16 pixels.</dd>
 </dl>
 
 <h2>Other: System Log</h2>
 <dl style="margin-left: 40px;">
   <dt>Maximum System Log items</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_SYSTEM_LOG_ITEMS">Maximum number of recent messages retained for the System Log window and available when it is opened or restyled. Lowering the value discards the oldest retained messages. The visible RichEdit buffer also retains its independent 96 KiB safety limit. Minimum: 1 message. Maximum: 1000 messages. Default: 100 messages.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAX_SYSTEM_LOG_ITEMS">How many recent messages DC++ keeps for the System Log
+window, shown when it is opened or its style changes. Lowering it drops the oldest messages. The window itself
+also holds at most 96 KiB of text. Range: 1 to 1000 messages. Default: 100 messages.</dd>
 </dl>
 
 <h2 id="geoip">Other: country database</h2>
+<p>DC++ shows the country of users from a local GeoLite2 Country database, which covers IPv4 and IPv6. While
+<b>Guess user country from IP</b> (Settings &gt; Appearance) is on, DC++ downloads a new database once a day,
+and tries again six hours after a failed attempt; <b>File &gt; GeoIP database update</b> updates it at once.
+The download shows in the transfer view, where it can be canceled, and a failed update keeps the database in
+use. Changing the options below starts an update.</p>
 <dl style="margin-left: 40px;">
   <dt>Download URL</dt>
-  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GEOIP_DOWNLOAD_URL">An HTTPS download URL for a Country .mmdb file or a standard .tar.gz archive.
-Default: the GeoLite2 Country database that DC++ Experimental publishes on GitHub
-(https://github.com/iceman50/exp-geoip2/releases/latest/download/GeoLite2-Country.mmdb).
-Public GitHub release assets are supported and require no login. Updates run once daily
-while DC++ is running; failed attempts retry after six hours. Use File &gt; GeoIP database
-update to start immediately. Progress and cancellation are available in the transfer view.
-Failed updates preserve the working database. One database covers IPv4 and IPv6, and
-lookups are local. Guessing user countries and their format are in Settings &gt; Appearance.</dd>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GEOIP_DOWNLOAD_URL">The HTTPS address of a Country .mmdb file, or of a
+.tar.gz archive containing one. Public GitHub release files work and need no login. Default: the GeoLite2
+Country database DC++ Experimental publishes on GitHub
+(https://github.com/iceman50/exp-geoip2/releases/latest/download/GeoLite2-Country.mmdb).</dd>
+  <dt>Download directly from MaxMind (testing override)</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_GEOIP_USE_MAXMIND">Downloads the database from MaxMind with the account ID
+and license key below, instead of from the download URL. Turning it off goes back to the URL. If a license key
+was saved before this option existed, it is on. Default: off.</dd>
+  <dt>MaxMind account ID</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAXMIND_ACCOUNT_ID">Your numeric MaxMind account ID, used when downloading
+directly from MaxMind.</dd>
+  <dt>License key</dt>
+  <dd cshelp="IDH_SETTINGS_EXPERIMENTAL_MAXMIND_LICENSE_KEY">Your full MaxMind license key, used when downloading
+directly from MaxMind. It is stored encrypted for your Windows account, so it can't be read from the settings
+file on another account or computer.</dd>
 </dl>
-<p>Enable <b>Download directly from MaxMind (testing override)</b> to use your numeric
-MaxMind account ID and full license key instead of the download URL.
-The key is encrypted for your Windows account. Turning off the override restores the
-download URL. Existing testing configurations with saved keys retain direct
-MaxMind downloads automatically. Changing these options starts an update; File &gt; GeoIP database update
-starts one at any time.</p>
 
 <h2 id="lock">Other: password lock</h2>
 <p>The password lock hides DC++ behind a password while you are away from the computer. When DC++
@@ -267,14 +410,14 @@ PBKDF2-SHA256 hash of the password, never the password itself. The change takes 
 removing the password also turns the options below off.</dd>
   <dt>Lock DC++ when it is minimized</dt>
   <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_ON_MINIMIZE">Locks DC++ whenever its window is minimized,
-to the taskbar or to the tray.</dd>
+to the taskbar or to the tray. Default: off.</dd>
   <dt>Lock DC++ when it starts</dt>
   <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_ON_STARTUP">Starts DC++ locked. Hubs you were connected to
-reconnect as usual behind the lock.</dd>
+reconnect as usual behind the lock. Default: off.</dd>
   <dt>Ask for the lock password before exiting</dt>
   <dd cshelp="IDH_SETTINGS_WINDOWS_LOCK_PASSWORD_TO_EXIT">Asks for the lock password whenever DC++ is
 closed, from the window, the tray or the taskbar, so nobody else can stop it. This applies whether
-or not DC++ is locked. Shutting down or signing out of Windows is never held up.</dd>
+or not DC++ is locked. Shutting down or signing out of Windows is never held up. Default: off.</dd>
 </dl>
 </body>
 </html>
